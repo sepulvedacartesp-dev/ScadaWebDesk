@@ -1,98 +1,139 @@
 body {
-    font-family: Arial, sans-serif;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    background-color: #f0f2f5;
-    margin: 0;
-  }
-  
-  .container {
-    background-color: #ffffff;
-    padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    text-align: center;
-    width: 350px;
-  }
-  
-  .tank-container {
-    margin: 30px auto;
-    width: 150px;
-    height: 250px;
-    border: 3px solid #666;
-    border-radius: 5px;
-    position: relative;
-    overflow: hidden;
-    background-color: #e0e0e0;
-  }
-  
-  .tank-level {
-    position: absolute;
-    bottom: 0;
-    width: 100%;
-    background-color: #4CAF50;
-    transition: height 0.5s ease-out;
-  }
-  
-  .level-indicator {
-    margin-top: 15px;
-    font-size: 1.2em;
-    font-weight: bold;
-  }
-  
-  .pump-status {
-    margin-top: 25px;
-    font-size: 1.1em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-  }
-  
-  .pump-indicator {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background-color: gray; /* Por defecto */
-  }
-  
-  #pump-state {
-    font-weight: bold;
-    color: gray;
-  }
-  
-  .controls {
-    margin-top: 30px;
-  }
-  
-  .btn {
-    padding: 12px 25px;
-    font-size: 1em;
-    font-weight: bold;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    margin: 0 10px;
-    transition: background-color 0.3s ease;
-  }
-  
-  .btn-start {
-    background-color: #5cb85c;
-    color: white;
-  }
-  
-  .btn-start:hover {
-    background-color: #4cae4c;
-  }
-  
-  .btn-stop {
-    background-color: #f0ad4e;
-    color: white;
-  }
-  
-  .btn-stop:hover {
-    background-color: #ec971f;
-  }
-  
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column; /* Organiza los elementos en columna */
+  justify-content: center; /* Centra verticalmente los elementos */
+  align-items: center; /* Centra horizontalmente los elementos */
+  min-height: 100vh;
+  background-color: #f0f2f5;
+  margin: 0;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 40px; /* Espacio debajo del título */
+  font-size: 2.5em; /* Tamaño de fuente más grande */
+  color: #333;
+}
+
+/* Nuevo contenedor para el centrado del recuadro principal */
+.main-container-wrapper {
+  display: flex;
+  justify-content: center; /* Centra el main-container horizontalmente */
+  width: 100%; /* Asegura que ocupe todo el ancho para centrar su contenido */
+}
+
+/* Contenedor principal de los sistemas (el que tiene el fondo blanco y sombra) */
+.main-container {
+  background-color: #ffffff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  /* Ya no es un flex container aquí, system-group lo será */
+}
+
+/* Nuevo contenedor para agrupar y organizar los dos sistemas de tanque */
+.system-group {
+  display: flex; /* Ahora este es el contenedor flex para los tanques */
+  gap: 40px; /* Espacio entre los tanques */
+}
+
+.system-container {
+  width: 300px; /* Ajusta el ancho de cada sistema individual */
+}
+
+h2 {
+  font-size: 1.3em;
+  margin-bottom: 25px;
+  color: #555;
+}
+
+.tank-container {
+  margin: 30px auto;
+  width: 150px;
+  height: 250px;
+  border: 3px solid #666;
+  border-radius: 5px;
+  position: relative;
+  overflow: hidden;
+  background-color: #e0e0e0;
+}
+
+.tank-level {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background-color: #4CAF50;
+  transition: height 0.5s ease-out;
+}
+
+.level-indicator {
+  margin-top: 15px;
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.pump-status {
+  margin-top: 25px;
+  font-size: 1.1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.pump-indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: gray;
+}
+
+.pump-status span { /* Asegúrate de que el span de estado de la bomba esté afectado */
+  font-weight: bold;
+  color: gray; /* Color por defecto */
+}
+
+
+.controls {
+  margin-top: 30px;
+}
+
+.btn {
+  padding: 12px 25px;
+  font-size: 1em;
+  font-weight: bold;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 0 10px;
+  transition: background-color 0.3s ease;
+  margin-bottom: 10px; /* Espacio entre botones */
+}
+
+.btn-start {
+  background-color: #5cb85c;
+  color: white;
+  display: block; /* Para que cada botón ocupe su propia línea */
+  width: calc(100% - 20px); /* Ajustar el ancho y considerar el margin horizontal */
+  max-width: 200px; /* Limitar el ancho */
+  margin: 10px auto; /* Centrar y añadir margen vertical */
+}
+
+.btn-start:hover {
+  background-color: #4cae4c;
+}
+
+.btn-stop {
+  background-color: #f0ad4e;
+  color: white;
+  display: block; /* Para que cada botón ocupe su propia línea */
+  width: calc(100% - 20px); /* Ajustar el ancho y considerar el margin horizontal */
+  max-width: 200px; /* Limitar el ancho */
+  margin: 10px auto; /* Centrar y añadir margen vertical */
+}
+
+.btn-stop:hover {
+  background-color: #ec971f;
+}

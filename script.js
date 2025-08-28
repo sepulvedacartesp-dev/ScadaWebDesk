@@ -6,19 +6,33 @@ const MQTT_USERNAME = "Webclient";
 const MQTT_PASSWORD = "Webclient2025";
 const CLIENT_ID = "web_scada_" + Math.random().toString(16).substr(2, 8);
 
-// Tópicos
-const TOPIC_LEVEL_READ = "PLC/Nivel";
-const TOPIC_PUMP_STATE_READ = "PLC/PumpSts";
-const TOPIC_PUMP_CMD_START = "PLC/PumpCmdStart";
-const TOPIC_PUMP_CMD_STOP  = "PLC/PumpCmdStop";
+// Tópicos - Sistema 1
+const TOPIC_LEVEL_READ_1 = "PLC/Nivel";
+const TOPIC_PUMP_STATE_READ_1 = "PLC/PumpSts";
+const TOPIC_PUMP_CMD_START_1 = "PLC/PumpCmdStart";
+const TOPIC_PUMP_CMD_STOP_1  = "PLC/PumpCmdStop";
 
-// --- Elementos HTML ---
+// Tópicos - Sistema 2 (Nuevos tópicos)
+const TOPIC_LEVEL_READ_2 = "Micro/Nivel2";
+const TOPIC_PUMP_STATE_READ_2 = "Micro/PumpSts2";
+const TOPIC_PUMP_CMD_START_2 = "Micro/PumpCmdStart2";
+const TOPIC_PUMP_CMD_STOP_2  = "Micro/PumpCmdStop2";
+
+// --- Elementos HTML - Sistema 1 ---
 const tankLevelDiv = document.getElementById("tank-level");
 const levelValueSpan = document.getElementById("level-value");
 const pumpStateSpan = document.getElementById("pump-state");
 const pumpIndicator = document.getElementById("pump-indicator");
 const startPumpBtn = document.getElementById("start-pump-btn");
 const stopPumpBtn = document.getElementById("stop-pump-btn");
+
+// --- Elementos HTML - Sistema 2 (Nuevos elementos) ---
+const tankLevelDiv2 = document.getElementById("tank-level-2");
+const levelValueSpan2 = document.getElementById("level-value-2");
+const pumpStateSpan2 = document.getElementById("pump-state-2");
+const pumpIndicator2 = document.getElementById("pump-indicator-2");
+const startPumpBtn2 = document.getElementById("start-pump-btn-2");
+const stopPumpBtn2 = document.getElementById("stop-pump-btn-2");
 
 let client;
 
@@ -45,8 +59,12 @@ function connectMQTT() {
 
 function onConnectSuccess() {
   console.log("Conectado a MQTT!");
-  client.subscribe(TOPIC_LEVEL_READ);
-  client.subscribe(TOPIC_PUMP_STATE_READ);
+  // Suscribirse a los tópicos del sistema 1
+  client.subscribe(TOPIC_LEVEL_READ_1);
+  client.subscribe(TOPIC_PUMP_STATE_READ_1);
+  // Suscribirse a los tópicos del sistema 2
+  client.subscribe(TOPIC_LEVEL_READ_2);
+  client.subscribe(TOPIC_PUMP_STATE_READ_2);
 }
 
 function onConnectFailure(resp) {
@@ -64,7 +82,8 @@ function onConnectionLost(resp) {
 function onMessageArrived(message) {
   console.log(`Mensaje recibido: ${message.destinationName} = ${message.payloadString}`);
 
-  if (message.destinationName === TOPIC_LEVEL_READ) {
+  // Lógica para el Sistema 1
+  if (message.destinationName === TOPIC_LEVEL_READ_1) {
     let level = parseFloat(message.payloadString);
     if (!isNaN(level)) {
       level = Math.max(0, Math.min(100, level));
@@ -73,14 +92,11 @@ function onMessageArrived(message) {
     }
   }
 
-  if (message.destinationName === TOPIC_PUMP_STATE_READ) {
-    // Interpretar la carga como booleano
+  if (message.destinationName === TOPIC_PUMP_STATE_READ_1) {
     let state;
     try {
-      // si viene como "true"/"false" en texto
       state = JSON.parse(message.payloadString.toLowerCase());
     } catch {
-      // fallback: aceptar "1"/"0"
       state = message.payloadString === "1";
     }
 
@@ -92,6 +108,35 @@ function onMessageArrived(message) {
       pumpStateSpan.textContent = "DETENIDA";
       pumpStateSpan.style.color = "gray";
       pumpIndicator.style.backgroundColor = "gray";
+    }
+  }
+
+  // Lógica para el Sistema 2 (Nueva lógica)
+  if (message.destinationName === TOPIC_LEVEL_READ_2) {
+    let level = parseFloat(message.payloadString);
+    if (!isNaN(level)) {
+      level = Math.max(0, Math.min(100, level));
+      tankLevelDiv2.style.height = level + "%";
+      levelValueSpan2.textContent = level.toFixed(0);
+    }
+  }
+
+  if (message.destinationName === TOPIC_PUMP_STATE_READ_2) {
+    let state;
+    try {
+      state = JSON.parse(message.payloadString.toLowerCase());
+    } catch {
+      state = message.payloadString === "1";
+    }
+
+    if (state === true) {
+      pumpStateSpan2.textContent = "ENCENDIDA";
+      pumpStateSpan2.style.color = "green";
+      pumpIndicator2.style.backgroundColor = "green";
+    } else {
+      pumpStateSpan2.textContent = "DETENIDA";
+      pumpStateSpan2.style.color = "gray";
+      pumpIndicator2.style.backgroundColor = "gray";
     }
   }
 }
@@ -107,9 +152,13 @@ function publishMessage(topic, payload) {
   }
 }
 
-// --- Eventos botones ---
-startPumpBtn.addEventListener("click", () => publishMessage(TOPIC_PUMP_CMD_START, "ON"));
-stopPumpBtn.addEventListener("click", () => publishMessage(TOPIC_PUMP_CMD_STOP, "ON"));
+// --- Eventos botones - Sistema 1 ---
+startPumpBtn.addEventListener("click", () => publishMessage(TOPIC_PUMP_CMD_START_1, "ON"));
+stopPumpBtn.addEventListener("click", () => publishMessage(TOPIC_PUMP_CMD_STOP_1, "ON"));
+
+// --- Eventos botones - Sistema 2 (Nuevos eventos) ---
+startPumpBtn2.addEventListener("click", () => publishMessage(TOPIC_PUMP_CMD_START_2, "ON"));
+stopPumpBtn2.addEventListener("click", () => publishMessage(TOPIC_PUMP_CMD_STOP_2, "ON"));
 
 // --- Inicia conexión ---
 window.onload = connectMQTT;
