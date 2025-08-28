@@ -1,0 +1,98 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f0f2f5;
+    margin: 0;
+  }
+  
+  .container {
+    background-color: #ffffff;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    width: 350px;
+  }
+  
+  .tank-container {
+    margin: 30px auto;
+    width: 150px;
+    height: 250px;
+    border: 3px solid #666;
+    border-radius: 5px;
+    position: relative;
+    overflow: hidden;
+    background-color: #e0e0e0;
+  }
+  
+  .tank-level {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background-color: #4CAF50;
+    transition: height 0.5s ease-out;
+  }
+  
+  .level-indicator {
+    margin-top: 15px;
+    font-size: 1.2em;
+    font-weight: bold;
+  }
+  
+  .pump-status {
+    margin-top: 25px;
+    font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  
+  .pump-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: gray; /* Por defecto */
+  }
+  
+  #pump-state {
+    font-weight: bold;
+    color: gray;
+  }
+  
+  .controls {
+    margin-top: 30px;
+  }
+  
+  .btn {
+    padding: 12px 25px;
+    font-size: 1em;
+    font-weight: bold;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 0 10px;
+    transition: background-color 0.3s ease;
+  }
+  
+  .btn-start {
+    background-color: #5cb85c;
+    color: white;
+  }
+  
+  .btn-start:hover {
+    background-color: #4cae4c;
+  }
+  
+  .btn-stop {
+    background-color: #f0ad4e;
+    color: white;
+  }
+  
+  .btn-stop:hover {
+    background-color: #ec971f;
+  }
+  
