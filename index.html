@@ -7,45 +7,37 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>SCADA Demo</h1>
+  <h1 id="main-title">SCADA Demo</h1>
 
-  <div class="main-container-wrapper"> <div class="main-container">
-      <div class="system-group"> <div class="system-container">
-          <h2>Tanque 1 - CompactLogix</h2>
-          <div class="tank-container">
-            <div id="tank-level" class="tank-level"></div>
-          </div>
-          <div class="level-indicator">
-            Nivel: <span id="level-value">0</span>%
-          </div>
-          <div class="pump-status">
-            <div id="pump-indicator" class="pump-indicator"></div>
-            <span id="pump-state">DETENIDA</span>
-          </div>
-          <div class="controls">
-            <button id="start-pump-btn" class="btn btn-start">PARTIR BOMBA 1</button>
-            <button id="stop-pump-btn" class="btn btn-stop">PARAR BOMBA 1</button>
-          </div>
-        </div>
+  <div class="controls-display">
+    <button id="view-matrix" class="btn btn-view active">Vista en Matriz</button>
+    <button id="view-sidebar" class="btn btn-view">Vista Lateral</button>
+  </div>
 
-        <div class="system-container">
-          <h2>Tanque 2 - MicroLogix</h2>
-          <div class="tank-container">
-            <div id="tank-level-2" class="tank-level"></div>
-          </div>
-          <div class="level-indicator">
-            Nivel: <span id="level-value-2">0</span>%
-          </div>
-          <div class="pump-status">
-            <div id="pump-indicator-2" class="pump-indicator"></div>
-            <span id="pump-state-2">DETENIDA</span>
-          </div>
-          <div class="controls">
-            <button id="start-pump-btn-2" class="btn btn-start">PARTIR BOMBA 2</button>
-            <button id="stop-pump-btn-2" class="btn btn-stop">PARAR BOMBA 2</button>
-          </div>
-        </div>
-      </div>
+  <div class="main-content-wrapper">
+    <div id="sidebar-menu" class="sidebar-menu"></div>
+    <div id="scada-container" class="system-group matrix-view"></div>
+  </div>
+
+  <div class="footer-controls">
+    <button id="login-btn" class="btn btn-login">Login</button>
+    <a href="config.html" id="config-link" class="config-link" style="display: none;">Volver a Configuración</a>
+  </div>
+  <span id="connect-status">Desconectado</span>
+  <div id="user-status-container">
+    <span>Usuario:</span> <span id="current-user">Anónimo</span>
+  </div>
+
+  <div id="login-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-btn">&times;</span>
+      <h2>Iniciar Sesión</h2>
+      <form id="login-form">
+        <input type="text" id="username-input" placeholder="Usuario" required>
+        <input type="password" id="password-input" placeholder="Contraseña" required>
+        <button type="submit" class="btn btn-login">Entrar</button>
+      </form>
+      <p id="login-error" class="error-message"></p>
     </div>
   </div>
 

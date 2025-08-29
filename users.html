@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestión de Usuarios SCADA</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .user-manager-container {
+      background-color: #fff;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      width: 80%;
+      max-width: 700px;
+      margin-top: 50px;
+    }
+    .user-form input, .user-form select {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .user-list {
+      margin-top: 20px;
+      border-collapse: collapse;
+      width: 100%;
+    }
+    .user-list th, .user-list td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+    .user-list th {
+      background-color: #f2f2f2;
+    }
+    .user-list .btn-remove {
+        background-color: #dc3545;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    .user-list .btn-remove:hover {
+        background-color: #c82333;
+    }
+    .button-group-bottom {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Gestión de Usuarios</h1>
+
+  <div class="user-manager-container">
+    <h2>Añadir Nuevo Usuario</h2>
+    <form id="user-form" class="user-form">
+      <input type="text" id="username" placeholder="Nombre de Usuario" required>
+      <input type="password" id="password" placeholder="Contraseña" required>
+      <select id="role">
+        <option value="operador">Operador</option>
+        <option value="visualizacion">Visualización</option>
+        <option value="admin">Administrador</option>
+      </select>
+      <button type="submit" class="btn btn-generate">Guardar Usuario</button>
+    </form>
+
+    <h2>Usuarios Existentes</h2>
+    <table class="user-list">
+      <thead>
+        <tr>
+          <th>Usuario</th>
+          <th>Rol</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="user-table-body">
+        </tbody>
+    </table>
+    
+    <div class="button-group-bottom">
+        <a href="index.html" class="btn btn-cancel">Volver a SCADA</a>
+    </div>
+  </div>
+
+  <script>
+    const userForm = document.getElementById('user-form');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const roleInput = document.getElementById('role');
+    const userTableBody = document.getElementById('user-table-body');
+    
+    function getUsers() {
+        return JSON.parse(localStorage.getItem('scadaUsers')) || [];
+    }
+    
+    function saveUsers(users) {
+        localStorage.setItem('scadaUsers', JSON.stringify(users));
+    }
+    
+    function renderUsers() {
+        const users = getUsers();
+        userTableBody.innerHTML = '';
+        users.forEach((user, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${user.username}</td>
+                <td>${user.role.charAt(0).toUpperCase() + user.role.slice(1)}</td>
+                <td><button class="btn-remove" onclick="removeUser(${index})">Eliminar</button></td>
+            `;
+            userTableBody.appendChild(row);
+        });
+    }
+
+    function removeUser(index) {
+        let users = getUsers();
+        if (users[index].role === 'admin' && users.filter(u => u.role === 'admin').length === 1) {
+            alert('No se puede eliminar el único usuario administrador.');
+            return;
+        }
+        users.splice(index, 1);
+        saveUsers(users);
+        renderUsers();
+    }
+    
+    userForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const username = usernameInput.value;
+        const password = passwordInput.value;
+        const role = roleInput.value;
+        
+        let users = getUsers();
+        if (users.some(user => user.username === username)) {
+            alert('El nombre de usuario ya existe.');
+            return;
+        }
+        
+        users.push({ username, password, role });
+        saveUsers(users);
+        renderUsers();
+        userForm.reset();
+    });
+    
+    document.addEventListener('DOMContentLoaded', renderUsers);
+  </script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Configuración SCADA</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f0f2f5; padding: 20px; }
+    .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    h1 { text-align: center; color: #333; }
+    h2 { border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    
+    .btn-add { background-color: #5cb85c; color: white; }
+    .btn-export { background-color: #007bff; color: white; }
+    .btn-generate { background-color: #007bff; color: white; margin-top: 20px; }
+    .btn-cancel { background-color: #6c757d; color: white; margin-top: 20px; }
+    .btn-remove { background-color: #dc3545; color: white; border-radius: 50%; width: 30px; height: 30px; padding: 0; line-height: 1; text-align: center; }
+
+    .object-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .object-item input, .object-item select { flex-grow: 1; padding: 5px; }
+
+    .button-group {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+      gap: 10px;
+    }
+    .button-group .left-side, .button-group .right-side {
+      display: flex;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Configuración SCADA</h1>
+
+  <div class="container">
+    <h2>Configuración General</h2>
+    <div>
+      <label for="main-title-input">Título de la página principal:</label>
+      <input type="text" id="main-title-input" placeholder="Ej: Mi Sistema SCADA">
+    </div>
+    <div style="margin-top: 15px;">
+      <label for="num-containers">Número de Contenedores:</label>
+      <input type="number" id="num-containers" min="1" value="1">
+    </div>
+  </div>
+
+  <div id="containers-section"></div>
+
+  <div class="button-group">
+      <div class="left-side">
+          <button id="cancel-btn" class="btn btn-cancel">Volver sin cambios</button>
+      </div>
+      <div class="right-side">
+          <button id="import-btn" class="btn btn-export">Importar</button>
+          <input type="file" id="import-input" accept=".json" style="display: none;">
+          <button id="export-btn" class="btn btn-export">Exportar</button>
+          <button id="generate-btn" class="btn btn-generate">Guardar y Volver</button>
+      </div>
+  </div>
+
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const userRole = localStorage.getItem('currentRole');
+        if (userRole !== 'admin') {
+            alert('Acceso denegado. Solo los administradores pueden acceder a esta página.');
+            window.location.href = 'index.html';
+        }
+    });
+    let currentConfig = { mainTitle: 'SCADA Demo', containers: [] };
+    const numContainersInput = document.getElementById('num-containers');
+    const mainTitleInput = document.getElementById('main-title-input');
+    const containersSection = document.getElementById('containers-section');
+    const generateBtn = document.getElementById('generate-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const exportBtn = document.getElementById('export-btn');
+    const importBtn = document.getElementById('import-btn');
+    const importInput = document.getElementById('import-input');
+
+    const objectOptions = [
+      { type: 'level', label: 'Nivel del Tanque', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'color', label: 'Color', type: 'color' }] },
+      { type: 'pumpStatus', label: 'Estado de Bomba', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'onColor', label: 'Color ON', type: 'color' }, { id: 'offColor', label: 'Color OFF', type: 'color' }] },
+      { type: 'motorSpeed', label: 'Velocidad de Motor', props: [{ id: 'topic', label: 'Tópico MQTT' }] },
+      { type: 'startBtn', label: 'Botón de Arranque', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'label', label: 'Etiqueta del Botón' }, { id: 'color', label: 'Color', type: 'color' }] },
+      { type: 'stopBtn', label: 'Botón de Paro', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'label', label: 'Etiqueta del Botón' }, { id: 'color', type: 'color' }] },
+      { type: 'resetBtn', label: 'Botón de Reset', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'label', label: 'Etiqueta del Botón' }, { id: 'color', type: 'color' }] },
+      { type: 'gauge', label: 'Medidor Circular (Gauge)', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'color', label: 'Color', type: 'color' }] },
+      { type: 'number', label: 'Valor Numérico', props: [{ id: 'topic', label: 'Tópico MQTT' }] }
+    ];
+
+    function renderContainers() {
+      containersSection.innerHTML = '';
+      currentConfig.containers.forEach((containerData, containerIndex) => {
+        const containerDiv = document.createElement('div');
+        containerDiv.className = 'container';
+        containerDiv.innerHTML = `
+          <h2>Contenedor ${containerIndex + 1}</h2>
+          <label for="title-${containerIndex}">Título:</label>
+          <input type="text" id="title-${containerIndex}" value="${containerData.title}" placeholder="Ej: Tanque 1 - CompactLogix">
+          <h3>Objetos:</h3>
+          <div id="objects-container-${containerIndex}"></div>
+          <button class="btn btn-add" onclick="addObject(${containerIndex})">Añadir Objeto</button>
+        `;
+        containersSection.appendChild(containerDiv);
+
+        document.getElementById(`title-${containerIndex}`).addEventListener('input', (event) => {
+          containerData.title = event.target.value;
+        });
+
+        const objectsContainer = document.getElementById(`objects-container-${containerIndex}`);
+        containerData.objects.forEach((obj, objectIndex) => {
+          const objDiv = createObjectDiv(obj, containerIndex, objectIndex);
+          objectsContainer.appendChild(objDiv);
+        });
+      });
+    }
+
+    function addObject(containerIndex) {
+      currentConfig.containers[containerIndex].objects.push({ type: objectOptions[0].type });
+      renderContainers();
+    }
+
+    function createObjectDiv(obj, containerIndex, objectIndex) {
+      const div = document.createElement('div');
+      div.className = 'object-item';
+
+      const select = document.createElement('select');
+      select.style.flexGrow = '1';
+      select.addEventListener('change', (event) => {
+        obj.type = event.target.value;
+        obj.label = '';
+        obj.topic = '';
+        obj.color = '';
+        obj.onColor = '';
+        obj.offColor = '';
+        renderContainers();
+      });
+      objectOptions.forEach(option => {
+        const opt = document.createElement('option');
+        opt.value = option.type;
+        opt.textContent = option.label;
+        if (obj.type === option.type) {
+          opt.selected = true;
+        }
+        select.appendChild(opt);
+      });
+      div.appendChild(select);
+
+      const type = obj.type || 'level';
+      const selectedOption = objectOptions.find(o => o.type === type);
+
+      selectedOption.props.forEach(prop => {
+        const input = document.createElement('input');
+        input.type = prop.type || 'text';
+        input.placeholder = prop.label;
+        input.value = obj[prop.id] || '';
+        input.addEventListener('input', (event) => {
+          obj[prop.id] = event.target.value;
+        });
+        div.appendChild(input);
+      });
+      
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn btn-remove';
+      removeBtn.textContent = 'x';
+      removeBtn.onclick = () => {
+        currentConfig.containers[containerIndex].objects.splice(objectIndex, 1);
+        renderContainers();
+      };
+      div.appendChild(removeBtn);
+      
+      return div;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const savedConfig = JSON.parse(localStorage.getItem('scadaConfig'));
+      if (savedConfig) {
+        currentConfig = savedConfig;
+      }
+      if (!currentConfig.mainTitle) {
+        currentConfig.mainTitle = 'SCADA Demo';
+      }
+      if (!currentConfig.containers || currentConfig.containers.length === 0) {
+        currentConfig.containers = [{ title: '', objects: [] }];
+      }
+      
+      numContainersInput.value = currentConfig.containers.length;
+      mainTitleInput.value = currentConfig.mainTitle;
+      renderContainers();
+    });
+
+    mainTitleInput.addEventListener('input', (event) => {
+      currentConfig.mainTitle = event.target.value;
+    });
+
+    numContainersInput.addEventListener('change', () => {
+      const newNum = parseInt(numContainersInput.value) || 1;
+      const containersToKeep = currentConfig.containers.slice(0, newNum);
+      
+      while (containersToKeep.length < newNum) {
+          containersToKeep.push({ title: '', objects: [] });
+      }
+      
+      currentConfig.containers = containersToKeep;
+      renderContainers();
+    });
+
+    generateBtn.onclick = () => {
+      localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
+      window.location.href = 'index.html';
+    };
+    
+    cancelBtn.onclick = () => {
+        window.location.href = 'index.html';
+    };
+
+    exportBtn.onclick = () => {
+      const dataStr = JSON.stringify(currentConfig, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const exportFileDefaultName = 'scada_config.json';
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+    };
+
+    importBtn.onclick = () => {
+        importInput.click();
+    };
+
+    importInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const importedConfig = JSON.parse(e.target.result);
+            if (importedConfig.containers) {
+              currentConfig = importedConfig;
+              localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
+              numContainersInput.value = currentConfig.containers.length;
+              renderContainers();
+              alert('Configuración importada exitosamente!');
+            } else {
+              alert('Formato de archivo JSON incorrecto.');
+            }
+          } catch (error) {
+            alert('Error al leer el archivo. Asegúrate de que sea un archivo JSON válido.');
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+
+  </script>
+</body>
+</html>
