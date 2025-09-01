@@ -21,217 +21,331 @@
     .btn-export { background-color: #007bff; color: white; }
     .btn-generate { background-color: #007bff; color: white; margin-top: 20px; }
     .btn-cancel { background-color: #6c757d; color: white; margin-top: 20px; }
-    .btn-remove { background-color: #dc3545; color: white; border-radius: 50%; width: 30px; height: 30px; padding: 0; line-height: 1; text-align: center; }
-
-    .object-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
+    .btn-remove { background-color: #dc3545; color: white; }
+    
+    .object-form {
+      border: 1px solid #ddd;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 10px;
+      margin-bottom: 15px;
+      background-color: #f9f9f9;
     }
-    .object-item input, .object-item select { flex-grow: 1; padding: 5px; }
 
-    .button-group {
+    .form-group {
+      margin-bottom: 15px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #555;
+    }
+    
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    /* Estilos específicos para el input de color */
+    input[type="color"] {
+        width: 100px; /* Ancho ajustable para el selector de color */
+        height: 38px; /* Altura para que se vea bien */
+        padding: 0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+        vertical-align: middle; /* Para alinear con el texto si hay */
+        cursor: pointer;
+    }
+
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .buttons {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
+      gap: 10px;
       margin-top: 20px;
-      gap: 10px;
     }
-    .button-group .left-side, .button-group .right-side {
-      display: flex;
-      gap: 10px;
+
+    .header-links {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
     }
+
+    .back-link {
+      font-size: 1em;
+      text-decoration: none;
+      color: #007bff;
+    }
+
   </style>
 </head>
 <body>
-
-  <h1>Configuración SCADA</h1>
+  <div class="header-links">
+    <a href="index.html" class="back-link">Volver al SCADA</a>
+    <h1>Configuración SCADA</h1>
+    <div></div>
+  </div>
 
   <div class="container">
-    <h2>Configuración General</h2>
-    <div>
-      <label for="main-title-input">Título de la página principal:</label>
-      <input type="text" id="main-title-input" placeholder="Ej: Mi Sistema SCADA">
+    <h2>Configuración Principal</h2>
+    <div class="form-group">
+      <label for="mainTitle">Título Principal:</label>
+      <input type="text" id="mainTitle" value="SCADA Demo">
     </div>
-    <div style="margin-top: 15px;">
-      <label for="num-containers">Número de Contenedores:</label>
-      <input type="number" id="num-containers" min="1" value="1">
+    <div class="form-group">
+      <label for="numContainers">Número de Contenedores:</label>
+      <input type="number" id="numContainers" value="1" min="1">
+    </div>
+    <div class="buttons">
+      <button class="btn btn-generate" id="generateBtn">Generar Contenedores</button>
+      <button class="btn btn-export" id="exportBtn">Exportar Configuración</button>
+      <button class="btn btn-cancel" id="importBtn">Importar Configuración</button>
+      <input type="file" id="importInput" accept=".json" style="display: none;">
     </div>
   </div>
 
   <div id="containers-section"></div>
 
-  <div class="button-group">
-      <div class="left-side">
-          <button id="cancel-btn" class="btn btn-cancel">Volver sin cambios</button>
-      </div>
-      <div class="right-side">
-          <button id="import-btn" class="btn btn-export">Importar</button>
-          <input type="file" id="import-input" accept=".json" style="display: none;">
-          <button id="export-btn" class="btn btn-export">Exportar</button>
-          <button id="generate-btn" class="btn btn-generate">Guardar y Volver</button>
-      </div>
-  </div>
-
-
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const userRole = localStorage.getItem('currentRole');
-        if (userRole !== 'admin') {
-            alert('Acceso denegado. Solo los administradores pueden acceder a esta página.');
-            window.location.href = 'index.html';
-        }
-    });
-    let currentConfig = { mainTitle: 'SCADA Demo', containers: [] };
-    const numContainersInput = document.getElementById('num-containers');
-    const mainTitleInput = document.getElementById('main-title-input');
+    const generateBtn = document.getElementById('generateBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const importInput = document.getElementById('importInput');
+    const numContainersInput = document.getElementById('numContainers');
+    const mainTitleInput = document.getElementById('mainTitle');
     const containersSection = document.getElementById('containers-section');
-    const generateBtn = document.getElementById('generate-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
-    const exportBtn = document.getElementById('export-btn');
-    const importBtn = document.getElementById('import-btn');
-    const importInput = document.getElementById('import-input');
 
-    const objectOptions = [
-      { type: 'level', label: 'Nivel del Tanque', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'color', label: 'Color', type: 'color' }] },
-      { type: 'pumpStatus', label: 'Estado de Bomba', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'onColor', label: 'Color ON', type: 'color' }, { id: 'offColor', label: 'Color OFF', type: 'color' }] },
-      { type: 'motorSpeed', label: 'Velocidad de Motor', props: [{ id: 'topic', label: 'Tópico MQTT' }] },
-      { type: 'startBtn', label: 'Botón de Arranque', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'label', label: 'Etiqueta del Botón' }, { id: 'color', label: 'Color', type: 'color' }] },
-      { type: 'stopBtn', label: 'Botón de Paro', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'label', label: 'Etiqueta del Botón' }, { id: 'color', type: 'color' }] },
-      { type: 'resetBtn', label: 'Botón de Reset', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'label', label: 'Etiqueta del Botón' }, { id: 'color', type: 'color' }] },
-      { type: 'gauge', label: 'Medidor Circular (Gauge)', props: [{ id: 'topic', label: 'Tópico MQTT' }, { id: 'color', label: 'Color', type: 'color' }] },
-      { type: 'number', label: 'Valor Numérico', props: [{ id: 'topic', label: 'Tópico MQTT' }] }
-    ];
-
-    function renderContainers() {
-      containersSection.innerHTML = '';
-      currentConfig.containers.forEach((containerData, containerIndex) => {
-        const containerDiv = document.createElement('div');
-        containerDiv.className = 'container';
-        containerDiv.innerHTML = `
-          <h2>Contenedor ${containerIndex + 1}</h2>
-          <label for="title-${containerIndex}">Título:</label>
-          <input type="text" id="title-${containerIndex}" value="${containerData.title}" placeholder="Ej: Tanque 1 - CompactLogix">
-          <h3>Objetos:</h3>
-          <div id="objects-container-${containerIndex}"></div>
-          <button class="btn btn-add" onclick="addObject(${containerIndex})">Añadir Objeto</button>
-        `;
-        containersSection.appendChild(containerDiv);
-
-        document.getElementById(`title-${containerIndex}`).addEventListener('input', (event) => {
-          containerData.title = event.target.value;
-        });
-
-        const objectsContainer = document.getElementById(`objects-container-${containerIndex}`);
-        containerData.objects.forEach((obj, objectIndex) => {
-          const objDiv = createObjectDiv(obj, containerIndex, objectIndex);
-          objectsContainer.appendChild(objDiv);
-        });
-      });
-    }
-
-    function addObject(containerIndex) {
-      currentConfig.containers[containerIndex].objects.push({ type: objectOptions[0].type });
-      renderContainers();
-    }
-
-    function createObjectDiv(obj, containerIndex, objectIndex) {
-      const div = document.createElement('div');
-      div.className = 'object-item';
-
-      const select = document.createElement('select');
-      select.style.flexGrow = '1';
-      select.addEventListener('change', (event) => {
-        obj.type = event.target.value;
-        obj.label = '';
-        obj.topic = '';
-        obj.color = '';
-        obj.onColor = '';
-        obj.offColor = '';
-        renderContainers();
-      });
-      objectOptions.forEach(option => {
-        const opt = document.createElement('option');
-        opt.value = option.type;
-        opt.textContent = option.label;
-        if (obj.type === option.type) {
-          opt.selected = true;
-        }
-        select.appendChild(opt);
-      });
-      div.appendChild(select);
-
-      const type = obj.type || 'level';
-      const selectedOption = objectOptions.find(o => o.type === type);
-
-      selectedOption.props.forEach(prop => {
-        const input = document.createElement('input');
-        input.type = prop.type || 'text';
-        input.placeholder = prop.label;
-        input.value = obj[prop.id] || '';
-        input.addEventListener('input', (event) => {
-          obj[prop.id] = event.target.value;
-        });
-        div.appendChild(input);
-      });
-      
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'btn btn-remove';
-      removeBtn.textContent = 'x';
-      removeBtn.onclick = () => {
-        currentConfig.containers[containerIndex].objects.splice(objectIndex, 1);
-        renderContainers();
-      };
-      div.appendChild(removeBtn);
-      
-      return div;
-    }
+    let currentConfig = {
+      mainTitle: 'SCADA Demo',
+      containers: []
+    };
 
     document.addEventListener('DOMContentLoaded', () => {
-      const savedConfig = JSON.parse(localStorage.getItem('scadaConfig'));
+      const savedConfig = localStorage.getItem('scadaConfig');
       if (savedConfig) {
-        currentConfig = savedConfig;
+        currentConfig = JSON.parse(savedConfig);
+        numContainersInput.value = currentConfig.containers.length;
+        mainTitleInput.value = currentConfig.mainTitle;
       }
-      if (!currentConfig.mainTitle) {
-        currentConfig.mainTitle = 'SCADA Demo';
-      }
-      if (!currentConfig.containers || currentConfig.containers.length === 0) {
-        currentConfig.containers = [{ title: '', objects: [] }];
-      }
-      
-      numContainersInput.value = currentConfig.containers.length;
-      mainTitleInput.value = currentConfig.mainTitle;
-      renderContainers();
-    });
-
-    mainTitleInput.addEventListener('input', (event) => {
-      currentConfig.mainTitle = event.target.value;
-    });
-
-    numContainersInput.addEventListener('change', () => {
-      const newNum = parseInt(numContainersInput.value) || 1;
-      const containersToKeep = currentConfig.containers.slice(0, newNum);
-      
-      while (containersToKeep.length < newNum) {
-          containersToKeep.push({ title: '', objects: [] });
-      }
-      
-      currentConfig.containers = containersToKeep;
       renderContainers();
     });
 
     generateBtn.onclick = () => {
+      const num = parseInt(numContainersInput.value);
+      currentConfig.mainTitle = mainTitleInput.value;
+      if (num < 1) {
+        alert('El número de contenedores debe ser al menos 1.');
+        return;
+      }
+      
+      const newContainers = [];
+      for (let i = 0; i < num; i++) {
+        if (currentConfig.containers[i]) {
+          newContainers.push(currentConfig.containers[i]);
+        } else {
+          newContainers.push({
+            title: `Contenedor ${i + 1}`,
+            objects: []
+          });
+        }
+      }
+      currentConfig.containers = newContainers;
       localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
-      window.location.href = 'index.html';
-    };
-    
-    cancelBtn.onclick = () => {
-        window.location.href = 'index.html';
+      renderContainers();
     };
 
+    function renderContainers() {
+      containersSection.innerHTML = '';
+      currentConfig.containers.forEach((containerData, index) => {
+        const containerDiv = document.createElement('div');
+        containerDiv.className = 'container';
+        containerDiv.innerHTML = `
+          <h2>Contenedor ${index + 1}</h2>
+          <div class="form-group">
+            <label for="containerTitle-${index}">Título del Contenedor:</label>
+            <input type="text" id="containerTitle-${index}" value="${containerData.title}">
+          </div>
+          <div id="objects-container-${index}"></div>
+          <button class="btn btn-add" onclick="addObject(${index})">Agregar Objeto</button>
+        `;
+        containersSection.appendChild(containerDiv);
+        renderObjects(index);
+      });
+    }
+
+    function renderObjects(containerIndex) {
+      const objectsContainer = document.getElementById(`objects-container-${containerIndex}`);
+      objectsContainer.innerHTML = '';
+      currentConfig.containers[containerIndex].objects.forEach((obj, objIndex) => {
+        const objForm = document.createElement('div');
+        objForm.className = 'object-form';
+        objForm.innerHTML = `
+          <h3>Objeto ${objIndex + 1}</h3>
+          <div class="form-group">
+            <label for="objType-${containerIndex}-${objIndex}">Tipo de Objeto:</label>
+            <select id="objType-${containerIndex}-${objIndex}" onchange="renderObjectForm(${containerIndex}, ${objIndex})">
+              <option value="level" ${obj.type === 'level' ? 'selected' : ''}>Medidor de Nivel</option>
+              <option value="pumpStatus" ${obj.type === 'pumpStatus' ? 'selected' : ''}>Indicador de Bomba</option>
+              <option value="motorSpeed" ${obj.type === 'motorSpeed' ? 'selected' : ''}>Velocidad de Motor</option>
+              <option value="startBtn" ${obj.type === 'startBtn' ? 'selected' : ''}>Botón de Inicio</option>
+              <option value="stopBtn" ${obj.type === 'stopBtn' ? 'selected' : ''}>Botón de Parada</option>
+              <option value="resetBtn" ${obj.type === 'resetBtn' ? 'selected' : ''}>Botón de Reset</option>
+              <option value="gauge" ${obj.type === 'gauge' ? 'selected' : ''}>Medidor Circular</option>
+              <option value="number" ${obj.type === 'number' ? 'selected' : ''}>Indicador Numérico</option>
+            </select>
+          </div>
+          <div id="dynamic-form-${containerIndex}-${objIndex}"></div>
+          <div class="buttons">
+              <button class="btn btn-remove" onclick="removeObject(${containerIndex}, ${objIndex})">Eliminar</button>
+          </div>
+        `;
+        objectsContainer.appendChild(objForm);
+        renderObjectForm(containerIndex, objIndex);
+      });
+    }
+
+    function renderObjectForm(containerIndex, objIndex) {
+      const obj = currentConfig.containers[containerIndex].objects[objIndex];
+      const formDiv = document.getElementById(`dynamic-form-${containerIndex}-${objIndex}`);
+      let htmlContent = `
+        <div class="form-group">
+          <label for="objLabel-${containerIndex}-${objIndex}">Etiqueta:</label>
+          <input type="text" id="objLabel-${containerIndex}-${objIndex}" value="${obj.label || ''}">
+        </div>
+        <div class="form-group">
+          <label for="objTopic-${containerIndex}-${objIndex}">Tópico MQTT:</label>
+          <input type="text" id="objTopic-${containerIndex}-${objIndex}" value="${obj.topic || ''}">
+        </div>
+      `;
+
+      switch(obj.type) {
+        case 'level':
+        case 'gauge':
+        case 'motorSpeed':
+        case 'number':
+          htmlContent += `
+            <div class="form-group">
+              <label for="objUnit-${containerIndex}-${objIndex}">Unidad de Ingeniería:</label>
+              <input type="text" id="objUnit-${containerIndex}-${objIndex}" value="${obj.unit || ''}" placeholder="Ej: %">
+            </div>
+            <div class="form-group">
+                <label for="objMin-${containerIndex}-${objIndex}">Valor Mínimo:</label>
+                <input type="number" id="objMin-${containerIndex}-${objIndex}" value="${obj.min !== undefined ? obj.min : ''}">
+            </div>
+            <div class="form-group">
+                <label for="objMax-${containerIndex}-${objIndex}">Valor Máximo:</label>
+                <input type="number" id="objMax-${containerIndex}-${objIndex}" value="${obj.max !== undefined ? obj.max : ''}">
+            </div>
+          `;
+          if (obj.type === 'level' || obj.type === 'gauge') {
+            htmlContent += `
+              <div class="form-group">
+                <label for="objColor-${containerIndex}-${objIndex}">Color:</label>
+                <input type="color" id="objColor-${containerIndex}-${objIndex}" value="${obj.color || '#00b3ff'}">
+              </div>
+            `;
+          }
+          break;
+        case 'pumpStatus':
+          htmlContent += `
+            <div class="form-group">
+              <label for="objOnColor-${containerIndex}-${objIndex}">Color ENCENDIDO:</label>
+              <input type="color" id="objOnColor-${containerIndex}-${objIndex}" value="${obj.onColor || '#00ff00'}">
+            </div>
+            <div class="form-group">
+              <label for="objOffColor-${containerIndex}-${objIndex}">Color APAGADO:</label>
+              <input type="color" id="objOffColor-${containerIndex}-${objIndex}" value="${obj.offColor || '#6c757d'}">
+            </div>
+          `;
+          break;
+        case 'startBtn':
+        case 'stopBtn':
+        case 'resetBtn':
+          htmlContent += `
+            <div class="form-group">
+              <label for="objColor-${containerIndex}-${objIndex}">Color del Botón:</label>
+              <input type="color" id="objColor-${containerIndex}-${objIndex}" value="${obj.color || '#007bff'}">
+            </div>
+          `;
+          break;
+      }
+
+      formDiv.innerHTML = htmlContent;
+      
+      // Update the object type when the select changes
+      const objTypeSelect = document.getElementById(`objType-${containerIndex}-${objIndex}`);
+      objTypeSelect.addEventListener('change', (e) => {
+        currentConfig.containers[containerIndex].objects[objIndex].type = e.target.value;
+        renderObjectForm(containerIndex, objIndex); // Re-render the form
+      });
+    }
+    
+    function addObject(containerIndex) {
+      currentConfig.containers[containerIndex].objects.push({ type: 'level', label: '', topic: '', unit: '', min: 0, max: 100, color: '#00b3ff' });
+      localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
+      renderObjects(containerIndex);
+    }
+    
+    function removeObject(containerIndex, objIndex) {
+      currentConfig.containers[containerIndex].objects.splice(objIndex, 1);
+      localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
+      renderObjects(containerIndex);
+    }
+
+    function saveConfig() {
+      currentConfig.mainTitle = mainTitleInput.value;
+      currentConfig.containers.forEach((containerData, containerIndex) => {
+        containerData.title = document.getElementById(`containerTitle-${containerIndex}`).value;
+        containerData.objects.forEach((obj, objIndex) => {
+          obj.type = document.getElementById(`objType-${containerIndex}-${objIndex}`).value;
+          obj.label = document.getElementById(`objLabel-${containerIndex}-${objIndex}`).value;
+          obj.topic = document.getElementById(`objTopic-${containerIndex}-${objIndex}`).value;
+          
+          const unitInput = document.getElementById(`objUnit-${containerIndex}-${objIndex}`);
+          if (unitInput) {
+            obj.unit = unitInput.value;
+          } else {
+            delete obj.unit;
+          }
+
+          if (obj.type === 'level' || obj.type === 'gauge') {
+            obj.color = document.getElementById(`objColor-${containerIndex}-${objIndex}`).value;
+          } else if (obj.type === 'pumpStatus') {
+            obj.onColor = document.getElementById(`objOnColor-${containerIndex}-${objIndex}`).value;
+            obj.offColor = document.getElementById(`objOffColor-${containerIndex}-${objIndex}`).value;
+          } else if (obj.type === 'startBtn' || obj.type === 'stopBtn' || obj.type === 'resetBtn') {
+            obj.color = document.getElementById(`objColor-${containerIndex}-${objIndex}`).value;
+          }
+
+          const minInput = document.getElementById(`objMin-${containerIndex}-${objIndex}`);
+          const maxInput = document.getElementById(`objMax-${containerIndex}-${objIndex}`);
+          if (minInput) obj.min = minInput.value !== '' ? parseFloat(minInput.value) : undefined;
+          if (maxInput) obj.max = maxInput.value !== '' ? parseFloat(maxInput.value) : undefined;
+        });
+      });
+      localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
+      alert('Configuración guardada en localStorage!');
+    }
+
+    // Save configuration before exporting or navigating away
+    window.addEventListener('beforeunload', saveConfig);
+
     exportBtn.onclick = () => {
+      saveConfig();
       const dataStr = JSON.stringify(currentConfig, null, 2);
-      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
       const exportFileDefaultName = 'scada_config.json';
       const linkElement = document.createElement('a');
       linkElement.setAttribute('href', dataUri);
@@ -254,6 +368,7 @@
               currentConfig = importedConfig;
               localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
               numContainersInput.value = currentConfig.containers.length;
+              mainTitleInput.value = currentConfig.mainTitle;
               renderContainers();
               alert('Configuración importada exitosamente!');
             } else {

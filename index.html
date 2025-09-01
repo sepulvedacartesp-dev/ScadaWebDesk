@@ -4,10 +4,11 @@
   <meta charset="UTF-8">
   <title>Simulador SCADA</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1 id="main-title">SCADA Demo v3</h1>
+  <h1 id="main-title">SCADA Demo</h1>
 
   <div class="controls-display">
     <button id="view-matrix" class="btn btn-view active">Vista en Matriz</button>
@@ -36,12 +37,11 @@
         <input type="text" id="username-input" placeholder="Usuario" required>
         <input type="password" id="password-input" placeholder="Contraseña" required>
         <button type="submit" class="btn btn-login">Entrar</button>
-        <p id="login-error" class="login-error"></p>
       </form>
+      <p id="login-error" class="error-message"></p>
     </div>
   </div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  
   <script src="script.js"></script>
 </body>
 </html>

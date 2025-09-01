@@ -1,0 +1,98 @@
+{
+  "containers": [
+    {
+      "title": "CompactLogix",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "Temperatura",
+          "topic": "Micro/NivelTK",
+          "unit": "ºC",
+          "min": 0,
+          "max": 150,
+          "color": "#ff0000"
+        }
+      ]
+    },
+    {
+      "title": "Micrologix",
+      "objects": [
+        {
+          "type": "level",
+          "label": "Nivel Estanque",
+          "topic": "Micro/NivelTK",
+          "unit": "%",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir bba 1",
+          "topic": "PLC/PumpCmdStart",
+          "color": "#1eff00"
+        }
+      ]
+    },
+    {
+      "title": "Detencion Bombas",
+      "objects": [
+        {
+          "type": "pumpStatus",
+          "label": "status bomba 1",
+          "topic": "PLC/PumpSts",
+          "onColor": "#bdbdbd",
+          "offColor": "#2bff00"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "status bomba 2",
+          "topic": "Micro/PumpSts2",
+          "onColor": "#bababa",
+          "offColor": "#2bfa00"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Detener B1",
+          "topic": "PLC/PumpCmdStop",
+          "color": "#ff0000"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Detener B2",
+          "topic": "Micro/PumpCmdStop2",
+          "color": "#ff0000"
+        },
+        {
+          "type": "number",
+          "label": "Nivel",
+          "topic": "Micro/NivelTK",
+          "unit": "lts",
+          "min": 0,
+          "max": 100
+        }
+      ]
+    },
+    {
+      "title": "Nivel",
+      "objects": [
+        {
+          "type": "level",
+          "label": "Nivel",
+          "topic": "Micro/NivelTK",
+          "unit": "m3",
+          "min": 0,
+          "max": 300,
+          "color": "#00b3ff"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir bba 2",
+          "topic": "Micro/PumpCmdStart2",
+          "color": "#1eff00"
+        }
+      ]
+    }
+  ],
+  "mainTitle": "SCADA Demo"
+}
