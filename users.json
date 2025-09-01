@@ -2,17 +2,17 @@
     "users": [
       {
         "username": "admin",
-        "password": "pass1234",
+        "password": "ac9689e2272427085e35b9d3e3e8bed88cb3434828b43b86fc0596cad4c6e270",
         "role": "admin"
       },
       {
-        "username": "operador1",
-        "password": "pass",
+        "username": "operador",
+        "password": "A5BEAE027394D1B9816DC1A5206B9BC9EBAB21B2E8044D89E7CEED0A18ECB60C",
         "role": "operador"
       },
       {
-        "username": "visualizacion1",
-        "password": "pass",
+        "username": "visualizacion",
+        "password": "52675631756776BA01A4A1AE8F1A666A16A8A6506D5B128BC58FB5473169FBA1",
         "role": "visualizacion"
       }
     ]

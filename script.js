@@ -6,6 +6,7 @@ const MQTT_USERNAME = "Webclient";
 const MQTT_PASSWORD = "Webclient2025";
 const CLIENT_ID = "web_scada_" + Math.random().toString(16).substr(2, 8);
 
+// --- Referencias a elementos del DOM ---
 const scadaContainer = document.getElementById('scada-container');
 const sidebarMenu = document.getElementById('sidebar-menu');
 const matrixBtn = document.getElementById('view-matrix');
@@ -22,364 +23,274 @@ const usernameInput = document.getElementById('username-input');
 const passwordInput = document.getElementById('password-input');
 const loginError = document.getElementById('login-error');
 
+let usersData = [];
 let config;
 let client;
 let currentView = 'matrix';
 let currentRole = 'anonimo';
-let usersData = null; // Variable para almacenar los usuarios del archivo JSON
+let currentUser = 'anonimo';
 
 const topicStateCache = {};
 const topicElementMap = {};
-let containerElements = [];
+
+// --- URL de la base de datos de usuarios en JSONBin.io ---
+const JSONBIN_URL = "https://api.jsonbin.io/v3/b/68b5b95aae596e708fdefd2b"; // <-- REEMPLAZA CON TU BIN ID
+
+// --- Funciones de Carga de Configuración y Autenticación ---
 
 function loadConfigAndRender() {
-    // Cargar los usuarios desde el archivo JSON
-    fetch('users.json')
-        .then(response => response.json())
-        .then(data => {
-            usersData = data.users;
-            // Cargar el resto de la configuración solo después de cargar los usuarios
-            if (matrixBtn && sidebarBtn) {
-                matrixBtn.addEventListener('click', () => renderView('matrix'));
-                sidebarBtn.addEventListener('click', () => renderView('sidebar'));
-            }
-
-            loginBtn.addEventListener('click', () => loginModal.style.display = 'block');
-            closeBtn.addEventListener('click', () => loginModal.style.display = 'none');
-            window.addEventListener('click', (e) => {
-                if (e.target === loginModal) {
-                    loginModal.style.display = 'none';
-                }
-            });
-
-            loginForm.addEventListener('submit', handleLogin);
-            
-            const savedUser = localStorage.getItem('currentUser');
-            const savedRole = localStorage.getItem('currentRole');
-            if (savedUser && savedRole) {
-                currentUserSpan.textContent = savedUser;
-                currentRole = savedRole;
-                applyAccessControl();
-            }
-
-            config = JSON.parse(localStorage.getItem('scadaConfig'));
-            if (!config || config.containers.length === 0) {
-                scadaContainer.innerHTML = '<p>No hay configuración guardada. Por favor, ve a la página de <a href="config.html">configuración</a> para generar una.</p>';
-                return;
-            }
-            
-            if (mainTitleH1 && config && config.mainTitle) {
-                mainTitleH1.textContent = config.mainTitle;
-            }
-
-            renderAllContainers();
-            renderView('matrix');
-            connectMQTT();
-        })
-        .catch(error => {
-            console.error('Error al cargar la base de datos de usuarios:', error);
-            loginError.textContent = 'No se pudo cargar la base de datos de usuarios.';
-        });
-}
-
-function handleLogin(e) {
-    e.preventDefault();
-    const username = usernameInput.value;
-    const password = passwordInput.value;
-
-    if (!usersData) {
-        loginError.textContent = 'Base de datos de usuarios no disponible.';
+    let storedConfig = localStorage.getItem('scadaConfig');
+    if (storedConfig) {
+        config = JSON.parse(storedConfig);
+        renderConfig(config);
+    } else {
+        alert("No se encontró configuración. Por favor, vaya a la página de configuración.");
         return;
     }
 
-    const user = usersData.find(u => u.username === username && u.password === password);
+    // Carga los usuarios desde JSONBin.io
+    fetch(JSONBIN_URL)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Error al cargar la base de datos de usuarios');
+            }
+            return response.json();
+        })
+        .then(data => {
+            usersData = data.record.users;
+            console.log("Usuarios cargados exitosamente.");
+        })
+        .catch(error => {
+            console.error('Error al cargar la base de datos de usuarios:', error);
+            loginError.textContent = 'Error al cargar la base de datos de usuarios.';
+        });
+}
+
+// --- Funciones de Renderizado ---
+
+function renderConfig(config) {
+    scadaContainer.innerHTML = '';
+    sidebarMenu.innerHTML = '';
+    topicElementMap = {};
+
+    config.containers.forEach(container => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'system-group';
+        groupDiv.id = `group-${container.id}`;
+        scadaContainer.appendChild(groupDiv);
+
+        if (currentView === 'sidebar') {
+            const sidebarItem = document.createElement('div');
+            sidebarItem.className = 'sidebar-item';
+            sidebarItem.textContent = container.name;
+            sidebarItem.onclick = () => {
+                const visibleGroup = document.querySelector('.system-group.active');
+                if (visibleGroup) {
+                    visibleGroup.classList.remove('active');
+                }
+                groupDiv.classList.add('active');
+            };
+            sidebarMenu.appendChild(sidebarItem);
+        }
+
+        container.topics.forEach(topic => {
+            const topicDiv = createTopicElement(topic, container.id);
+            groupDiv.appendChild(topicDiv);
+            if (!topicElementMap[topic.topic]) {
+                topicElementMap[topic.topic] = [];
+            }
+            topicElementMap[topic.topic].push(topicDiv);
+        });
+    });
+
+    if (currentView === 'matrix') {
+        scadaContainer.classList.remove('sidebar-view');
+        scadaContainer.classList.add('matrix-view');
+        sidebarMenu.style.display = 'none';
+    } else {
+        scadaContainer.classList.remove('matrix-view');
+        scadaContainer.classList.add('sidebar-view');
+        sidebarMenu.style.display = 'flex';
+        const firstGroup = scadaContainer.querySelector('.system-group');
+        if (firstGroup) {
+            firstGroup.classList.add('active');
+        }
+    }
+}
+
+function createTopicElement(topic, containerId) {
+    const topicDiv = document.createElement('div');
+    topicDiv.className = 'topic-container';
+    topicDiv.dataset.containerId = containerId;
+    topicDiv.dataset.topicType = topic.type;
+    topicDiv.dataset.topic = topic.topic;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'topic-name';
+    nameSpan.textContent = topic.name;
+    topicDiv.appendChild(nameSpan);
+
+    const valueSpan = document.createElement('span');
+    valueSpan.className = 'topic-value';
+    valueSpan.textContent = topic.initialValue || 'N/A';
+    topicDiv.appendChild(valueSpan);
+
+    if (topic.type === 'control') {
+        const controlDiv = document.createElement('div');
+        controlDiv.className = 'topic-control';
+
+        if (topic.controlType === 'button') {
+            const controlBtn = document.createElement('button');
+            controlBtn.className = 'btn';
+            controlBtn.textContent = 'Toggle';
+            controlBtn.onclick = () => {
+                const currentState = topicStateCache[topic.topic] === '1' ? '0' : '1';
+                publishMessage(topic.topic, currentState);
+            };
+            controlDiv.appendChild(controlBtn);
+        } else if (topic.controlType === 'slider') {
+            const sliderInput = document.createElement('input');
+            sliderInput.type = 'range';
+            sliderInput.min = 0;
+            sliderInput.max = 100;
+            sliderInput.value = 0;
+            const sliderValueSpan = document.createElement('span');
+            sliderValueSpan.textContent = sliderInput.value;
+            sliderInput.oninput = () => {
+                sliderValueSpan.textContent = sliderInput.value;
+            };
+            sliderInput.onchange = () => {
+                publishMessage(topic.topic, sliderInput.value);
+            };
+            controlDiv.appendChild(sliderInput);
+            controlDiv.appendChild(sliderValueSpan);
+        }
+
+        topicDiv.appendChild(controlDiv);
+    }
+
+    return topicDiv;
+}
+
+function updateElement(element, value) {
+    const type = element.dataset.topicType;
+    const valueSpan = element.querySelector('.topic-value');
+
+    if (type === 'state') {
+        valueSpan.textContent = value === '1' ? 'ON' : 'OFF';
+        element.style.backgroundColor = value === '1' ? '#d4edda' : '#f8d7da';
+        element.style.borderColor = value === '1' ? '#c3e6cb' : '#f5c6cb';
+    } else {
+        valueSpan.textContent = value;
+    }
+}
+
+// --- Funciones de Eventos ---
+
+matrixBtn.addEventListener('click', () => {
+    currentView = 'matrix';
+    matrixBtn.classList.add('active');
+    sidebarBtn.classList.remove('active');
+    renderConfig(config);
+});
+
+sidebarBtn.addEventListener('click', () => {
+    currentView = 'sidebar';
+    sidebarBtn.classList.add('active');
+    matrixBtn.classList.remove('active');
+    renderConfig(config);
+});
+
+loginBtn.addEventListener('click', () => {
+    loginModal.style.display = 'block';
+});
+
+closeBtn.addEventListener('click', () => {
+    loginModal.style.display = 'none';
+});
+
+window.addEventListener('click', (event) => {
+    if (event.target === loginModal) {
+        loginModal.style.display = 'none';
+    }
+});
+
+loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = usernameInput.value;
+    const password = passwordInput.value;
+    const user = usersData.find(u => u.username === username);
 
     if (user) {
-        currentUserSpan.textContent = user.username;
-        currentRole = user.role;
-        localStorage.setItem('currentUser', user.username);
-        localStorage.setItem('currentRole', user.role);
-        loginModal.style.display = 'none';
-        loginError.textContent = '';
-        applyAccessControl();
+        // Hashear la contraseña ingresada por el usuario
+        const hashedPassword = CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
+
+        // Comparar el hash de la contraseña ingresada con el hash guardado
+        if (hashedPassword === user.password) {
+            currentUser = username;
+            currentRole = user.role;
+            loginModal.style.display = 'none';
+            updateUI();
+            connectMQTT();
+        } else {
+            loginError.textContent = 'Usuario o contraseña incorrectos.';
+        }
     } else {
         loginError.textContent = 'Usuario o contraseña incorrectos.';
     }
-}
+});
 
-function applyAccessControl() {
-    if (configLink) {
-        configLink.style.display = (currentRole === 'admin') ? 'block' : 'none';
-    }
+// --- Funciones de UI ---
 
-    const controlButtons = scadaContainer.querySelectorAll('.controls .btn');
-    controlButtons.forEach(btn => {
-        if (currentRole === 'visualizacion') {
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-            btn.style.cursor = 'not-allowed';
-        } else {
-            btn.disabled = false;
-            btn.style.opacity = '1';
-            btn.style.cursor = 'pointer';
-        }
-    });
-}
-
-function renderAllContainers() {
-    if (sidebarMenu) {
-        sidebarMenu.innerHTML = '';
-        config.containers.forEach((containerData, index) => {
-            const link = document.createElement('a');
-            link.href = '#';
-            link.textContent = containerData.title;
-            link.onclick = (e) => {
-                e.preventDefault();
-                renderSingleContainerView(index);
-            };
-            sidebarMenu.appendChild(link);
-        });
-    }
-
-    scadaContainer.innerHTML = '';
-    containerElements = [];
-    config.containers.forEach((containerData, containerIndex) => {
-        const container = createContainerElement(containerData, containerIndex);
-        containerElements.push(container);
-        scadaContainer.appendChild(container);
-    });
-
-    applyAccessControl();
-}
-
-function createContainerElement(containerData, containerIndex) {
-    const container = document.createElement('div');
-    container.className = 'system-container';
-    container.dataset.containerIndex = containerIndex;
-
-    const title = document.createElement('h2');
-    title.textContent = containerData.title;
-    container.appendChild(title);
-    
-    const controlsDiv = document.createElement('div');
-    controlsDiv.className = 'controls';
-    
-    containerData.objects.forEach((obj, objIndex) => {
-        let element;
-        const elementId = `container-${containerIndex}-obj-${objIndex}`;
-        const topic = obj.topic;
-
-        if (topic) {
-             if (!topicElementMap[topic]) {
-                topicElementMap[topic] = [];
-            }
-        }
-
-        switch (obj.type) {
-            case 'level':
-                container.innerHTML += `
-                    <div class="tank-container">
-                        <div id="${elementId}" class="tank-level"></div>
-                    </div>
-                    <div class="level-indicator">${obj.label || 'Nivel'}: <span id="${elementId}-value">0</span>%</div>
-                `;
-                topicElementMap[topic].push({ id: elementId, type: 'level', color: obj.color });
-                break;
-            case 'pumpStatus':
-                container.innerHTML += `<div class="pump-status"><div id="${elementId}" class="pump-indicator"></div><span id="${elementId}-state">${obj.label || 'Bomba'}</span></div>`;
-                topicElementMap[topic].push({ id: elementId, type: 'pumpStatus', onColor: obj.onColor, offColor: obj.offColor });
-                break;
-            case 'motorSpeed':
-                container.innerHTML += `<div class="motor-speed">${obj.label || 'Velocidad'}: <span id="${elementId}">0</span> RPM</div>`;
-                topicElementMap[topic].push({ id: elementId, type: 'motorSpeed' });
-                break;
-            case 'startBtn':
-                element = document.createElement('button');
-                element.className = 'btn btn-start';
-                element.textContent = obj.label;
-                element.style.backgroundColor = obj.color;
-                element.addEventListener('click', () => publishMessage(topic, 'ON'));
-                controlsDiv.appendChild(element);
-                break;
-            case 'stopBtn':
-                element = document.createElement('button');
-                element.className = 'btn btn-stop';
-                element.textContent = obj.label;
-                element.style.backgroundColor = obj.color;
-                element.addEventListener('click', () => publishMessage(topic, 'OFF'));
-                controlsDiv.appendChild(element);
-                break;
-            case 'resetBtn':
-                element = document.createElement('button');
-                element.className = 'btn btn-reset';
-                element.textContent = obj.label;
-                element.style.backgroundColor = obj.color;
-                element.addEventListener('click', () => publishMessage(topic, 'RESET'));
-                controlsDiv.appendChild(element);
-                break;
-            case 'gauge':
-                container.innerHTML += `
-                    <div class="gauge-container">
-                        <div class="gauge-dial">
-                            <div id="${elementId}" class="gauge-fill" style="background-color: ${obj.color};"></div>
-                            <div class="gauge-center"></div>
-                        </div>
-                        <div class="gauge-label">${obj.label || 'Gauge'}</div>
-                        <div id="${elementId}-value" class="gauge-value">0%</div>
-                    </div>
-                `;
-                topicElementMap[topic].push({ id: elementId, type: 'gauge', color: obj.color });
-                break;
-            case 'number':
-                container.innerHTML += `<div class="number-indicator">${obj.label || 'Valor'}: <span id="${elementId}">0</span></div>`;
-                topicElementMap[topic].push({ id: elementId, type: 'number' });
-                break;
-        }
-    });
-
-    if (controlsDiv.children.length > 0) {
-        container.appendChild(controlsDiv);
-    }
-    
-    return container;
-}
-
-
-function renderView(viewType) {
-    currentView = viewType;
-
-    if (matrixBtn) matrixBtn.classList.toggle('active', viewType === 'matrix');
-    if (sidebarBtn) sidebarBtn.classList.toggle('active', viewType === 'sidebar');
-
-    if (sidebarMenu) sidebarMenu.style.display = viewType === 'sidebar' ? 'flex' : 'none';
-
-    if (scadaContainer) {
-        if (viewType === 'matrix') {
-            scadaContainer.classList.add('matrix-view');
-            scadaContainer.classList.remove('sidebar-view');
-            containerElements.forEach(el => el.style.display = 'block');
-        } else {
-            scadaContainer.classList.add('sidebar-view');
-            scadaContainer.classList.remove('matrix-view');
-            renderSingleContainerView(0);
-        }
-    }
-    
-    applyCachedValues();
-}
-
-function renderSingleContainerView(index) {
-    containerElements.forEach(el => el.style.display = 'none');
-    if (containerElements[index]) {
-        containerElements[index].style.display = 'block';
-    }
-
-    if (sidebarMenu) {
-        const activeLink = sidebarMenu.querySelector('.active');
-        if (activeLink) {
-            activeLink.classList.remove('active');
-        }
-        if (sidebarMenu.children[index]) {
-            sidebarMenu.children[index].classList.add('active');
-        }
+function updateUI() {
+    currentUserSpan.textContent = currentUser;
+    if (currentRole === 'admin' || currentRole === 'operador') {
+        configLink.style.display = 'inline-block';
+    } else {
+        configLink.style.display = 'none';
     }
 }
 
-
-function updateElement(target, payload) {
-  const element = document.getElementById(target.id);
-  if (!element) return;
-
-  switch (target.type) {
-    case 'level':
-      const level = parseFloat(payload) || 0;
-      const valueSpan = document.getElementById(`${target.id}-value`);
-      element.style.height = level + "%";
-      element.style.backgroundColor = target.color;
-      if (valueSpan) valueSpan.textContent = level.toFixed(0);
-      break;
-    case 'pumpStatus':
-      const state = (payload.toLowerCase() === 'true' || payload === '1');
-      const stateSpan = document.getElementById(`${target.id}-state`);
-      if (state) {
-        element.style.backgroundColor = target.onColor || 'green';
-        if (stateSpan) {
-            stateSpan.textContent = 'ENCENDIDA';
-            stateSpan.style.color = target.onColor || 'green';
-        }
-      } else {
-        element.style.backgroundColor = target.offColor || 'gray';
-        if (stateSpan) {
-            stateSpan.textContent = 'DETENIDA';
-            stateSpan.style.color = target.offColor || 'gray';
-        }
-      }
-      break;
-    case 'motorSpeed':
-    case 'number':
-      const value = parseFloat(payload) || 0;
-      element.textContent = value.toFixed(0);
-      break;
-    case 'gauge':
-        const gaugeLevel = parseFloat(payload) || 0;
-        const gaugeValueSpan = document.getElementById(`${target.id}-value`);
-        const angle = (gaugeLevel / 100) * 180;
-        element.style.transform = `rotate(${angle}deg)`;
-        if (gaugeValueSpan) gaugeValueSpan.textContent = `${gaugeLevel.toFixed(0)}%`;
-        break;
-  }
-}
-
-function applyCachedValues() {
-  for (const topic in topicElementMap) {
-    if (topicStateCache[topic] !== undefined) {
-      const payload = topicStateCache[topic];
-      topicElementMap[topic].forEach(target => {
-        updateElement(target, payload);
-      });
-    }
-  }
-}
+// --- Funciones MQTT ---
 
 function connectMQTT() {
-  client = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), MQTT_PATH, CLIENT_ID);
-  client.onConnectionLost = onConnectionLost;
-  client.onMessageArrived = onMessageArrived;
+    if (client && client.isConnected()) {
+        client.disconnect();
+    }
 
-  const options = {
-    timeout: 3,
-    userName: MQTT_USERNAME,
-    password: MQTT_PASSWORD,
-    useSSL: true,
-    onSuccess: onConnectSuccess,
-    onFailure: onConnectFailure,
-    cleanSession: true
-  };
-  client.connect(options);
+    client = new Paho.MQTT.Client(MQTT_HOST, MQTT_PORT, MQTT_PATH, CLIENT_ID);
+    client.onConnectionLost = onConnectionLost;
+    client.onMessageArrived = onMessageArrived;
+
+    const options = {
+        onSuccess: onConnectSuccess,
+        onFailure: onConnectFailure,
+        useSSL: true,
+        userName: MQTT_USERNAME,
+        password: MQTT_PASSWORD
+    };
+
+    try {
+        client.connect(options);
+    } catch (error) {
+        console.error("Error de conexión:", error);
+    }
 }
 
 function onConnectSuccess() {
-  console.log("Conectado al broker MQTT");
-  if (connectStatusSpan) {
-    connectStatusSpan.textContent = 'Conectado';
-    connectStatusSpan.style.color = 'green';
-  }
+    console.log("Conectado exitosamente al broker MQTT");
+    if (connectStatusSpan) {
+        connectStatusSpan.textContent = 'Conectado';
+        connectStatusSpan.style.color = 'green';
+    }
 
-  const topicsToSubscribe = new Set();
-  if (config) {
-      config.containers.forEach(container => {
-        container.objects.forEach(obj => {
-          if (obj.topic && obj.type !== 'startBtn' && obj.type !== 'stopBtn' && obj.type !== 'resetBtn') {
-            topicsToSubscribe.add(obj.topic);
-          }
+    // Suscribirse a los tópicos de configuración
+    config.containers.forEach(container => {
+        container.topics.forEach(topic => {
+            console.log("Suscribiendo a tópico:", topic.topic);
+            client.subscribe(topic.topic);
         });
-      });
-  }
-
-  topicsToSubscribe.forEach(topic => {
-    client.subscribe(topic);
-    console.log("Suscrito a tópico:", topic);
-  });
+    });
 }
 
 function onConnectFailure(responseObject) {
@@ -402,28 +313,29 @@ function onConnectionLost(responseObject) {
 }
 
 function onMessageArrived(message) {
-  topicStateCache[message.destinationName] = message.payloadString;
-  const targets = topicElementMap[message.destinationName];
-  if (targets) {
-    targets.forEach(target => {
-      updateElement(target, message.payloadString);
-    });
-  }
+    topicStateCache[message.destinationName] = message.payloadString;
+    const targets = topicElementMap[message.destinationName];
+    if (targets) {
+        targets.forEach(target => {
+            updateElement(target, message.payloadString);
+        });
+    }
 }
 
 function publishMessage(topic, payload) {
-  if (currentRole === 'visualizacion') {
-      console.warn("Permiso denegado. Rol de visualización no puede publicar.");
-      return;
-  }
-  if (client && client.isConnected()) {
-    const message = new Paho.MQTT.Message(payload);
-    message.destinationName = topic;
-    client.send(message);
-    console.log("Publicado:", topic, "=", payload);
-  } else {
-    console.warn("Cliente MQTT no conectado");
-  }
+    if (currentRole === 'visualizacion') {
+        console.warn("Permiso denegado. Rol de visualización no puede publicar.");
+        return;
+    }
+    if (client && client.isConnected()) {
+        const message = new Paho.MQTT.Message(payload);
+        message.destinationName = topic;
+        client.send(message);
+        console.log(`Mensaje publicado en ${topic}: ${payload}`);
+    } else {
+        console.error("No se puede publicar: el cliente MQTT no está conectado.");
+    }
 }
 
+// --- Inicio de la Aplicación ---
 document.addEventListener('DOMContentLoaded', loadConfigAndRender);
