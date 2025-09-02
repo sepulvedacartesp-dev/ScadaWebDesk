@@ -142,34 +142,39 @@ function checkIfLoggedIn() {
 }
 
 function handleLogin(e) {
-    e.preventDefault();
-    const username = usernameInput.value;
-    const password = passwordInput.value;
+  e.preventDefault();
+  const username = usernameInput.value;
+  const password = passwordInput.value;
 
-    if (!usersData) {
-        loginError.textContent = 'Base de datos de usuarios no disponible.';
-        return;
-    }
+  if (!usersData) {
+      loginError.textContent = 'Base de datos de usuarios no disponible.';
+      return;
+  }
 
-    const user = usersData.find(u => u.username === username);
+  const user = usersData.find(u => u.username === username);
 
-    if (user) {
-        const hashedPassword = CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
-        
-        if (hashedPassword === user.password) {
-            currentUserSpan.textContent = user.username;
-            currentRole = user.role;
-            localStorage.setItem('currentUser', user.username);
-            localStorage.setItem('currentRole', user.role);
-            loginModal.style.display = 'none';
-            loginError.textContent = '';
-            updateUIForRole();
-        } else {
-            loginError.textContent = 'Usuario o contraseña incorrectos.';
-        }
-    } else {
-        loginError.textContent = 'Usuario o contraseña incorrectos.';
-    }
+  if (user) {
+      const hashedPassword = CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
+      
+      if (hashedPassword === user.password) {
+          currentUserSpan.textContent = user.username;
+          currentRole = user.role;
+          localStorage.setItem('currentUser', user.username);
+          localStorage.setItem('currentRole', user.role);
+
+          // --- ESTA ES LA CORRECCIÓN ---
+          // Llama a la función de control de acceso inmediatamente después de un login exitoso.
+          updateUIForRole();
+          // -----------------------------
+
+          loginModal.style.display = 'none';
+          loginError.textContent = '';
+      } else {
+          loginError.textContent = 'Usuario o contraseña incorrectos.';
+      }
+  } else {
+      loginError.textContent = 'Usuario o contraseña incorrectos.';
+  }
 }
 
 function handleLogout() {
@@ -395,16 +400,25 @@ function createPumpStatus(id, label, onColor, offColor) {
     div.appendChild(indicator);
     div.appendChild(text);
     return { element: div, update: (value) => {
-        const indicatorEl = document.getElementById(id);
-        const textEl = document.getElementById(`${id}-state`);
-        if (value === 'ON' || value === '1') {
-            indicatorEl.style.backgroundColor = onColor;
-            textEl.textContent = `${label} ON`;
-        } else {
-            indicatorEl.style.backgroundColor = offColor;
-            textEl.textContent = `${label} OFF`;
-        }
-    }};
+      const indicatorEl = document.getElementById(id);
+      const textEl = document.getElementById(`${id}-state`);
+      
+      // Convertir el valor a booleano si es una cadena
+      let is_on = false;
+      if (typeof value === 'string') {
+          is_on = value.toUpperCase() === 'ON' || value === '1' || value.toLowerCase() === 'true';
+      } else if (typeof value === 'boolean') {
+          is_on = value;
+      }
+  
+      if (is_on) {
+          indicatorEl.style.backgroundColor = onColor;
+          textEl.textContent = `${label} ON`;
+      } else {
+          indicatorEl.style.backgroundColor = offColor;
+          textEl.textContent = `${label} OFF`;
+      }
+  }};
 }
 
 function createMotorSpeed(id, label, unit) {

@@ -41,15 +41,8 @@
           "type": "pumpStatus",
           "label": "status bomba 1",
           "topic": "PLC/PumpSts",
-          "onColor": "#bdbdbd",
-          "offColor": "#2bff00"
-        },
-        {
-          "type": "pumpStatus",
-          "label": "status bomba 2",
-          "topic": "Micro/PumpSts2",
-          "onColor": "#bababa",
-          "offColor": "#2bfa00"
+          "onColor": "#0ed200",
+          "offColor": "#adadad"
         },
         {
           "type": "stopBtn",
@@ -108,9 +101,19 @@
           "min": 0,
           "max": 100,
           "color": "#ff0000"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Estado Bba Llenado",
+          "topic": "Micro/PumpSts2",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff",
+          "onColor": "#00ff00",
+          "offColor": "#6c757d"
         }
       ]
     }
   ],
-  "mainTitle": "SCADA Demo"
+  "mainTitle": "SCADA Web Demo V2.0"
 }
