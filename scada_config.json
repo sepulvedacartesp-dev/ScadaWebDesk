@@ -58,12 +58,6 @@
           "color": "#ff0000"
         },
         {
-          "type": "stopBtn",
-          "label": "Detener B2",
-          "topic": "Micro/PumpCmdStop2",
-          "color": "#ff0000"
-        },
-        {
           "type": "number",
           "label": "Nivel",
           "topic": "Micro/NivelTK",
@@ -74,22 +68,46 @@
       ]
     },
     {
-      "title": "Nivel",
+      "title": "Contenedor 4",
       "objects": [
         {
           "type": "level",
-          "label": "Nivel",
+          "label": "tk2",
           "topic": "Micro/NivelTK",
-          "unit": "m3",
+          "unit": "%",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff"
+        }
+      ]
+    },
+    {
+      "title": "Control Bombas",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "medidor circular",
+          "topic": "Micro/NivelTK",
+          "unit": "RPM",
           "min": 0,
           "max": 300,
-          "color": "#00b3ff"
+          "color": "#fbff00"
         },
         {
           "type": "startBtn",
-          "label": "Partir bba 2",
+          "label": "Partir Llenado",
           "topic": "Micro/PumpCmdStart2",
-          "color": "#1eff00"
+          "min": 0,
+          "max": 100,
+          "color": "#04e600"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Detener Llenado",
+          "topic": "Micro/PumpCmdStop2",
+          "min": 0,
+          "max": 100,
+          "color": "#ff0000"
         }
       ]
     }

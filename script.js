@@ -6,6 +6,7 @@ const MQTT_USERNAME = "Webclient";
 const MQTT_PASSWORD = "Webclient2025";
 const CLIENT_ID = "web_scada_" + Math.random().toString(16).substr(2, 8);
 const JSONBIN_URL = "https://api.jsonbin.io/v3/b/68b5b95aae596e708fdefd2b";
+const JSONBIN_MASTER_KEY = "$2a$10$T0EWIyZETjULNG0RGtMVMeMnFoAfw5boBuqMUP66b3CYzyGJilPE."; // Clave Maestra
 
 const scadaContainer = document.getElementById('scada-container');
 const sidebarMenu = document.getElementById('sidebar-menu');
@@ -14,6 +15,7 @@ const sidebarBtn = document.getElementById('view-sidebar');
 const connectStatusSpan = document.getElementById('connect-status');
 const mainTitleH1 = document.getElementById('main-title');
 const loginBtn = document.getElementById('login-btn');
+const logoutBtn = document.getElementById('logout-btn');
 const configLink = document.getElementById('config-link');
 const currentUserSpan = document.getElementById('current-user');
 const loginModal = document.getElementById('login-modal');
@@ -34,11 +36,9 @@ const topicElementMap = {};
 let containerElements = [];
 
 function loadConfigAndRender() {
-    // Primero, intenta cargar la configuración desde el archivo scada_config.json
     fetch('scada_config.json')
     .then(response => {
         if (!response.ok) {
-            // Si el archivo no existe o hay un error, usa localStorage
             console.warn('scada_config.json no encontrado, cargando desde localStorage...');
             const savedConfig = localStorage.getItem('scadaConfig');
             if (savedConfig) {
@@ -54,7 +54,7 @@ function loadConfigAndRender() {
     .then(data => {
         if (data) {
             config = data;
-            localStorage.setItem('scadaConfig', JSON.stringify(config)); // Guarda en localStorage por si acaso
+            localStorage.setItem('scadaConfig', JSON.stringify(config));
             initializeUI();
         }
     })
@@ -63,7 +63,6 @@ function loadConfigAndRender() {
         scadaContainer.innerHTML = '<p>Error al cargar la configuración.</p>';
     });
 
-    // Carga de usuarios desde JSONBin.io (mismo código que antes)
     fetch(JSONBIN_URL, {
         headers: {
             'X-Master-Key': '$2a$10$T0EWIyZETjULNG0RGtMVMeMnFoAfw5boBuqMUP66b3CYzyGJilPE.'
@@ -78,15 +77,8 @@ function loadConfigAndRender() {
     .then(data => {
         usersData = data.record.users;
         console.log("Usuarios cargados exitosamente desde JSONBin.io.");
-        // Inicializa los eventos y controles de la interfaz solo después de cargar todo
         setupEventListeners();
-        const savedUser = localStorage.getItem('currentUser');
-        const savedRole = localStorage.getItem('currentRole');
-        if (savedUser && savedRole) {
-            currentUserSpan.textContent = savedUser;
-            currentRole = savedRole;
-            applyAccessControl();
-        }
+        checkIfLoggedIn(); // Reemplazado por esta llamada para manejar el estado de inicio de sesión inicial
     })
     .catch(error => {
         console.error('Error al cargar la base de datos de usuarios:', error);
@@ -115,13 +107,38 @@ function setupEventListeners() {
         sidebarBtn.addEventListener('click', () => renderView('sidebar'));
     }
     loginBtn.addEventListener('click', () => loginModal.style.display = 'block');
-    closeBtn.addEventListener('click', () => loginModal.style.display = 'none');
+    logoutBtn.addEventListener('click', handleLogout);
+    closeBtn.addEventListener('click', () => {
+        loginModal.style.display = 'none';
+        loginError.textContent = '';
+        loginForm.reset();
+    });
     window.addEventListener('click', (e) => {
         if (e.target === loginModal) {
             loginModal.style.display = 'none';
+            loginError.textContent = '';
+            loginForm.reset();
         }
     });
     loginForm.addEventListener('submit', handleLogin);
+}
+
+// Nueva función para verificar el estado de inicio de sesión y actualizar la interfaz de usuario
+function checkIfLoggedIn() {
+    const savedUser = localStorage.getItem('currentUser');
+    const savedRole = localStorage.getItem('currentRole');
+    if (savedUser && savedRole) {
+        currentUserSpan.textContent = savedUser;
+        currentRole = savedRole;
+        loginBtn.style.display = 'none';
+        logoutBtn.style.display = 'inline-block';
+    } else {
+        currentUserSpan.textContent = 'Anónimo';
+        currentRole = 'anonimo';
+        loginBtn.style.display = 'inline-block';
+        logoutBtn.style.display = 'none';
+    }
+    updateUIForRole(); // Llama a la función de control de acceso
 }
 
 function handleLogin(e) {
@@ -146,7 +163,7 @@ function handleLogin(e) {
             localStorage.setItem('currentRole', user.role);
             loginModal.style.display = 'none';
             loginError.textContent = '';
-            applyAccessControl();
+            updateUIForRole();
         } else {
             loginError.textContent = 'Usuario o contraseña incorrectos.';
         }
@@ -155,23 +172,34 @@ function handleLogin(e) {
     }
 }
 
-function applyAccessControl() {
-    // Control de visibilidad del enlace de configuración.
-    // Solo el rol 'admin' puede ver este enlace.
-    if (configLink) {
-        configLink.style.display = (currentRole === 'admin') ? 'block' : 'none';
-    }
+function handleLogout() {
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentRole');
+    currentUserSpan.textContent = 'Anónimo';
+    currentRole = 'anonimo';
+    updateUIForRole();
+}
 
-    // Control de los botones de control (Start, Stop, etc.).
-    // Solo los roles 'operador' y 'admin' pueden usar estos botones.
-    const controlButtons = scadaContainer.querySelectorAll('.controls .btn');
+// Corregido: La función `updateUIForRole` ahora maneja toda la lógica de control de acceso
+function updateUIForRole() {
+    // Controla la visibilidad de los botones de control (Start, Stop, Reset)
     const isControlRole = (currentRole === 'admin' || currentRole === 'operador');
-
-    controlButtons.forEach(btn => {
+    document.querySelectorAll('.btn-start, .btn-stop, .btn-reset').forEach(btn => {
         btn.disabled = !isControlRole;
         btn.style.opacity = isControlRole ? '1' : '0.5';
         btn.style.cursor = isControlRole ? 'pointer' : 'not-allowed';
     });
+
+    // Controla la visibilidad del enlace de configuración
+    if (configLink) {
+        configLink.style.display = (currentRole === 'admin') ? 'inline-block' : 'none';
+    }
+
+    // Controla la visibilidad de los botones de login y logout
+    if (loginBtn && logoutBtn) {
+        loginBtn.style.display = (currentRole === 'anonimo') ? 'inline-block' : 'none';
+        logoutBtn.style.display = (currentRole !== 'anonimo') ? 'inline-block' : 'none';
+    }
 }
 
 function renderAllContainers() {
@@ -197,7 +225,44 @@ function renderAllContainers() {
         scadaContainer.appendChild(container);
     });
 
-    applyAccessControl();
+    updateUIForRole(); // Llama a la función después de renderizar los elementos
+}
+
+function renderSingleContainerView(index) {
+    if (containerElements.length > 0) {
+        containerElements.forEach((container, i) => {
+            container.style.display = (i === index) ? 'flex' : 'none';
+        });
+        matrixBtn.classList.remove('active');
+        sidebarBtn.classList.add('active');
+        sidebarMenu.style.display = 'flex';
+    }
+}
+
+function renderView(view) {
+    currentView = view;
+    if (currentView === 'matrix') {
+        matrixBtn.classList.add('active');
+        sidebarBtn.classList.remove('active');
+        scadaContainer.classList.remove('sidebar-view');
+        scadaContainer.classList.add('matrix-view');
+        sidebarMenu.style.display = 'none';
+
+        containerElements.forEach(el => {
+            el.style.display = 'flex';
+        });
+
+    } else if (currentView === 'sidebar') {
+        matrixBtn.classList.remove('active');
+        sidebarBtn.classList.add('active');
+        scadaContainer.classList.remove('matrix-view');
+        scadaContainer.classList.add('sidebar-view');
+        sidebarMenu.style.display = 'flex';
+
+        containerElements.forEach(el => {
+            el.style.display = 'none';
+        });
+    }
 }
 
 function createContainerElement(containerData, containerIndex) {
@@ -211,13 +276,12 @@ function createContainerElement(containerData, containerIndex) {
     
     const controlsDiv = document.createElement('div');
     controlsDiv.className = 'controls';
-    
+
     containerData.objects.forEach((obj, objIndex) => {
         let element;
         const elementId = `container-${containerIndex}-obj-${objIndex}`;
         const topic = obj.topic;
         const unit = obj.unit || '';
-
         if (topic) {
             if (!topicElementMap[topic]) {
                 topicElementMap[topic] = [];
@@ -226,63 +290,45 @@ function createContainerElement(containerData, containerIndex) {
 
         switch (obj.type) {
             case 'level':
-                container.innerHTML += `
-                    <div class="tank-container">
-                        <div id="${elementId}" class="tank-level"></div>
-                    </div>
-                    <div class="level-indicator">${obj.label || 'Nivel'}: <span id="${elementId}-value">0 ${unit}</span></div>
-                `;
-                topicElementMap[topic].push({ id: elementId, type: 'level', color: obj.color, unit: unit });
+                element = createLevelIndicator(elementId, obj.label, unit, obj.color);
                 break;
             case 'pumpStatus':
-                container.innerHTML += `<div class="pump-status"><div id="${elementId}" class="pump-indicator"></div><span id="${elementId}-state">${obj.label || 'Bomba'}</span></div>`;
-                topicElementMap[topic].push({ id: elementId, type: 'pumpStatus', onColor: obj.onColor, offColor: obj.offColor });
+                element = createPumpStatus(elementId, obj.label, obj.onColor, obj.offColor);
                 break;
             case 'motorSpeed':
-                container.innerHTML += `<div class="motor-speed">${obj.label || 'Velocidad'}: <span id="${elementId}">0 ${unit}</span></div>`;
-                topicElementMap[topic].push({ id: elementId, type: 'motorSpeed', unit: unit });
+                element = createMotorSpeed(elementId, obj.label, unit);
                 break;
             case 'startBtn':
-                element = document.createElement('button');
-                element.className = 'btn btn-start';
-                element.textContent = obj.label;
-                element.style.backgroundColor = obj.color;
-                element.addEventListener('click', () => publishMessage(topic, 'ON'));
-                controlsDiv.appendChild(element);
+                element = createButton(obj.label, 'btn-start', topic, 'ON', obj.color);
                 break;
             case 'stopBtn':
-                element = document.createElement('button');
-                element.className = 'btn btn-stop';
-                element.textContent = obj.label;
-                element.style.backgroundColor = obj.color;
-                element.addEventListener('click', () => publishMessage(topic, 'OFF'));
-                controlsDiv.appendChild(element);
+                element = createButton(obj.label, 'btn-stop', topic, 'OFF', obj.color);
                 break;
             case 'resetBtn':
-                element = document.createElement('button');
-                element.className = 'btn btn-reset';
-                element.textContent = obj.label;
-                element.style.backgroundColor = obj.color;
-                element.addEventListener('click', () => publishMessage(topic, 'RESET'));
-                controlsDiv.appendChild(element);
+                element = createButton(obj.label, 'btn-reset', topic, 'RESET', obj.color);
                 break;
             case 'gauge':
-                container.innerHTML += `
-                    <div class="gauge-container">
-                        <div class="gauge-dial">
-                            <div id="${elementId}" class="gauge-fill" style="background-color: ${obj.color};"></div>
-                            <div class="gauge-center"></div>
-                        </div>
-                        <div class="gauge-label">${obj.label || 'Gauge'}</div>
-                        <div id="${elementId}-value" class="gauge-value">0 ${unit}</div>
-                    </div>
-                `;
-                topicElementMap[topic].push({ id: elementId, type: 'gauge', color: obj.color, unit: unit });
+                element = createGauge(elementId, obj.label, unit, obj.min, obj.max, obj.color);
                 break;
             case 'number':
-                container.innerHTML += `<div class="number-indicator">${obj.label || 'Valor'}: <span id="${elementId}">0 ${unit}</span></div>`;
-                topicElementMap[topic].push({ id: elementId, type: 'number', unit: unit });
+                element = createNumberIndicator(elementId, obj.label, unit);
                 break;
+            case 'text':
+                element = createTextIndicator(elementId, obj.label);
+                break;
+            default:
+                return;
+        }
+
+        if (element) {
+            if (element.element) {
+                container.appendChild(element.element);
+            } else if (element.type === 'button') {
+                controlsDiv.appendChild(element.element);
+            }
+            if (topic && element.update) {
+                topicElementMap[topic].push(element);
+            }
         }
     });
 
@@ -290,147 +336,193 @@ function createContainerElement(containerData, containerIndex) {
         container.appendChild(controlsDiv);
     }
     
+    // Add event listeners for new elements after they are appended
+    const startBtns = container.querySelectorAll('.btn-start');
+    const stopBtns = container.querySelectorAll('.btn-stop');
+    const resetBtns = container.querySelectorAll('.btn-reset');
+    
+    startBtns.forEach(btn => {
+        const topic = btn.getAttribute('data-topic');
+        const payload = btn.getAttribute('data-payload');
+        btn.addEventListener('click', () => publishMessage(topic, payload));
+    });
+    stopBtns.forEach(btn => {
+        const topic = btn.getAttribute('data-topic');
+        const payload = btn.getAttribute('data-payload');
+        btn.addEventListener('click', () => publishMessage(topic, payload));
+    });
+    resetBtns.forEach(btn => {
+        const topic = btn.getAttribute('data-topic');
+        const payload = btn.getAttribute('data-payload');
+        btn.addEventListener('click', () => publishMessage(topic, payload));
+    });
+
     return container;
 }
 
 
-function renderView(viewType) {
-    currentView = viewType;
+function createLevelIndicator(id, label, unit, color) {
+    const div = document.createElement('div');
+    div.classList.add('tank-container');
+    div.style.border = `2px solid ${color}`;
+    const tankLevel = document.createElement('div');
+    tankLevel.id = id;
+    tankLevel.classList.add('tank-level');
+    tankLevel.style.backgroundColor = color;
+    div.appendChild(tankLevel);
+    const indicator = document.createElement('p');
+    indicator.classList.add('level-indicator');
+    indicator.innerHTML = `<span>${label || 'Nivel'}:</span> <span id="${id}-value" class="value">0</span> ${unit}`;
+    div.appendChild(indicator);
+    return { element: div, update: (value) => {
+        const percentage = Math.max(0, Math.min(100, parseFloat(value)));
+        document.getElementById(id).style.height = `${percentage}%`;
+        document.getElementById(`${id}-value`).textContent = percentage.toFixed(1);
+    }};
+}
 
-    if (matrixBtn) matrixBtn.classList.toggle('active', viewType === 'matrix');
-    if (sidebarBtn) sidebarBtn.classList.toggle('active', viewType === 'sidebar');
 
-    if (sidebarMenu) sidebarMenu.style.display = viewType === 'sidebar' ? 'flex' : 'none';
-
-    if (scadaContainer) {
-        if (viewType === 'matrix') {
-            scadaContainer.classList.add('matrix-view');
-            scadaContainer.classList.remove('sidebar-view');
-            containerElements.forEach(el => el.style.display = 'block');
+function createPumpStatus(id, label, onColor, offColor) {
+    const div = document.createElement('div');
+    div.classList.add('pump-status');
+    const indicator = document.createElement('span');
+    indicator.id = id;
+    indicator.classList.add('pump-indicator');
+    indicator.style.backgroundColor = offColor;
+    const text = document.createElement('span');
+    text.id = `${id}-state`;
+    text.textContent = label;
+    div.appendChild(indicator);
+    div.appendChild(text);
+    return { element: div, update: (value) => {
+        const indicatorEl = document.getElementById(id);
+        const textEl = document.getElementById(`${id}-state`);
+        if (value === 'ON' || value === '1') {
+            indicatorEl.style.backgroundColor = onColor;
+            textEl.textContent = `${label} ON`;
         } else {
-            scadaContainer.classList.add('sidebar-view');
-            scadaContainer.classList.remove('matrix-view');
-            renderSingleContainerView(0);
+            indicatorEl.style.backgroundColor = offColor;
+            textEl.textContent = `${label} OFF`;
         }
-    }
+    }};
+}
+
+function createMotorSpeed(id, label, unit) {
+    const div = document.createElement('div');
+    div.classList.add('motor-speed');
+    div.innerHTML = `<span>${label}:</span> <span id="${id}">0</span> ${unit}`;
+    return { element: div, update: (value) => {
+        document.getElementById(id).textContent = parseFloat(value).toFixed(1);
+    }};
+}
+
+
+function createButton(label, className, topic, payload, color) {
+    const button = document.createElement('button');
+    button.classList.add('btn', className);
+    button.textContent = label;
+    button.style.backgroundColor = color;
+    button.setAttribute('data-topic', topic);
+    button.setAttribute('data-payload', payload);
+    return { element: button, type: 'button' };
+}
+
+function createGauge(id, label, unit, min, max, color) {
+    const div = document.createElement('div');
+    div.classList.add('gauge-container');
+    div.style.setProperty('--gauge-color', color);
     
-    applyCachedValues();
+    const dial = document.createElement('div');
+    dial.classList.add('gauge-dial');
+    const fill = document.createElement('div');
+    fill.id = id;
+    fill.classList.add('gauge-fill');
+    dial.appendChild(fill);
+    
+    const center = document.createElement('div');
+    center.classList.add('gauge-center');
+    
+    const valueSpan = document.createElement('div');
+    valueSpan.id = `${id}-value`;
+    valueSpan.classList.add('gauge-value');
+    
+    const labelSpan = document.createElement('div');
+    labelSpan.classList.add('gauge-label');
+    labelSpan.textContent = `${label} (${unit})`;
+    
+    div.appendChild(dial);
+    div.appendChild(center);
+    div.appendChild(labelSpan);
+    div.appendChild(valueSpan);
+
+    return { element: div, update: (value) => {
+        const numericValue = parseFloat(value);
+        if (!isNaN(numericValue)) {
+            const clampedValue = Math.max(min, Math.min(max, numericValue));
+            const angle = (clampedValue - min) / (max - min) * 180;
+            document.getElementById(id).style.transform = `rotate(${angle}deg)`;
+            document.getElementById(`${id}-value`).textContent = numericValue.toFixed(1);
+        }
+    }};
 }
 
-function renderSingleContainerView(index) {
-    containerElements.forEach(el => el.style.display = 'none');
-    if (containerElements[index]) {
-        containerElements[index].style.display = 'block';
-    }
-
-    if (sidebarMenu) {
-        const activeLink = sidebarMenu.querySelector('.active');
-        if (activeLink) {
-            activeLink.classList.remove('active');
-        }
-        if (sidebarMenu.children[index]) {
-            sidebarMenu.children[index].classList.add('active');
-        }
-    }
+function createNumberIndicator(id, label, unit) {
+    const div = document.createElement('div');
+    div.classList.add('number-indicator');
+    div.innerHTML = `<span>${label}:</span> <span id="${id}" class="value">0</span> ${unit}`;
+    return { element: div, update: (value) => {
+        document.getElementById(id).textContent = parseFloat(value).toFixed(2);
+    }};
 }
 
-
-function updateElement(target, payload) {
-  const element = document.getElementById(target.id);
-  if (!element) return;
-
-  const unit = target.unit || '';
-
-  switch (target.type) {
-    case 'level':
-      const level = parseFloat(payload) || 0;
-      const valueSpan = document.getElementById(`${target.id}-value`);
-      element.style.height = level + "%";
-      element.style.backgroundColor = target.color;
-      if (valueSpan) valueSpan.textContent = `${level.toFixed(0)} ${unit}`;
-      break;
-    case 'pumpStatus':
-      const state = (payload.toLowerCase() === 'true' || payload === '1');
-      const stateSpan = document.getElementById(`${target.id}-state`);
-      if (state) {
-        element.style.backgroundColor = target.onColor || 'green';
-        if (stateSpan) {
-            stateSpan.textContent = 'ENCENDIDA';
-            stateSpan.style.color = target.onColor || 'green';
-        }
-      } else {
-        element.style.backgroundColor = target.offColor || 'gray';
-        if (stateSpan) {
-            stateSpan.textContent = 'DETENIDA';
-            stateSpan.style.color = target.offColor || 'gray';
-        }
-      }
-      break;
-    case 'motorSpeed':
-    case 'number':
-      const value = parseFloat(payload) || 0;
-      element.textContent = `${value.toFixed(0)} ${unit}`;
-      break;
-    case 'gauge':
-        const gaugeLevel = parseFloat(payload) || 0;
-        const gaugeValueSpan = document.getElementById(`${target.id}-value`);
-        const angle = (gaugeLevel / 100) * 180;
-        element.style.transform = `rotate(${angle}deg)`;
-        if (gaugeValueSpan) gaugeValueSpan.textContent = `${gaugeLevel.toFixed(0)} ${unit}`;
-        break;
-  }
+function createTextIndicator(id, label) {
+    const div = document.createElement('div');
+    div.classList.add('text-indicator');
+    div.innerHTML = `<span>${label}:</span> <span id="${id}" class="value"></span>`;
+    return { element: div, update: (value) => {
+        document.getElementById(id).textContent = value;
+    }};
 }
 
-function applyCachedValues() {
-  for (const topic in topicElementMap) {
-    if (topicStateCache[topic] !== undefined) {
-      const payload = topicStateCache[topic];
-      topicElementMap[topic].forEach(target => {
-        updateElement(target, payload);
-      });
-    }
-  }
-}
 
 function connectMQTT() {
-  client = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), MQTT_PATH, CLIENT_ID);
-  client.onConnectionLost = onConnectionLost;
-  client.onMessageArrived = onMessageArrived;
+    if (connectStatusSpan) {
+        connectStatusSpan.textContent = 'Conectando...';
+        connectStatusSpan.style.color = 'orange';
+    }
 
-  const options = {
-    timeout: 3,
-    userName: MQTT_USERNAME,
-    password: MQTT_PASSWORD,
-    useSSL: true,
-    onSuccess: onConnectSuccess,
-    onFailure: onConnectFailure,
-    cleanSession: true
-  };
-  client.connect(options);
+    client = new Paho.MQTT.Client(MQTT_HOST, MQTT_PORT, MQTT_PATH, CLIENT_ID);
+    client.onConnectionLost = onConnectionLost;
+    client.onMessageArrived = onMessageArrived;
+
+    const options = {
+        timeout: 3,
+        userName: MQTT_USERNAME,
+        password: MQTT_PASSWORD,
+        useSSL: true,
+        onSuccess: onConnectSuccess,
+        onFailure: onConnectFailure
+    };
+    client.connect(options);
 }
 
 function onConnectSuccess() {
-  console.log("Conectado al broker MQTT");
-  if (connectStatusSpan) {
-    connectStatusSpan.textContent = 'Conectado';
-    connectStatusSpan.style.color = 'green';
-  }
+    console.log("Conexión exitosa a MQTT");
+    if (connectStatusSpan) {
+        connectStatusSpan.textContent = 'Conectado';
+        connectStatusSpan.style.color = 'green';
+    }
+    subscribeToTopics();
+}
 
-  const topicsToSubscribe = new Set();
-  if (config) {
-      config.containers.forEach(container => {
-        container.objects.forEach(obj => {
-          if (obj.topic && obj.type !== 'startBtn' && obj.type !== 'stopBtn' && obj.type !== 'resetBtn') {
-            topicsToSubscribe.add(obj.topic);
-          }
-        });
-      });
+function subscribeToTopics() {
+  if (client && client.isConnected()) {
+    const uniqueTopics = new Set(Object.keys(topicElementMap));
+    uniqueTopics.forEach(topic => {
+      client.subscribe(topic);
+      console.log("Suscrito al tópico:", topic);
+    });
   }
-
-  topicsToSubscribe.forEach(topic => {
-    client.subscribe(topic);
-    console.log("Suscrito a tópico:", topic);
-  });
 }
 
 function onConnectFailure(responseObject) {
@@ -471,10 +563,16 @@ function publishMessage(topic, payload) {
     const message = new Paho.MQTT.Message(payload);
     message.destinationName = topic;
     client.send(message);
-    console.log("Publicado:", topic, "=", payload);
+    console.log("Mensaje publicado:", topic, payload);
   } else {
-    console.warn("Cliente MQTT no conectado");
+    console.error("Cliente MQTT no conectado. No se puede publicar el mensaje.");
   }
 }
 
-document.addEventListener('DOMContentLoaded', loadConfigAndRender);
+function updateElement(target, payload) {
+    if (typeof target.update === 'function') {
+        target.update(payload);
+    }
+}
+
+window.onload = loadConfigAndRender;

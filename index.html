@@ -15,13 +15,15 @@
     <button id="view-sidebar" class="btn btn-view">Vista Lateral</button>
   </div>
 
+  <div id="sidebar-menu" class="sidebar-menu" style="display: none;"></div>
+
   <div class="main-content-wrapper">
-    <div id="sidebar-menu" class="sidebar-menu"></div>
     <div id="scada-container" class="system-group matrix-view"></div>
   </div>
 
   <div class="footer-controls">
     <button id="login-btn" class="btn btn-login">Login</button>
+    <button id="logout-btn" class="btn btn-logout" style="display: none;">Logout</button>
     <a href="config.html" id="config-link" class="config-link" style="display: none;">Volver a Configuración</a>
   </div>
   <span id="connect-status">Desconectado</span>
@@ -34,14 +36,17 @@
       <span class="close-btn">&times;</span>
       <h2>Iniciar Sesión</h2>
       <form id="login-form">
-        <input type="text" id="username-input" placeholder="Usuario" required>
-        <input type="password" id="password-input" placeholder="Contraseña" required>
-        <button type="submit" class="btn btn-login">Entrar</button>
+        <label for="username-input">Usuario:</label>
+        <input type="text" id="username-input" required>
+        <label for="password-input">Contraseña:</label>
+        <input type="password" id="password-input" required>
+        <button type="submit" class="btn btn-login">Login</button>
+        <p id="error-message" class="error-message"></p>
       </form>
-      <p id="login-error" class="error-message"></p>
     </div>
   </div>
   
   <script src="script.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 </body>
 </html>
