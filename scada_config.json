@@ -4,15 +4,6 @@
       "title": "CompactLogix",
       "objects": [
         {
-          "type": "level",
-          "label": "Nivel TK101",
-          "topic": "PLC/NivelTK",
-          "unit": "m3",
-          "min": 0,
-          "max": 800,
-          "color": "#0599f5"
-        },
-        {
           "type": "startBtn",
           "label": "Partir",
           "topic": "PLC/PumpCmdStart",
@@ -37,6 +28,15 @@
           "color": "#00b3ff",
           "onColor": "#00ff00",
           "offColor": "#6c757d"
+        },
+        {
+          "type": "level",
+          "label": "Estanque 2",
+          "topic": "PLC/NivelTK",
+          "unit": "Lts",
+          "min": 0,
+          "max": 1000,
+          "color": "#00b3ff"
         }
       ]
     },
