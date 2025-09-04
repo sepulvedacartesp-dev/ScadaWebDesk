@@ -5,12 +5,12 @@
       "objects": [
         {
           "type": "level",
-          "label": "Temperatura",
-          "topic": "Micro/NivelTK",
-          "unit": "ºC",
+          "label": "Nivel TK101",
+          "topic": "PLC/NivelTK",
+          "unit": "m3",
           "min": 0,
-          "max": 150,
-          "color": "#ff0000"
+          "max": 800,
+          "color": "#0599f5"
         },
         {
           "type": "startBtn",
