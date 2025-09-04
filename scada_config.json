@@ -4,6 +4,15 @@
       "title": "CompactLogix",
       "objects": [
         {
+          "type": "level",
+          "label": "Nivel TK101",
+          "topic": "PLC/NivelTK",
+          "unit": "m3",
+          "min": 0,
+          "max": 800,
+          "color": "#0599f5"
+        },
+        {
           "type": "startBtn",
           "label": "Partir",
           "topic": "PLC/PumpCmdStart",
@@ -28,15 +37,6 @@
           "color": "#00b3ff",
           "onColor": "#00ff00",
           "offColor": "#6c757d"
-        },
-        {
-          "type": "level",
-          "label": "Estanque 2",
-          "topic": "PLC/NivelTK",
-          "unit": "Lts",
-          "min": 0,
-          "max": 1000,
-          "color": "#00b3ff"
         }
       ]
     },
@@ -77,7 +77,47 @@
           "offColor": "#6c757d"
         }
       ]
+    },
+    {
+      "title": "Compact Logix",
+      "objects": [
+        {
+          "type": "level",
+          "label": "Estanque",
+          "topic": "PLC/NivelTK",
+          "unit": "m3",
+          "min": 0,
+          "max": 1000,
+          "color": "#00b3ff"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "PLC/PumpCmdStart",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Detener",
+          "topic": "PLC/PumpCmdStop",
+          "min": 0,
+          "max": 100,
+          "color": "#ff0000"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Estado",
+          "topic": "PLC/PumpSts",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff",
+          "onColor": "#00ff00",
+          "offColor": "#6c757d"
+        }
+      ]
     }
   ],
-  "mainTitle": "SCADA Web Demo V2.0"
+  "mainTitle": "SCADA Web Demo V2.1"
 }
