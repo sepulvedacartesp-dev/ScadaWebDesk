@@ -27,6 +27,16 @@
           "min": 0,
           "max": 100,
           "color": "#ff0000"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Estado bomba",
+          "topic": "PLC/PumpSts",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff",
+          "onColor": "#00ff00",
+          "offColor": "#6c757d"
         }
       ]
     },
@@ -55,6 +65,16 @@
           "min": 0,
           "max": 100,
           "color": "#ff0000"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Estado bomba",
+          "topic": "Micro/PumpSts2",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff",
+          "onColor": "#00ff00",
+          "offColor": "#6c757d"
         }
       ]
     }
