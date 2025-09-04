@@ -4,12 +4,28 @@
       "title": "CompactLogix",
       "objects": [
         {
-          "type": "gauge",
+          "type": "level",
           "label": "Temperatura",
           "topic": "Micro/NivelTK",
           "unit": "ºC",
           "min": 0,
           "max": 150,
+          "color": "#ff0000"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "PLC/PumpCmdStart",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "PLC/PumpCmdStop",
+          "min": 0,
+          "max": 100,
           "color": "#ff0000"
         }
       ]
@@ -29,88 +45,16 @@
         {
           "type": "startBtn",
           "label": "Partir bba 1",
-          "topic": "PLC/PumpCmdStart",
-          "color": "#1eff00"
-        }
-      ]
-    },
-    {
-      "title": "Detencion Bombas",
-      "objects": [
-        {
-          "type": "pumpStatus",
-          "label": "status bomba 1",
-          "topic": "PLC/PumpSts",
-          "onColor": "#0ed200",
-          "offColor": "#adadad"
-        },
-        {
-          "type": "stopBtn",
-          "label": "Detener B1",
-          "topic": "PLC/PumpCmdStop",
-          "color": "#ff0000"
-        },
-        {
-          "type": "number",
-          "label": "Nivel",
-          "topic": "Micro/NivelTK",
-          "unit": "lts",
-          "min": 0,
-          "max": 100
-        }
-      ]
-    },
-    {
-      "title": "Contenedor 4",
-      "objects": [
-        {
-          "type": "level",
-          "label": "tk2",
-          "topic": "Micro/NivelTK",
-          "unit": "%",
-          "min": 0,
-          "max": 100,
-          "color": "#00b3ff"
-        }
-      ]
-    },
-    {
-      "title": "Control Bombas",
-      "objects": [
-        {
-          "type": "gauge",
-          "label": "medidor circular",
-          "topic": "Micro/NivelTK",
-          "unit": "RPM",
-          "min": 0,
-          "max": 300,
-          "color": "#fbff00"
-        },
-        {
-          "type": "startBtn",
-          "label": "Partir Llenado",
           "topic": "Micro/PumpCmdStart2",
-          "min": 0,
-          "max": 100,
-          "color": "#04e600"
+          "color": "#1eff00"
         },
         {
           "type": "stopBtn",
-          "label": "Detener Llenado",
+          "label": "Parar bba 1",
           "topic": "Micro/PumpCmdStop2",
           "min": 0,
           "max": 100,
           "color": "#ff0000"
-        },
-        {
-          "type": "pumpStatus",
-          "label": "Estado Bba Llenado",
-          "topic": "Micro/PumpSts2",
-          "min": 0,
-          "max": 100,
-          "color": "#00b3ff",
-          "onColor": "#00ff00",
-          "offColor": "#6c757d"
         }
       ]
     }
