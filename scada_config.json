@@ -28,6 +28,15 @@
           "color": "#00b3ff",
           "onColor": "#00ff00",
           "offColor": "#6c757d"
+        },
+        {
+          "type": "number",
+          "label": "Presión",
+          "topic": "Siemens/PV",
+          "unit": "PSI",
+          "min": 0,
+          "max": 100,
+          "color": "#00b3ff"
         }
       ]
     },
