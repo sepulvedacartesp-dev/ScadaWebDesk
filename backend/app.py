@@ -30,23 +30,17 @@ MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "0").strip() == "1"
 MQTT_CA_CERT_PATH = os.getenv("MQTT_CA_CERT_PATH", "").strip()  # optional
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "webbridge-backend")
 
-# Topic base to scope each user (recommended: something like 'scada/customers')
 TOPIC_BASE = os.getenv("TOPIC_BASE", "scada/customers").strip()
-
-# Optional: allow multiple public prefixes (comma-separated) if you don't want per-user scoping
 PUBLIC_ALLOWED_PREFIXES = [p.strip() for p in os.getenv("PUBLIC_ALLOWED_PREFIXES", "").split(",") if p.strip()]
 
 FIREBASE_SERVICE_ACCOUNT = os.getenv("FIREBASE_SERVICE_ACCOUNT", "").strip()
 
 if not FIREBASE_PROJECT_ID:
     raise RuntimeError("FIREBASE_PROJECT_ID is required")
-
 if not MQTT_HOST:
     raise RuntimeError("HIVEMQ_HOST is required")
 
 # ---- Firebase Admin init ----
-# Opción 1: si defines FIREBASE_SERVICE_ACCOUNT (JSON completo) en Render, la usamos.
-# Opción 2: si no, inicializamos con options={'projectId': FIREBASE_PROJECT_ID}, suficiente para verify_id_token.
 if not firebase_admin._apps:
     try:
         if FIREBASE_SERVICE_ACCOUNT:
@@ -72,12 +66,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---- MQTT Client (single, shared) ----
+# ---- MQTT Client ----
 mqtt_client = mqtt.Client(client_id=MQTT_CLIENT_ID, clean_session=True)
-mqtt_client.enable_logger()  # logs de cliente MQTT útiles
+mqtt_client.enable_logger()
 
 if MQTT_TLS:
-    # TLS Configuration
     if MQTT_CA_CERT_PATH:
         mqtt_client.tls_set(ca_certs=MQTT_CA_CERT_PATH, certfile=None, keyfile=None, tls_version=ssl.PROTOCOL_TLS)
     else:
@@ -87,17 +80,14 @@ if MQTT_TLS:
 if MQTT_USERNAME:
     mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD if MQTT_PASSWORD else None)
 
-# Simple connection state
 _mqtt_connected = threading.Event()
 
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         _mqtt_connected.set()
         print("[MQTT] Connected")
-        # Subscribe a broad base. We will filter per-user before forwarding.
         base = TOPIC_BASE if TOPIC_BASE.endswith("#") else (TOPIC_BASE.rstrip("/") + "/#")
         client.subscribe(base, qos=1)
-        # If configured, subscribe also to public prefixes
         for p in PUBLIC_ALLOWED_PREFIXES:
             topic = p if p.endswith("#") else (p.rstrip("/") + "/#")
             client.subscribe(topic, qos=1)
@@ -105,19 +95,16 @@ def on_connect(client, userdata, flags, rc, properties=None):
         print(f"[MQTT] Connection failed rc={rc}")
 
 def on_message(client, userdata, msg):
-    # Broadcast to relevant websockets that are authorized for this topic
     data = {"topic": msg.topic, "payload": try_decode(msg.payload), "qos": msg.qos, "retain": msg.retain}
     ConnectionManager.broadcast(msg.topic, data)
 
 def try_decode(b: bytes) -> Any:
     try:
         s = b.decode("utf-8")
-        # if it looks like json, parse it
         if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
             return json.loads(s)
         return s
     except Exception:
-        # return base64 for binary payloads
         import base64
         return {"_binary_base64": base64.b64encode(b).decode("ascii")}
 
@@ -126,16 +113,14 @@ mqtt_client.on_message = on_message
 mqtt_client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
 mqtt_client.loop_start()
 
-# ---- Connection Manager for WebSockets ----
+# ---- WebSocket connection manager ----
 class WSClient:
     def __init__(self, ws: WebSocket, uid: str, allowed_prefixes: List[str]):
         self.ws = ws
         self.uid = uid
-        # normalize prefixes with trailing slash
         self.allowed_prefixes = [p.rstrip("/") + "/" for p in allowed_prefixes]
 
     def can_receive(self, topic: str) -> bool:
-        # deliver only if the topic starts with any allowed prefix
         t = topic.rstrip("/") + "/"
         return any(t.startswith(pref) for pref in self.allowed_prefixes)
 
@@ -155,12 +140,10 @@ class ConnectionManager:
 
     @classmethod
     def broadcast(cls, topic: str, data: dict):
-        # non-blocking send to authorized clients only
         to_remove = []
         for c in list(cls.clients):
             try:
                 if c.can_receive(topic):
-                    # send asynchronously; FastAPI/Starlette provides ws.send_json
                     import anyio
                     anyio.from_thread.run(c.ws.send_json, data)
             except Exception:
@@ -174,19 +157,16 @@ def verify_bearer_token(authorization: Optional[str]) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail="Missing Bearer token")
     id_token = authorization.split(" ", 1)[1].strip()
     try:
-        # Opción A: sin revocación (no requiere Service Account)
         decoded = firebase_auth.verify_id_token(id_token, check_revoked=False)
         return decoded
     except Exception as e:
-        print(f"[WS] HTTP token invalid: {e}")
+        print(f"[HTTP] token invalid: {e}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 def allowed_prefixes_for_user(uid: str) -> List[str]:
-    # Main per-user scope under TOPIC_BASE
     base = TOPIC_BASE.rstrip("/")
     per_user = f"{base}/{uid}"
     prefixes = [per_user]
-    # Add public prefixes if configured
     prefixes.extend(PUBLIC_ALLOWED_PREFIXES)
     return prefixes
 
@@ -195,6 +175,10 @@ def ensure_mqtt_connected():
         raise HTTPException(status_code=503, detail="MQTT broker not connected")
 
 # ---- API ----
+@app.get("/")
+def root():
+    return {"service": "mqtt-web-bridge", "health": "ok"}
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -209,9 +193,8 @@ class PublishIn(BaseModel):
 def publish(p: PublishIn, authorization: Optional[str] = Header(None)):
     decoded = verify_bearer_token(authorization)
     uid = decoded["uid"]
-    # Check topic scope
-    allowed = allowed_prefixes_for_user(uid)
-    if not any(p.topic.startswith(pref) for pref in [x.rstrip("/") + "/" for x in allowed]):
+    allowed = [x.rstrip("/") + "/" for x in allowed_prefixes_for_user(uid)]
+    if not any(p.topic.startswith(pref) for pref in allowed):
         raise HTTPException(status_code=403, detail=f"Topic not allowed for user {uid}")
     ensure_mqtt_connected()
     payload = p.payload
@@ -226,14 +209,14 @@ def publish(p: PublishIn, authorization: Optional[str] = Header(None)):
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default=None)):
-    # Accept connection
     await websocket.accept()
-    # Verify token (sent in ?token=...)
+    origin = websocket.headers.get("origin")
+    print(f"[WS] origin={origin}")
+
     if not token:
         await websocket.close(code=4401)
         return
     try:
-        # Opción A: sin revocación (no requiere Service Account)
         decoded = firebase_auth.verify_id_token(token, check_revoked=False)
         print(f"[WS] token OK, uid={decoded.get('uid')}")
     except Exception as e:
@@ -242,17 +225,14 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
         return
 
     uid = decoded["uid"]
-    # Assign allowed prefixes to this connection
     prefixes = allowed_prefixes_for_user(uid)
     client = WSClient(websocket, uid, prefixes)
     ConnectionManager.add(client)
 
-    # Send a hello message with info & prefixes
     await websocket.send_json({"type": "hello", "uid": uid, "allowed_prefixes": prefixes})
 
     try:
         while True:
-            # Receive messages from client: {type:"publish", topic, payload, qos, retain}
             data = await websocket.receive_json()
             if not isinstance(data, dict):
                 continue
@@ -262,7 +242,6 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
                 qos = int(data.get("qos", 0))
                 retain = bool(data.get("retain", False))
 
-                # topic scope check
                 if not any(topic.startswith(pref.rstrip('/') + '/') for pref in prefixes):
                     await websocket.send_json({"type": "error", "error": "Topic not allowed"})
                     continue
