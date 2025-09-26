@@ -4,13 +4,14 @@ import ssl
 import threading
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Body, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
 import firebase_admin
 from firebase_admin import auth as firebase_auth
+from firebase_admin import credentials
 
 import paho.mqtt.client as mqtt
 
@@ -35,16 +36,29 @@ TOPIC_BASE = os.getenv("TOPIC_BASE", "scada/customers").strip()
 # Optional: allow multiple public prefixes (comma-separated) if you don't want per-user scoping
 PUBLIC_ALLOWED_PREFIXES = [p.strip() for p in os.getenv("PUBLIC_ALLOWED_PREFIXES", "").split(",") if p.strip()]
 
+FIREBASE_SERVICE_ACCOUNT = os.getenv("FIREBASE_SERVICE_ACCOUNT", "").strip()
+
 if not FIREBASE_PROJECT_ID:
     raise RuntimeError("FIREBASE_PROJECT_ID is required")
 
 if not MQTT_HOST:
     raise RuntimeError("HIVEMQ_HOST is required")
 
-# ---- Firebase Admin init (used only for verifying ID tokens) ----
-# initialize app without credentials; it will fetch Google's public certs to verify tokens
+# ---- Firebase Admin init ----
+# Opción 1: si defines FIREBASE_SERVICE_ACCOUNT (JSON completo) en Render, la usamos.
+# Opción 2: si no, inicializamos con options={'projectId': FIREBASE_PROJECT_ID}, suficiente para verify_id_token.
 if not firebase_admin._apps:
-    firebase_admin.initialize_app(name="bridge-app")
+    try:
+        if FIREBASE_SERVICE_ACCOUNT:
+            cred = credentials.Certificate(json.loads(FIREBASE_SERVICE_ACCOUNT))
+            firebase_admin.initialize_app(cred, name="bridge-app")
+            print("[FB] Initialized with service account")
+        else:
+            firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID}, name="bridge-app")
+            print(f"[FB] Initialized with projectId={FIREBASE_PROJECT_ID}")
+    except Exception as e:
+        print(f"[FB] Init error: {e}")
+        raise
 
 # ---- FastAPI app ----
 app = FastAPI(title="MQTT Web Bridge", version="1.0.0")
@@ -60,6 +74,7 @@ app.add_middleware(
 
 # ---- MQTT Client (single, shared) ----
 mqtt_client = mqtt.Client(client_id=MQTT_CLIENT_ID, clean_session=True)
+mqtt_client.enable_logger()  # logs de cliente MQTT útiles
 
 if MQTT_TLS:
     # TLS Configuration
@@ -159,13 +174,12 @@ def verify_bearer_token(authorization: Optional[str]) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail="Missing Bearer token")
     id_token = authorization.split(" ", 1)[1].strip()
     try:
-        decoded = firebase_auth.verify_id_token(id_token, check_revoked=True)
         # Opción A: sin revocación (no requiere Service Account)
         decoded = firebase_auth.verify_id_token(id_token, check_revoked=False)
-         # (opcional) chequeos adicionales...
         return decoded
     except Exception as e:
-         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+        print(f"[WS] HTTP token invalid: {e}")
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 def allowed_prefixes_for_user(uid: str) -> List[str]:
     # Main per-user scope under TOPIC_BASE
@@ -219,10 +233,8 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
         await websocket.close(code=4401)
         return
     try:
-        decoded = firebase_auth.verify_id_token(token, check_revoked=True)
         # Opción A: sin revocación (no requiere Service Account)
         decoded = firebase_auth.verify_id_token(token, check_revoked=False)
-        # Log útil para depurar:
         print(f"[WS] token OK, uid={decoded.get('uid')}")
     except Exception as e:
         print(f"[WS] token invalid: {e}")
