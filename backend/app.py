@@ -159,14 +159,13 @@ def verify_bearer_token(authorization: Optional[str]) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail="Missing Bearer token")
     id_token = authorization.split(" ", 1)[1].strip()
     try:
+        decoded = firebase_auth.verify_id_token(id_token, check_revoked=True)
+        # Opción A: sin revocación (no requiere Service Account)
         decoded = firebase_auth.verify_id_token(id_token, check_revoked=False)
-        # Optionally enforce project id
-        if decoded.get("aud") and FIREBASE_PROJECT_ID not in (decoded.get("aud"), decoded.get("firebase", {}).get("project_id", "")):
-            # Usually 'aud' equals the Firebase project ID; if mismatch, reject
-            pass  # Allow if verify_id_token succeeded; Firebase handles the audience check internally
-        return decoded  # contains 'uid', 'email', etc.
+         # (opcional) chequeos adicionales...
+        return decoded
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 def allowed_prefixes_for_user(uid: str) -> List[str]:
     # Main per-user scope under TOPIC_BASE
@@ -220,8 +219,13 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
         await websocket.close(code=4401)
         return
     try:
+        decoded = firebase_auth.verify_id_token(token, check_revoked=True)
+        # Opción A: sin revocación (no requiere Service Account)
         decoded = firebase_auth.verify_id_token(token, check_revoked=False)
-    except Exception:
+        # Log útil para depurar:
+        print(f"[WS] token OK, uid={decoded.get('uid')}")
+    except Exception as e:
+        print(f"[WS] token invalid: {e}")
         await websocket.close(code=4401)
         return
 
