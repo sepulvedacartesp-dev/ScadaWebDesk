@@ -159,7 +159,7 @@ def verify_bearer_token(authorization: Optional[str]) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail="Missing Bearer token")
     id_token = authorization.split(" ", 1)[1].strip()
     try:
-        decoded = firebase_auth.verify_id_token(id_token, check_revoked=True)
+        decoded = firebase_auth.verify_id_token(id_token, check_revoked=False)
         # Optionally enforce project id
         if decoded.get("aud") and FIREBASE_PROJECT_ID not in (decoded.get("aud"), decoded.get("firebase", {}).get("project_id", "")):
             # Usually 'aud' equals the Firebase project ID; if mismatch, reject
@@ -220,7 +220,7 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
         await websocket.close(code=4401)
         return
     try:
-        decoded = firebase_auth.verify_id_token(token, check_revoked=True)
+        decoded = firebase_auth.verify_id_token(token, check_revoked=False)
     except Exception:
         await websocket.close(code=4401)
         return
