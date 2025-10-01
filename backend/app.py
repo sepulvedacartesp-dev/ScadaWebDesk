@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials
+from google.auth.exceptions import DefaultCredentialsError
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 
 import paho.mqtt.client as mqtt
 
@@ -24,6 +27,8 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter("[BRIDGE] %(message)s"))
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+GOOGLE_REQUEST = google_requests.Request()
 
 FIREBASE_APP_NAME = "bridge-app"
 firebase_app = None
@@ -169,12 +174,35 @@ class ConnectionManager:
             cls.remove(ws)
 
 # ---- Helpers ----
+
+def decode_firebase_token(id_token_str: str) -> Dict[str, Any]:
+    last_error: Optional[Exception] = None
+    if firebase_app is not None:
+        try:
+            return firebase_auth.verify_id_token(id_token_str, check_revoked=False, app=firebase_app)
+        except DefaultCredentialsError as exc:
+            last_error = exc
+            logger.warning("Firebase Admin requires ADC; falling back to google-auth verify: %s", exc)
+        except Exception as exc:
+            logger.warning("Firebase Admin verify failed: %s", exc)
+            last_error = exc
+    try:
+        decoded = google_id_token.verify_firebase_token(id_token_str, GOOGLE_REQUEST, audience=FIREBASE_PROJECT_ID)
+        if not decoded:
+            raise ValueError("Decoded token empty")
+        return decoded
+    except Exception as exc:
+        if last_error is None:
+            last_error = exc
+        raise last_error
+
+
 def verify_bearer_token(authorization: Optional[str]) -> Dict[str, Any]:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing Bearer token")
     id_token = authorization.split(" ", 1)[1].strip()
     try:
-        decoded = firebase_auth.verify_id_token(id_token, check_revoked=False, app=firebase_app)
+        decoded = decode_firebase_token(id_token)
         return decoded
     except Exception as e:
         logger.warning("HTTP token invalid: %s", e)
@@ -234,7 +262,7 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
         await websocket.close(code=4401)
         return
     try:
-        decoded = firebase_auth.verify_id_token(token, check_revoked=False, app=firebase_app)
+        decoded = decode_firebase_token(token)
         logger.info("WS token OK uid=%s", decoded.get("uid"))
     except Exception as e:
         logger.warning("WS token invalid: %s", e)
