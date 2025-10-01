@@ -6,8 +6,9 @@ import asyncio
 import logging
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import List, Optional, Dict, Any
+from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -29,6 +30,15 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter("[BRIDGE] %(message)s"))
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_ENV_PATH = os.getenv('SCADA_CONFIG_PATH')
+if CONFIG_ENV_PATH:
+    CONFIG_PATH = Path(CONFIG_ENV_PATH).expanduser().resolve()
+else:
+    CONFIG_PATH = (BASE_DIR / '..' / 'scada_config.json').resolve()
+ADMIN_EMAILS = [email.strip() for email in os.getenv('CONFIG_ADMIN_EMAILS', '').split(',') if email.strip()]
+ADMIN_EMAILS_LOWER = {email.lower() for email in ADMIN_EMAILS}
 
 GOOGLE_REQUEST = google_requests.Request()
 
@@ -131,6 +141,7 @@ def on_message(client, userdata, msg):
     data = {"topic": msg.topic, "payload": decoded_payload, "qos": msg.qos, "retain": msg.retain}
     ConnectionManager.broadcast(msg.topic, data)
 
+
 def try_decode(b: bytes) -> Any:
     try:
         s = b.decode("utf-8")
@@ -140,6 +151,107 @@ def try_decode(b: bytes) -> Any:
     except Exception:
         import base64
         return {"_binary_base64": base64.b64encode(b).decode("ascii")}
+
+
+def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        return {
+            "mainTitle": "SCADA Web",
+            "roles": {"admins": [], "operators": [], "viewers": []},
+            "containers": []
+        }
+    result = dict(data)
+    result.setdefault("mainTitle", "SCADA Web")
+    roles = result.get("roles")
+    if not isinstance(roles, dict):
+        roles = {}
+    normalized_roles: Dict[str, List[str]] = {}
+    for key in ("admins", "operators", "viewers"):
+        raw = roles.get(key, [])
+        if isinstance(raw, list):
+            normalized_roles[key] = [str(item).strip() for item in raw if str(item).strip()]
+        elif isinstance(raw, str):
+            normalized_roles[key] = [item.strip() for item in raw.split(",") if item.strip()]
+        else:
+            normalized_roles[key] = []
+    result["roles"] = normalized_roles
+    containers = result.get("containers")
+    if not isinstance(containers, list):
+        containers = []
+    result["containers"] = containers
+    return result
+
+
+def load_scada_config() -> Dict[str, Any]:
+    try:
+        with CONFIG_PATH.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        logger.warning("Config file %s not found, using defaults", CONFIG_PATH)
+        data = {}
+    except json.JSONDecodeError as exc:
+        logger.error("Config JSON invalid: %s", exc)
+        raise HTTPException(status_code=500, detail="Invalid configuration file")
+    return normalize_config(data)
+
+
+def save_scada_config(data: Dict[str, Any]) -> None:
+    normalized = normalize_config(data)
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with CONFIG_PATH.open("w", encoding="utf-8") as fh:
+        json.dump(normalized, fh, ensure_ascii=False, indent=2)
+
+
+def role_for_email(cfg: Dict[str, Any], email: Optional[str]) -> str:
+    if not email:
+        return "viewer"
+    lower_email = email.lower()
+    if lower_email in ADMIN_EMAILS_LOWER:
+        return "admin"
+    roles = cfg.get("roles", {})
+    if lower_email in [str(item).lower() for item in roles.get("admins", [])]:
+        return "admin"
+    if lower_email in [str(item).lower() for item in roles.get("operators", [])]:
+        return "operador"
+    if lower_email in [str(item).lower() for item in roles.get("viewers", [])]:
+        return "visualizacion"
+    return "operador"
+
+
+def ensure_admin(email: Optional[str], cfg: Optional[Dict[str, Any]] = None) -> None:
+    if not email:
+        raise HTTPException(status_code=403, detail="Usuario sin email en token")
+    lower_email = email.lower()
+    if lower_email in ADMIN_EMAILS_LOWER:
+        return
+    cfg = cfg or load_scada_config()
+    roles = cfg.get("roles", {})
+    admin_list = [str(item).lower() for item in roles.get("admins", [])]
+    if lower_email in admin_list:
+        return
+    raise HTTPException(status_code=403, detail="Usuario no autorizado para modificar la configuración")
+
+
+def validate_config_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="El cuerpo debe ser un objeto JSON")
+    containers = data.get("containers")
+    if containers is None or not isinstance(containers, list):
+        raise HTTPException(status_code=400, detail="El campo containers debe ser una lista")
+    for c_idx, container in enumerate(containers):
+        if not isinstance(container, dict):
+            raise HTTPException(status_code=400, detail=f"El contenedor {c_idx} debe ser un objeto")
+        objects = container.get("objects", [])
+        if not isinstance(objects, list):
+            raise HTTPException(status_code=400, detail=f"El campo objects del contenedor {c_idx} debe ser una lista")
+        for o_idx, obj in enumerate(objects):
+            if not isinstance(obj, dict):
+                raise HTTPException(status_code=400, detail=f"El objeto {o_idx} del contenedor {c_idx} debe ser un objeto")
+            topic = obj.get("topic")
+            if topic is not None and not isinstance(topic, str):
+                raise HTTPException(status_code=400, detail=f"El topic del objeto {o_idx} del contenedor {c_idx} debe ser texto")
+    return normalize_config(data)
+
 
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
@@ -259,6 +371,33 @@ def allowed_prefixes_for_user(uid: str) -> List[str]:
 def ensure_mqtt_connected():
     if not _mqtt_connected.wait(timeout=10):
         raise HTTPException(status_code=503, detail="MQTT broker not connected")
+
+
+
+@app.get("/config")
+def get_config_endpoint(authorization: Optional[str] = Header(None)):
+    decoded = verify_bearer_token(authorization)
+    cfg = load_scada_config()
+    email = decoded.get("email")
+    role = role_for_email(cfg, email)
+    return {"config": cfg, "role": role}
+
+
+@app.put("/config")
+def update_config_endpoint(config: Dict[str, Any] = Body(...), authorization: Optional[str] = Header(None)):
+    decoded = verify_bearer_token(authorization)
+    email = decoded.get("email")
+    current_cfg = load_scada_config()
+    ensure_admin(email, current_cfg)
+    normalized = validate_config_payload(config)
+    try:
+        save_scada_config(normalized)
+    except Exception as exc:
+        logger.exception("Error writing configuration: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudo guardar la configuración") from exc
+    role = role_for_email(normalized, email)
+    logger.info("Config updated by %s", email)
+    return {"ok": True, "config": normalized, "role": role}
 
 # ---- API ----
 @app.get("/")

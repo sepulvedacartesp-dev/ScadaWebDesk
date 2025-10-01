@@ -1,387 +1,85 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Configuración SCADA</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuracion SCADA</title>
+  <link rel="stylesheet" href="style.css">
   <style>
-    body { font-family: Arial, sans-serif; background-color: #f0f2f5; padding: 20px; }
-    .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    h1 { text-align: center; color: #333; }
-    h2 { border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-top: 0; }
-    
-    .btn {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    
-    .btn-add { background-color: #5cb85c; color: white; }
-    .btn-export { background-color: #007bff; color: white; }
-    .btn-generate { background-color: #007bff; color: white; margin-top: 20px; }
-    .btn-cancel { background-color: #6c757d; color: white; margin-top: 20px; }
-    .btn-remove { background-color: #dc3545; color: white; }
-    
-    .object-form {
-      border: 1px solid #ddd;
-      padding: 15px;
-      border-radius: 8px;
-      margin-top: 10px;
-      margin-bottom: 15px;
-      background-color: #f9f9f9;
-    }
-
-    .form-group {
-      margin-bottom: 15px;
-    }
-    
-    label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: bold;
-      color: #555;
-    }
-    
-    input[type="text"], input[type="number"], select {
-      width: 100%;
-      padding: 8px;
-      box-sizing: border-box;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-
-    /* Estilos específicos para el input de color */
-    input[type="color"] {
-        width: 100px; /* Ancho ajustable para el selector de color */
-        height: 38px; /* Altura para que se vea bien */
-        padding: 0;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        box-sizing: border-box;
-        vertical-align: middle; /* Para alinear con el texto si hay */
-        cursor: pointer;
-    }
-
-    .checkbox-group {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    .buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 20px;
-    }
-
-    .header-links {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-    }
-
-    .back-link {
-      font-size: 1em;
-      text-decoration: none;
-      color: #007bff;
-    }
-
+    .config-editor { width: min(1000px, 100%); margin: 0 auto 3rem; padding: 2rem clamp(1rem, 3vw, 2.5rem); display: flex; flex-direction: column; gap: 1.5rem; }
+    .config-card { background: var(--bg-elevated); border-radius: 20px; padding: 1.75rem 2rem; box-shadow: var(--shadow-soft); border: 1px solid rgba(112, 138, 255, 0.14); display: flex; flex-direction: column; gap: 1rem; }
+    #config-editor { width: 100%; min-height: 420px; border-radius: 16px; border: 1px solid rgba(112, 138, 255, 0.24); background: rgba(10, 19, 32, 0.9); color: var(--text-primary); font-family: "JetBrains Mono", Menlo, monospace; font-size: 0.9rem; padding: 1rem; }
+    .button-row { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: flex-end; }
+    .status-banner { padding: 0.85rem 1.2rem; border-radius: 14px; border: 1px solid rgba(112, 138, 255, 0.22); background: rgba(9, 18, 32, 0.85); font-size: 0.95rem; }
+    .status-banner.success { border-color: rgba(6, 214, 160, 0.35); color: #6cffd6; }
+    .status-banner.error { border-color: rgba(239, 71, 111, 0.35); color: #ff9fb4; }
+    .status-banner.warning { border-color: rgba(255, 209, 102, 0.35); color: #ffdd91; }
+    .btn-link { background: transparent; color: var(--text-muted); padding: 0.35rem 0.75rem; }
+    .btn-link:hover { color: var(--text-primary); text-decoration: underline; }
   </style>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAwac3okkBuOm0gB5aqRuHILefbryj9lAw",
+      authDomain: "scadaweb-64eba.firebaseapp.com",
+      projectId: "scadaweb-64eba",
+    };
+    firebase.initializeApp(firebaseConfig);
+  </script>
 </head>
 <body>
-  <div class="header-links">
-    <a href="index.html" class="back-link">Volver al SCADA</a>
-    <h1>Configuración SCADA</h1>
-    <div></div>
-  </div>
-
-  <div class="container">
-    <h2>Configuración Principal</h2>
-    <div class="form-group">
-      <label for="mainTitle">Título Principal:</label>
-      <input type="text" id="mainTitle" value="SCADA Demo">
+  <header class="app-header">
+    <div>
+      <a class="btn btn-link" href="index.html"><< Volver al dashboard</a>
     </div>
-    <div class="form-group">
-      <label for="numContainers">Número de Contenedores:</label>
-      <input type="number" id="numContainers" value="1" min="1">
+    <h1>Editor de configuracion SCADA</h1>
+    <div class="session-panel">
+      <span id="session-status" class="session-status">Sin sesion</span>
+      <span id="role-badge" class="chip chip-disconnected">Rol: -</span>
+      <button id="logout-btn" type="button" class="btn btn-logout" disabled>Cerrar sesion</button>
+      <button id="open-login" type="button" class="btn btn-login">Ingresar</button>
     </div>
-    <div class="buttons">
-      <button class="btn btn-generate" id="generateBtn">Generar Contenedores</button>
-      <button class="btn btn-export" id="exportBtn">Exportar Configuración</button>
-      <button class="btn btn-cancel" id="importBtn">Importar Configuración</button>
-      <input type="file" id="importInput" accept=".json" style="display: none;">
-    </div>
-  </div>
+  </header>
 
-  <div id="containers-section"></div>
+  <main class="config-editor">
+    <section class="config-card">
+      <div id="status-banner" class="status-banner">Autenticate para cargar la configuracion.</div>
+      <div>
+        <p style="margin:0; color: var(--text-muted);">Esta herramienta carga el archivo <code>scada_config.json</code> desde el servidor, permite editarlo y guardarlo nuevamente. Se requiere rol de administrador para actualizarlo.</p>
+      </div>
+    </section>
 
-  <script>
-    const generateBtn = document.getElementById('generateBtn');
-    const exportBtn = document.getElementById('exportBtn');
-    const importBtn = document.getElementById('importBtn');
-    const importInput = document.getElementById('importInput');
-    const numContainersInput = document.getElementById('numContainers');
-    const mainTitleInput = document.getElementById('mainTitle');
-    const containersSection = document.getElementById('containers-section');
+    <section class="config-card">
+      <div class="button-row">
+        <button id="reload-btn" class="btn">Recargar</button>
+        <button id="format-btn" class="btn">Formatear JSON</button>
+        <button id="import-btn" class="btn">Importar archivo</button>
+        <button id="download-btn" class="btn">Descargar</button>
+        <button id="save-btn" class="btn btn-save">Guardar en servidor</button>
+      </div>
+      <textarea id="config-editor" spellcheck="false" placeholder="{
+  "mainTitle": "SCADA Web",
+  ...
+}"></textarea>
+    </section>
+  </main>
 
-    let currentConfig = {
-      mainTitle: 'SCADA Demo',
-      containers: []
-    };
+  <dialog id="login-dialog" class="login-dialog">
+    <form id="login-form" method="dialog" class="login-form">
+      <h2>Iniciar sesion</h2>
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autocomplete="username">
+      <label for="password">Contrasena</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+      <div class="login-actions">
+        <button type="submit" class="btn btn-login">Entrar</button>
+        <button type="button" class="btn btn-cancel" id="close-login">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const savedConfig = localStorage.getItem('scadaConfig');
-      if (savedConfig) {
-        currentConfig = JSON.parse(savedConfig);
-        numContainersInput.value = currentConfig.containers.length;
-        mainTitleInput.value = currentConfig.mainTitle;
-      }
-      renderContainers();
-    });
-
-    generateBtn.onclick = () => {
-      const num = parseInt(numContainersInput.value);
-      currentConfig.mainTitle = mainTitleInput.value;
-      if (num < 1) {
-        alert('El número de contenedores debe ser al menos 1.');
-        return;
-      }
-      
-      const newContainers = [];
-      for (let i = 0; i < num; i++) {
-        if (currentConfig.containers[i]) {
-          newContainers.push(currentConfig.containers[i]);
-        } else {
-          newContainers.push({
-            title: `Contenedor ${i + 1}`,
-            objects: []
-          });
-        }
-      }
-      currentConfig.containers = newContainers;
-      localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
-      renderContainers();
-    };
-
-    function renderContainers() {
-      containersSection.innerHTML = '';
-      currentConfig.containers.forEach((containerData, index) => {
-        const containerDiv = document.createElement('div');
-        containerDiv.className = 'container';
-        containerDiv.innerHTML = `
-          <h2>Contenedor ${index + 1}</h2>
-          <div class="form-group">
-            <label for="containerTitle-${index}">Título del Contenedor:</label>
-            <input type="text" id="containerTitle-${index}" value="${containerData.title}">
-          </div>
-          <div id="objects-container-${index}"></div>
-          <button class="btn btn-add" onclick="addObject(${index})">Agregar Objeto</button>
-        `;
-        containersSection.appendChild(containerDiv);
-        renderObjects(index);
-      });
-    }
-
-    function renderObjects(containerIndex) {
-      const objectsContainer = document.getElementById(`objects-container-${containerIndex}`);
-      objectsContainer.innerHTML = '';
-      currentConfig.containers[containerIndex].objects.forEach((obj, objIndex) => {
-        const objForm = document.createElement('div');
-        objForm.className = 'object-form';
-        objForm.innerHTML = `
-          <h3>Objeto ${objIndex + 1}</h3>
-          <div class="form-group">
-            <label for="objType-${containerIndex}-${objIndex}">Tipo de Objeto:</label>
-            <select id="objType-${containerIndex}-${objIndex}" onchange="renderObjectForm(${containerIndex}, ${objIndex})">
-              <option value="level" ${obj.type === 'level' ? 'selected' : ''}>Medidor de Nivel</option>
-              <option value="pumpStatus" ${obj.type === 'pumpStatus' ? 'selected' : ''}>Indicador de Bomba</option>
-              <option value="motorSpeed" ${obj.type === 'motorSpeed' ? 'selected' : ''}>Velocidad de Motor</option>
-              <option value="startBtn" ${obj.type === 'startBtn' ? 'selected' : ''}>Botón de Inicio</option>
-              <option value="stopBtn" ${obj.type === 'stopBtn' ? 'selected' : ''}>Botón de Parada</option>
-              <option value="resetBtn" ${obj.type === 'resetBtn' ? 'selected' : ''}>Botón de Reset</option>
-              <option value="gauge" ${obj.type === 'gauge' ? 'selected' : ''}>Medidor Circular</option>
-              <option value="number" ${obj.type === 'number' ? 'selected' : ''}>Indicador Numérico</option>
-            </select>
-          </div>
-          <div id="dynamic-form-${containerIndex}-${objIndex}"></div>
-          <div class="buttons">
-              <button class="btn btn-remove" onclick="removeObject(${containerIndex}, ${objIndex})">Eliminar</button>
-          </div>
-        `;
-        objectsContainer.appendChild(objForm);
-        renderObjectForm(containerIndex, objIndex);
-      });
-    }
-
-    function renderObjectForm(containerIndex, objIndex) {
-      const obj = currentConfig.containers[containerIndex].objects[objIndex];
-      const formDiv = document.getElementById(`dynamic-form-${containerIndex}-${objIndex}`);
-      let htmlContent = `
-        <div class="form-group">
-          <label for="objLabel-${containerIndex}-${objIndex}">Etiqueta:</label>
-          <input type="text" id="objLabel-${containerIndex}-${objIndex}" value="${obj.label || ''}">
-        </div>
-        <div class="form-group">
-          <label for="objTopic-${containerIndex}-${objIndex}">Tópico MQTT:</label>
-          <input type="text" id="objTopic-${containerIndex}-${objIndex}" value="${obj.topic || ''}">
-        </div>
-      `;
-
-      switch(obj.type) {
-        case 'level':
-        case 'gauge':
-        case 'motorSpeed':
-        case 'number':
-          htmlContent += `
-            <div class="form-group">
-              <label for="objUnit-${containerIndex}-${objIndex}">Unidad de Ingeniería:</label>
-              <input type="text" id="objUnit-${containerIndex}-${objIndex}" value="${obj.unit || ''}" placeholder="Ej: %">
-            </div>
-            <div class="form-group">
-                <label for="objMin-${containerIndex}-${objIndex}">Valor Mínimo:</label>
-                <input type="number" id="objMin-${containerIndex}-${objIndex}" value="${obj.min !== undefined ? obj.min : ''}">
-            </div>
-            <div class="form-group">
-                <label for="objMax-${containerIndex}-${objIndex}">Valor Máximo:</label>
-                <input type="number" id="objMax-${containerIndex}-${objIndex}" value="${obj.max !== undefined ? obj.max : ''}">
-            </div>
-          `;
-          if (obj.type === 'level' || obj.type === 'gauge') {
-            htmlContent += `
-              <div class="form-group">
-                <label for="objColor-${containerIndex}-${objIndex}">Color:</label>
-                <input type="color" id="objColor-${containerIndex}-${objIndex}" value="${obj.color || '#00b3ff'}">
-              </div>
-            `;
-          }
-          break;
-        case 'pumpStatus':
-          htmlContent += `
-            <div class="form-group">
-              <label for="objOnColor-${containerIndex}-${objIndex}">Color ENCENDIDO:</label>
-              <input type="color" id="objOnColor-${containerIndex}-${objIndex}" value="${obj.onColor || '#00ff00'}">
-            </div>
-            <div class="form-group">
-              <label for="objOffColor-${containerIndex}-${objIndex}">Color APAGADO:</label>
-              <input type="color" id="objOffColor-${containerIndex}-${objIndex}" value="${obj.offColor || '#6c757d'}">
-            </div>
-          `;
-          break;
-        case 'startBtn':
-        case 'stopBtn':
-        case 'resetBtn':
-          htmlContent += `
-            <div class="form-group">
-              <label for="objColor-${containerIndex}-${objIndex}">Color del Botón:</label>
-              <input type="color" id="objColor-${containerIndex}-${objIndex}" value="${obj.color || '#007bff'}">
-            </div>
-          `;
-          break;
-      }
-
-      formDiv.innerHTML = htmlContent;
-      
-      // Update the object type when the select changes
-      const objTypeSelect = document.getElementById(`objType-${containerIndex}-${objIndex}`);
-      objTypeSelect.addEventListener('change', (e) => {
-        currentConfig.containers[containerIndex].objects[objIndex].type = e.target.value;
-        renderObjectForm(containerIndex, objIndex); // Re-render the form
-      });
-    }
-    
-    function addObject(containerIndex) {
-      currentConfig.containers[containerIndex].objects.push({ type: 'level', label: '', topic: '', unit: '', min: 0, max: 100, color: '#00b3ff' });
-      localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
-      renderObjects(containerIndex);
-    }
-    
-    function removeObject(containerIndex, objIndex) {
-      currentConfig.containers[containerIndex].objects.splice(objIndex, 1);
-      localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
-      renderObjects(containerIndex);
-    }
-
-    function saveConfig() {
-      currentConfig.mainTitle = mainTitleInput.value;
-      currentConfig.containers.forEach((containerData, containerIndex) => {
-        containerData.title = document.getElementById(`containerTitle-${containerIndex}`).value;
-        containerData.objects.forEach((obj, objIndex) => {
-          obj.type = document.getElementById(`objType-${containerIndex}-${objIndex}`).value;
-          obj.label = document.getElementById(`objLabel-${containerIndex}-${objIndex}`).value;
-          obj.topic = document.getElementById(`objTopic-${containerIndex}-${objIndex}`).value;
-          
-          const unitInput = document.getElementById(`objUnit-${containerIndex}-${objIndex}`);
-          if (unitInput) {
-            obj.unit = unitInput.value;
-          } else {
-            delete obj.unit;
-          }
-
-          if (obj.type === 'level' || obj.type === 'gauge') {
-            obj.color = document.getElementById(`objColor-${containerIndex}-${objIndex}`).value;
-          } else if (obj.type === 'pumpStatus') {
-            obj.onColor = document.getElementById(`objOnColor-${containerIndex}-${objIndex}`).value;
-            obj.offColor = document.getElementById(`objOffColor-${containerIndex}-${objIndex}`).value;
-          } else if (obj.type === 'startBtn' || obj.type === 'stopBtn' || obj.type === 'resetBtn') {
-            obj.color = document.getElementById(`objColor-${containerIndex}-${objIndex}`).value;
-          }
-
-          const minInput = document.getElementById(`objMin-${containerIndex}-${objIndex}`);
-          const maxInput = document.getElementById(`objMax-${containerIndex}-${objIndex}`);
-          if (minInput) obj.min = minInput.value !== '' ? parseFloat(minInput.value) : undefined;
-          if (maxInput) obj.max = maxInput.value !== '' ? parseFloat(maxInput.value) : undefined;
-        });
-      });
-      localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
-      alert('Configuración guardada en localStorage!');
-    }
-
-    // Save configuration before exporting or navigating away
-    window.addEventListener('beforeunload', saveConfig);
-
-    exportBtn.onclick = () => {
-      saveConfig();
-      const dataStr = JSON.stringify(currentConfig, null, 2);
-      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-      const exportFileDefaultName = 'scada_config.json';
-      const linkElement = document.createElement('a');
-      linkElement.setAttribute('href', dataUri);
-      linkElement.setAttribute('download', exportFileDefaultName);
-      linkElement.click();
-    };
-
-    importBtn.onclick = () => {
-        importInput.click();
-    };
-
-    importInput.addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const importedConfig = JSON.parse(e.target.result);
-            if (importedConfig.containers) {
-              currentConfig = importedConfig;
-              localStorage.setItem('scadaConfig', JSON.stringify(currentConfig));
-              numContainersInput.value = currentConfig.containers.length;
-              mainTitleInput.value = currentConfig.mainTitle;
-              renderContainers();
-              alert('Configuración importada exitosamente!');
-            } else {
-              alert('Formato de archivo JSON incorrecto.');
-            }
-          } catch (error) {
-            alert('Error al leer el archivo. Asegúrate de que sea un archivo JSON válido.');
-          }
-        };
-        reader.readAsText(file);
-      }
-    });
-
-  </script>
+  <input type="file" id="importInput" accept="application/json" hidden>
+  <script src="config.js" defer></script>
 </body>
 </html>
