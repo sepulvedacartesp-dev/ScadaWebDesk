@@ -25,6 +25,8 @@ if not logger.handlers:
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+FIREBASE_APP_NAME = "bridge-app"
+firebase_app = None
 # ---- Config ----
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
@@ -53,14 +55,21 @@ if not firebase_admin._apps:
     try:
         if FIREBASE_SERVICE_ACCOUNT:
             cred = credentials.Certificate(json.loads(FIREBASE_SERVICE_ACCOUNT))
-            firebase_admin.initialize_app(cred, name="bridge-app")
+            firebase_app = firebase_admin.initialize_app(cred, name=FIREBASE_APP_NAME)
             logger.info("FB initialized with service account")
         else:
-            firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID}, name="bridge-app")
+            firebase_app = firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID}, name=FIREBASE_APP_NAME)
             logger.info("FB initialized with projectId=%s", FIREBASE_PROJECT_ID)
     except Exception as e:
         logger.exception("FB init error: %s", e)
         raise
+else:
+    try:
+        firebase_app = firebase_admin.get_app(FIREBASE_APP_NAME)
+        logger.info("FB app reused name=%s", FIREBASE_APP_NAME)
+    except ValueError:
+        firebase_app = firebase_admin.get_app()
+        logger.info("FB default app reused")
 
 # ---- FastAPI app ----
 app = FastAPI(title="MQTT Web Bridge", version="1.0.0")
@@ -165,7 +174,7 @@ def verify_bearer_token(authorization: Optional[str]) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail="Missing Bearer token")
     id_token = authorization.split(" ", 1)[1].strip()
     try:
-        decoded = firebase_auth.verify_id_token(id_token, check_revoked=False)
+        decoded = firebase_auth.verify_id_token(id_token, check_revoked=False, app=firebase_app)
         return decoded
     except Exception as e:
         logger.warning("HTTP token invalid: %s", e)
@@ -225,7 +234,7 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
         await websocket.close(code=4401)
         return
     try:
-        decoded = firebase_auth.verify_id_token(token, check_revoked=False)
+        decoded = firebase_auth.verify_id_token(token, check_revoked=False, app=firebase_app)
         logger.info("WS token OK uid=%s", decoded.get("uid"))
     except Exception as e:
         logger.warning("WS token invalid: %s", e)
