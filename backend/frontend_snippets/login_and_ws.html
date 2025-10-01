@@ -1,0 +1,56 @@
+<!-- Agrega esto en tu index.html o en una página de login -->
+<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "TU_API_KEY",
+    authDomain: "TU_AUTH_DOMAIN",
+    projectId: "TU_PROJECT_ID",
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
+
+<form onsubmit="doLogin(event)">
+  <input type="email" id="email" placeholder="Email" required>
+  <input type="password" id="password" placeholder="Contraseña" required>
+  <button type="submit">Ingresar</button>
+</form>
+
+<script>
+let ws = null;
+let uid = null;
+let idToken = null;
+
+async function doLogin(ev) {
+  ev.preventDefault();
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  await firebase.auth().signInWithEmailAndPassword(email, password);
+  const user = firebase.auth().currentUser;
+  uid = user.uid;
+  idToken = await user.getIdToken(true);
+  connectWS();
+}
+
+function connectWS() {
+  const wsUrl = "wss://TU_BACKEND_URL/ws?token=" + encodeURIComponent(idToken);
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => console.log("WS abierto");
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === "hello") {
+      console.log("Conectado como", msg.uid, "prefixes:", msg.allowed_prefixes);
+    } else if (msg.topic) {
+      console.log("MQTT", msg.topic, msg.payload);
+      // TODO: actualizar UI
+    }
+  };
+  ws.onclose = () => console.log("WS cerrado");
+}
+
+function publishRelative(relativePath, payload, qos=0, retain=false) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const base = "scada/customers/" + uid + "/";
+  ws.send(JSON.stringify({type: "publish", topic: base + relativePath, payload, qos, retain}));
+}
+</script>
