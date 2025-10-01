@@ -27,7 +27,7 @@ MQTT_USERNAME = os.getenv("HIVEMQ_USERNAME", "").strip()
 MQTT_PASSWORD = os.getenv("HIVEMQ_PASSWORD", "").strip()
 MQTT_TLS = os.getenv("MQTT_TLS", "1").strip() == "1"
 MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "0").strip() == "1"
-MQTT_CA_CERT_PATH = os.getenv("MQTT_CA_CERT_PATH", "").strip()  # optional
+MQTT_CA_CERT_PATH = os.getenv("MQTT_CA_CERT_PATH", "").strip()
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "webbridge-backend")
 
 TOPIC_BASE = os.getenv("TOPIC_BASE", "scada/customers").strip()

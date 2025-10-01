@@ -1,35 +1,28 @@
-# MQTT Web Bridge (FastAPI + Firebase + HiveMQ)
+﻿# MQTT Web Bridge (FastAPI + Firebase Auth + HiveMQ)
 
-Este backend intermedio permite:
-- Validar usuarios vía **Firebase Authentication** (token ID).
-- Conectarse a **HiveMQ** (u otro broker MQTT) con **credenciales seguras**.
-- Exponer un **WebSocket** para que el frontend reciba datos en tiempo real y publique sin conocer credenciales del broker.
-- Restringir temas MQTT por **UID de Firebase**: cada usuario sólo accede a `TOPIC_BASE/{uid}/...`
+Este backend actua como puente seguro entre el frontend estatico, Firebase Authentication y el broker MQTT. Las funciones principales son:
+- Validar tokens ID emitidos por Firebase antes de abrir la sesion WebSocket o aceptar publicaciones HTTP.
+- Conectarse a HiveMQ Cloud usando credenciales privadas almacenadas en variables de entorno (Render secrets).
+- Reenviar todos los mensajes MQTT permitidos hacia los navegadores conectados via WebSocket.
+- Restringir la lectura y la escritura al scope `TOPIC_BASE/{uid}/...` mas los prefijos publicos configurados.
 
-## 1) Requisitos
-- Una cuenta de **Firebase** (plan gratuito) con *Authentication* activado (email/contraseña).
-- Un broker **HiveMQ** (puede ser HiveMQ Cloud).
-- Una cuenta en **Render.com** o **Railway.app** (plan gratuito) para desplegar este backend.
-- Tu frontend web (GitHub Pages + Hostinger) que hará login con Firebase.
+## Requisitos previos
+- Proyecto de Firebase con Authentication (Email/Password) habilitado y al menos un usuario de prueba.
+- Instancia de HiveMQ Cloud (puerto TLS 8883) o un broker MQTT compatible.
+- Cuenta en Render.com (free tier) para desplegar este backend como Web Service.
+- Frontend estatico (GitHub Pages + Hostinger) que cargue Firebase Web SDK.
 
-## 2) Firebase: configuración rápida
-1. Crea un **Proyecto** en Firebase.
-2. En **Authentication → Sign-in method**, habilita **Email/Password**.
-3. En **Project settings → General → Your apps → Web app**, copia la configuración web (apiKey, authDomain, etc.).
-4. Crea al menos un **usuario de prueba** en Authentication → Users.
+## Variables de entorno
+Crea un archivo `.env` a partir de `.env.example` y completa los valores reales. Nunca subas secretos al repositorio.
+```env
+FRONTEND_ORIGIN=https://TU-DOMINIO-EN-HOSTINGER
+FIREBASE_PROJECT_ID=scadaweb-64eba
+# FIREBASE_SERVICE_ACCOUNT=<JSON OPCIONAL PARA REVOCATION CHECK>
 
-> Nota: el backend verifica el **ID Token** de Firebase con `firebase_admin`. Sólo necesitas el `FIREBASE_PROJECT_ID` (el mismo que ves en Firebase).
-
-## 3) Variables de entorno
-Crea un archivo `.env` a partir de `.env.example` y completa los valores:
-```
-FRONTEND_ORIGIN=https://tu-dominio.com
-FIREBASE_PROJECT_ID=tu-proyecto-firebase-id
-
-HIVEMQ_HOST=xxxxxxxx.s1.eu.hivemq.cloud
+HIVEMQ_HOST=xxxxxx.s1.eu.hivemq.cloud
 HIVEMQ_PORT=8883
-HIVEMQ_USERNAME=usuario_mqtt
-HIVEMQ_PASSWORD=contraseña_mqtt
+HIVEMQ_USERNAME=USUARIO_MQTT
+HIVEMQ_PASSWORD=PASSWORD_MQTT
 
 MQTT_TLS=1
 MQTT_TLS_INSECURE=0
@@ -38,95 +31,54 @@ MQTT_CA_CERT_PATH=
 TOPIC_BASE=scada/customers
 PUBLIC_ALLOWED_PREFIXES=public/broadcast
 ```
+Si necesitas validar revocacion de tokens, agrega `FIREBASE_SERVICE_ACCOUNT` con el JSON completo del service account.
 
-## 4) Ejecutar localmente (opcional)
+## Ejecucion local
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # en Windows: .venv\Scripts\activate
+# Windows Powershell
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
-- WebSocket: `ws://localhost:8000/ws?token=ID_TOKEN`
-- Publicar: `POST http://localhost:8000/publish` con header `Authorization: Bearer ID_TOKEN`
+- Healthcheck: `GET http://127.0.0.1:8000/health`
+- WebSocket: `ws://127.0.0.1:8000/ws?token=<ID_TOKEN>`
+- Publicar: `POST http://127.0.0.1:8000/publish` con header `Authorization: Bearer <ID_TOKEN>` y cuerpo JSON `{ "topic": "scada/customers/<uid>/demo", "payload": {"ok": true} }`.
 
-## 5) Despliegue en Render (gratis)
-1. Sube esta carpeta a un repositorio en GitHub (puede ser un subfolder `backend/` de tu repo existente).
-2. En Render, **New + Web Service** → conecta tu repo.
-3. **Environment**: `Python 3.11` (o similar).
-4. **Build Command**: `pip install -r requirements.txt`
-5. **Start Command**: `uvicorn app:app --host 0.0.0.0 --port $PORT`
-6. En **Environment Variables**, agrega todas las del `.env`.
-7. Deploy. Render te dará una URL tipo `https://tuapp.onrender.com`.
+## Despliegue en Render
+Configura el servicio exactamente con los siguientes valores:
+- Root Directory: `backend`
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `uvicorn app:app --host 0.0.0.0 --port $PORT`
+- Runtime Environment Variables:
+  - `PYTHON_VERSION=3.11.9`
+  - `FRONTEND_ORIGIN` (tu dominio Hostinger o `http://127.0.0.1:8001` para pruebas locales)
+  - `FIREBASE_PROJECT_ID=scadaweb-64eba`
+  - `FIREBASE_SERVICE_ACCOUNT` (solo si aplicas revocation check)
+  - `HIVEMQ_HOST`, `HIVEMQ_PORT`, `HIVEMQ_USERNAME`, `HIVEMQ_PASSWORD`
+  - `MQTT_TLS=1`, `MQTT_TLS_INSECURE=0`, `MQTT_CA_CERT_PATH=`
+  - `TOPIC_BASE=scada/customers`
+  - `PUBLIC_ALLOWED_PREFIXES=public/broadcast`
 
-> Nota: En el plan gratuito puede haber *cold start* (primer request tarda unos segundos). Luego funciona fluido.
+## Integracion del Frontend
+1. Incluye los SDK compat de Firebase en `index.html`.
+2. Inicializa Firebase con la configuracion del proyecto `scadaweb-64eba`.
+3. Implementa login Email/Password y recupera el `ID Token` actual con `firebase.auth().currentUser.getIdToken(true)`.
+4. Abre el WebSocket contra `wss://scadawebdesk.onrender.com/ws?token=<ID_TOKEN>`.
+5. Publica usando el mensaje JSON `{type:"publish", topic, payload, qos, retain}`.
+6. Para publicar en tu scope, usa `const base = "scada/customers/" + uid + "/";` y concatena los paths relativos definidos en `scada_config.json`.
 
-## 6) Frontend: Login con Firebase y WebSocket
-Incluye Firebase mediante CDN en tu HTML:
-```html
-<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
-<script>
-  const firebaseConfig = {
-    apiKey: "TU_API_KEY",
-    authDomain: "TU_AUTH_DOMAIN",
-    projectId: "TU_PROJECT_ID",
-  };
-  firebase.initializeApp(firebaseConfig);
-</script>
-```
+## Pruebas y criterios de aceptacion
+1. `GET https://scadawebdesk.onrender.com/health` responde `{ "status": "ok" }`.
+2. Login correcto en el frontend muestra el mensaje `hello` inicial con `uid` y `allowed_prefixes` desde el WebSocket.
+3. Llamada `publishRelative("lab/echo", { msg: "hola", ts: Date.now() })` emite el `ack` y el mensaje se refleja en la consola del navegador.
+4. Publicar desde HiveMQ (con las credenciales del backend) en `scada/customers/<uid>/lab/externo` se refleja en el navegador.
+5. (Opcional) Solicitud `GET /` o `/publish` con token invalido responde `401`.
+6. Render mantiene el servicio activo tras cold start (espera hasta 50 s en primer request).
 
-Ejemplo mínimo de login y conexión al WebSocket:
-```html
-<script>
-let ws = null;
-let idToken = null;
+## Buenas practicas adicionales
+- Mantener `MQTT_TLS_INSECURE=0`; solo cambiar a 1 si usas certificados autofirmados.
+- Configurar ACLs en HiveMQ para reforzar el scope MQTT.
+- Agregar rate limiting o validaciones especificas si vas a exponer controles criticos.
+- Rotar contrasenas MQTT periodicamente y actualizarlas en Render.
 
-// Login básico (email+password)
-async function login(email, password) {
-  await firebase.auth().signInWithEmailAndPassword(email, password);
-  const user = firebase.auth().currentUser;
-  idToken = await user.getIdToken(/* forceRefresh */ true);
-  connectWS();
-}
-
-function connectWS() {
-  const wsUrl = "wss://TU_BACKEND_URL/ws?token=" + encodeURIComponent(idToken);
-  ws = new WebSocket(wsUrl);
-  ws.onopen = () => console.log("WS abierto");
-  ws.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === "hello") {
-      console.log("Conectado como", msg.uid, "prefixes:", msg.allowed_prefixes);
-    } else if (msg.topic) {
-      // Mensaje desde MQTT → frontend
-      // msg = {topic, payload, qos, retain}
-      console.log("MQTT", msg.topic, msg.payload);
-      // TODO: actualizar tus widgets/indicadores con msg.payload
-    } else if (msg.type === "error") {
-      console.error("WS error:", msg.error);
-    }
-  };
-  ws.onclose = () => console.log("WS cerrado");
-}
-
-// Publicar vía WebSocket (sin exponer credenciales)
-function publish(topic, payload, qos=0, retain=false) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({type: "publish", topic, payload, qos, retain}));
-}
-</script>
-```
-
-> Importante: El servidor **restringe** por UID los temas permitidos. Sólo podrás publicar/recibir bajo `TOPIC_BASE/{uid}/...`.
-
-## 7) Migrar tu app actual
-- Quita cualquier conexión MQTT directa desde el navegador.
-- Mantén tu `scada_config.json` con la lista de *topics* relativos (por ejemplo, `nivel`, `bomba/status`).
-- Al iniciar sesión, determina el prefijo del usuario: `const base = "scada/customers/" + UID + "/";`
-- Para *subscribe*: tu backend ya reenvía todo lo que coincida con ese prefijo; tú sólo filtra por `topic.startsWith(base)` si lo necesitas.
-- Para *publish*: usa `publish(base + "comandos/bomba", {start: true})`.
-
-## 8) Seguridad adicional recomendada
-- En HiveMQ, usa **TLS (8883)** y **ACLs** si es posible.
-- En el backend, ajusta `PUBLIC_ALLOWED_PREFIXES` sólo si realmente necesitas canales compartidos.
-- Considera *rate limiting* y validaciones de payload en `/publish` si aceptas control de equipos.

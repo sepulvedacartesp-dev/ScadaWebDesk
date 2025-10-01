@@ -1,10 +1,45 @@
-<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyAwac3okkBuOm0gB5aqRuHILefbryj9lAw",
-    authDomain: "scadaweb-64eba.firebaseapp.com",
-    projectId: "scadaweb-64eba",
-  };
-  firebase.initializeApp(firebaseConfig);
-</script>
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scada Web Desk</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAwac3okkBuOm0gB5aqRuHILefbryj9lAw",
+      authDomain: "scadaweb-64eba.firebaseapp.com",
+      projectId: "scadaweb-64eba",
+    };
+    firebase.initializeApp(firebaseConfig);
+  </script>
+</head>
+<body>
+  <main>
+    <section class="auth">
+      <h1>Scada Web Desk</h1>
+      <form id="login-form">
+        <label for="email">Email</label>
+        <input type="email" id="email" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" required>
+        <button type="submit">Iniciar sesion</button>
+      </form>
+      <div class="auth-actions">
+        <button id="logout-btn" type="button">Cerrar sesion</button>
+      </div>
+      <p id="status" class="status">Sin sesion</p>
+    </section>
+
+    <section class="widgets">
+      <h2>Mensajes recibidos</h2>
+      <pre id="log" class="log"></pre>
+    </section>
+  </main>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
+
