@@ -40,8 +40,7 @@ function setStatus(text) {
 function appendLog(entry) {
   if (!logArea) return;
   const now = new Date().toISOString();
-  logArea.textContent += `[${now}] ${entry}
-`;
+  logArea.textContent += '[' + now + '] ' + entry + '\n';
   logArea.scrollTop = logArea.scrollHeight;
 }
 
@@ -539,7 +538,7 @@ function resetSessionState() {
   currentRole = "viewer";
   uid = null;
   clearDashboard();
-  scadaContainer.innerHTML = "<p class="empty-state">Inicia sesión para cargar tu tablero SCADA.</p>";
+  scadaContainer.innerHTML = '<p class="empty-state">Inicia sesion para cargar tu tablero SCADA.</p>';
   if (sidebarMenu) {
     sidebarMenu.hidden = true;
   }
