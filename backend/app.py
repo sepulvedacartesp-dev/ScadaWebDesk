@@ -164,16 +164,22 @@ class ConnectionManager:
 
     @classmethod
     def broadcast(cls, topic: str, data: dict):
+        delivered = 0
         to_remove = []
         for c in list(cls.clients):
             try:
                 if c.can_receive(topic):
                     import anyio
+                    logger.info("WS deliver topic=%s uid=%s", topic, c.uid)
                     anyio.from_thread.run(c.ws.send_json, data)
+                    delivered += 1
             except Exception:
+                logger.exception("Broadcast to uid=%s failed", getattr(c, "uid", None))
                 to_remove.append(c.ws)
         for ws in to_remove:
             cls.remove(ws)
+        if delivered == 0:
+            logger.info("WS no listeners for topic=%s", topic)
 
 # ---- Helpers ----
 
