@@ -169,9 +169,10 @@ class ConnectionManager:
         for c in list(cls.clients):
             try:
                 if c.can_receive(topic):
-                    import anyio
+                    import asyncio
+                    loop = asyncio.get_event_loop()
                     logger.info("WS deliver topic=%s uid=%s", topic, c.uid)
-                    anyio.from_thread.run(c.ws.send_json, data)
+                    loop.call_soon_threadsafe(asyncio.create_task, c.ws.send_json(data))
                     delivered += 1
             except Exception:
                 logger.exception("Broadcast to uid=%s failed", getattr(c, "uid", None))
