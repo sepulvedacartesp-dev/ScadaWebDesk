@@ -117,7 +117,9 @@ def on_connect(client, userdata, flags, rc, properties=None):
         logger.error("MQTT connection failed rc=%s", rc)
 
 def on_message(client, userdata, msg):
-    data = {"topic": msg.topic, "payload": try_decode(msg.payload), "qos": msg.qos, "retain": msg.retain}
+    decoded_payload = try_decode(msg.payload)
+    logger.info("MQTT inbound topic=%s qos=%s retain=%s", msg.topic, msg.qos, msg.retain)
+    data = {"topic": msg.topic, "payload": decoded_payload, "qos": msg.qos, "retain": msg.retain}
     ConnectionManager.broadcast(msg.topic, data)
 
 def try_decode(b: bytes) -> Any:
@@ -175,22 +177,34 @@ class ConnectionManager:
 
 # ---- Helpers ----
 
+def _ensure_uid(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not payload:
+        raise ValueError("Empty token payload")
+    uid = payload.get("uid") or payload.get("user_id") or payload.get("sub")
+    if not uid:
+        raise ValueError("Token missing uid")
+    payload["uid"] = uid
+    return payload
+
+
 def decode_firebase_token(id_token_str: str) -> Dict[str, Any]:
     last_error: Optional[Exception] = None
+    decoded: Optional[Dict[str, Any]] = None
     if firebase_app is not None:
         try:
-            return firebase_auth.verify_id_token(id_token_str, check_revoked=False, app=firebase_app)
+            decoded = firebase_auth.verify_id_token(id_token_str, check_revoked=False, app=firebase_app)
+            return _ensure_uid(decoded)
         except DefaultCredentialsError as exc:
             last_error = exc
             logger.warning("Firebase Admin requires ADC; falling back to google-auth verify: %s", exc)
         except Exception as exc:
-            logger.warning("Firebase Admin verify failed: %s", exc)
             last_error = exc
+            logger.warning("Firebase Admin verify failed: %s", exc)
     try:
         decoded = google_id_token.verify_firebase_token(id_token_str, GOOGLE_REQUEST, audience=FIREBASE_PROJECT_ID)
         if not decoded:
             raise ValueError("Decoded token empty")
-        return decoded
+        return _ensure_uid(decoded)
     except Exception as exc:
         if last_error is None:
             last_error = exc
