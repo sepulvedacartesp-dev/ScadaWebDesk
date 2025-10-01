@@ -2,6 +2,7 @@ import os
 import json
 import ssl
 import threading
+import logging
 from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query
@@ -16,6 +17,13 @@ from firebase_admin import credentials
 import paho.mqtt.client as mqtt
 
 load_dotenv()
+
+logger = logging.getLogger("bridge")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("[BRIDGE] %(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 # ---- Config ----
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
@@ -46,12 +54,12 @@ if not firebase_admin._apps:
         if FIREBASE_SERVICE_ACCOUNT:
             cred = credentials.Certificate(json.loads(FIREBASE_SERVICE_ACCOUNT))
             firebase_admin.initialize_app(cred, name="bridge-app")
-            print("[FB] Initialized with service account")
+            logger.info("FB initialized with service account")
         else:
             firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID}, name="bridge-app")
-            print(f"[FB] Initialized with projectId={FIREBASE_PROJECT_ID}")
+            logger.info("FB initialized with projectId=%s", FIREBASE_PROJECT_ID)
     except Exception as e:
-        print(f"[FB] Init error: {e}")
+        logger.exception("FB init error: %s", e)
         raise
 
 # ---- FastAPI app ----
@@ -85,14 +93,14 @@ _mqtt_connected = threading.Event()
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         _mqtt_connected.set()
-        print("[MQTT] Connected")
+        logger.info("MQTT connected")
         base = TOPIC_BASE if TOPIC_BASE.endswith("#") else (TOPIC_BASE.rstrip("/") + "/#")
         client.subscribe(base, qos=1)
         for p in PUBLIC_ALLOWED_PREFIXES:
             topic = p if p.endswith("#") else (p.rstrip("/") + "/#")
             client.subscribe(topic, qos=1)
     else:
-        print(f"[MQTT] Connection failed rc={rc}")
+        logger.error("MQTT connection failed rc=%s", rc)
 
 def on_message(client, userdata, msg):
     data = {"topic": msg.topic, "payload": try_decode(msg.payload), "qos": msg.qos, "retain": msg.retain}
@@ -160,7 +168,7 @@ def verify_bearer_token(authorization: Optional[str]) -> Dict[str, Any]:
         decoded = firebase_auth.verify_id_token(id_token, check_revoked=False)
         return decoded
     except Exception as e:
-        print(f"[HTTP] token invalid: {e}")
+        logger.warning("HTTP token invalid: %s", e)
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 def allowed_prefixes_for_user(uid: str) -> List[str]:
@@ -211,16 +219,16 @@ def publish(p: PublishIn, authorization: Optional[str] = Header(None)):
 async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default=None)):
     await websocket.accept()
     origin = websocket.headers.get("origin")
-    print(f"[WS] origin={origin}")
+    logger.info("WS accepted origin=%s", origin)
 
     if not token:
         await websocket.close(code=4401)
         return
     try:
         decoded = firebase_auth.verify_id_token(token, check_revoked=False)
-        print(f"[WS] token OK, uid={decoded.get('uid')}")
+        logger.info("WS token OK uid=%s", decoded.get("uid"))
     except Exception as e:
-        print(f"[WS] token invalid: {e}")
+        logger.warning("WS token invalid: %s", e)
         await websocket.close(code=4401)
         return
 
