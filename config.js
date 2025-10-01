@@ -149,8 +149,7 @@ function emailsFrom(value) {
     return value.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
   }
   if (typeof value === "string") {
-    return value.split(/[
-,;]/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+    return value.split(/[\\r\\n,;]/).map((item) => item.trim().toLowerCase()).filter(Boolean);
   }
   return [];
 }
