@@ -2,7 +2,9 @@ import os
 import json
 import ssl
 import threading
+import asyncio
 import logging
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query
@@ -32,6 +34,7 @@ GOOGLE_REQUEST = google_requests.Request()
 
 FIREBASE_APP_NAME = "bridge-app"
 firebase_app = None
+event_loop: Optional[asyncio.AbstractEventLoop] = None
 # ---- Config ----
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
@@ -78,6 +81,12 @@ else:
 
 # ---- FastAPI app ----
 app = FastAPI(title="MQTT Web Bridge", version="1.0.0")
+
+@app.on_event("startup")
+async def capture_event_loop():
+    global event_loop
+    event_loop = asyncio.get_running_loop()
+    logger.info("Event loop captured")
 
 # CORS
 app.add_middleware(
@@ -166,16 +175,27 @@ class ConnectionManager:
     def broadcast(cls, topic: str, data: dict):
         delivered = 0
         to_remove = []
+        loop = event_loop
         for c in list(cls.clients):
             try:
-                if c.can_receive(topic):
-                    import asyncio
-                    loop = asyncio.get_event_loop()
-                    logger.info("WS deliver topic=%s uid=%s", topic, c.uid)
-                    loop.call_soon_threadsafe(asyncio.create_task, c.ws.send_json(data))
+                if not c.can_receive(topic):
+                    continue
+                if loop is None:
+                    logger.warning("WS deliver skipped; no event loop topic=%s", topic)
+                    continue
+                future = asyncio.run_coroutine_threadsafe(c.ws.send_json(data), loop)
+                try:
+                    future.result(timeout=5)
                     delivered += 1
-            except Exception:
-                logger.exception("Broadcast to uid=%s failed", getattr(c, "uid", None))
+                    logger.info("WS deliver topic=%s uid=%s", topic, c.uid)
+                except FutureTimeoutError:
+                    logger.error("WS deliver timeout uid=%s topic=%s", c.uid, topic)
+                    to_remove.append(c.ws)
+                except Exception as exc:
+                    logger.error("WS deliver failed uid=%s topic=%s: %s", c.uid, topic, exc, exc_info=exc)
+                    to_remove.append(c.ws)
+            except Exception as exc:
+                logger.error("Broadcast loop error uid=%s topic=%s: %s", getattr(c, "uid", None), topic, exc, exc_info=exc)
                 to_remove.append(c.ws)
         for ws in to_remove:
             cls.remove(ws)
