@@ -18,14 +18,14 @@
           "label": "Partir",
           "topic": "Siemens/Partir",
           "color": "#00b3ff",
-          "payload": "start"
+          "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
           "topic": "Siemens/Parar",
           "color": "#ff0000",
-          "payload": "stop"
+          "payload": "0"
         },
         {
           "type": "pumpStatus",
@@ -61,14 +61,14 @@
           "label": "Partir bba 1",
           "topic": "Micro/PumpCmdStart2",
           "color": "#1eff00",
-          "payload": "start"
+          "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar bba 1",
           "topic": "Micro/PumpCmdStop2",
           "color": "#ff0000",
-          "payload": "stop"
+          "payload": "0"
         },
         {
           "type": "pumpStatus",
@@ -96,14 +96,14 @@
           "label": "Partir",
           "topic": "PLC/PumpCmdStart",
           "color": "#00b3ff",
-          "payload": "start"
+          "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Detener",
           "topic": "PLC/PumpCmdStop",
           "color": "#ff0000",
-          "payload": "stop"
+          "payload": "0"
         },
         {
           "type": "pumpStatus",
