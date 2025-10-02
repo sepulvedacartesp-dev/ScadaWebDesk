@@ -111,6 +111,10 @@ app.add_middleware(
 mqtt_client = mqtt.Client(client_id=MQTT_CLIENT_ID, clean_session=True)
 mqtt_client.enable_logger()
 
+last_message_store: Dict[str, Dict[str, Any]] = {}
+last_message_lock = threading.Lock()
+
+
 if MQTT_TLS:
     if MQTT_CA_CERT_PATH:
         mqtt_client.tls_set(ca_certs=MQTT_CA_CERT_PATH, certfile=None, keyfile=None, tls_version=ssl.PROTOCOL_TLS)
@@ -139,8 +143,30 @@ def on_message(client, userdata, msg):
     decoded_payload = try_decode(msg.payload)
     logger.info("MQTT inbound topic=%s qos=%s retain=%s", msg.topic, msg.qos, msg.retain)
     data = {"topic": msg.topic, "payload": decoded_payload, "qos": msg.qos, "retain": msg.retain}
+    remember_message(data)
     ConnectionManager.broadcast(msg.topic, data)
 
+
+
+
+def remember_message(data: Dict[str, Any]) -> None:
+    topic = data.get("topic")
+    if not topic:
+        return
+    entry = {"topic": topic,
+             "payload": data.get("payload"),
+             "retain": bool(data.get("retain")),
+             "qos": int(data.get("qos", 0))}
+    with last_message_lock:
+        last_message_store[topic] = entry
+
+
+
+def snapshot_for_prefixes(prefixes: List[str]) -> List[Dict[str, Any]]:
+    normalized = [p.rstrip("/") + "/" for p in prefixes]
+    with last_message_lock:
+        return [dict(entry) for topic, entry in last_message_store.items()
+                if any((topic.rstrip("/") + "/").startswith(pref) for pref in normalized)]
 
 def try_decode(b: bytes) -> Any:
     try:
@@ -454,7 +480,8 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
     client = WSClient(websocket, uid, prefixes)
     ConnectionManager.add(client)
 
-    await websocket.send_json({"type": "hello", "uid": uid, "allowed_prefixes": prefixes})
+    initial_snapshot = snapshot_for_prefixes(prefixes)
+    await websocket.send_json({"type": "hello", "uid": uid, "allowed_prefixes": prefixes, "last_values": initial_snapshot})
 
     try:
         while True:

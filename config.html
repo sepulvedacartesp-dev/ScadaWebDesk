@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -6,16 +6,134 @@
   <title>Configuracion SCADA</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    .config-editor { width: min(1000px, 100%); margin: 0 auto 3rem; padding: 2rem clamp(1rem, 3vw, 2.5rem); display: flex; flex-direction: column; gap: 1.5rem; }
-    .config-card { background: var(--bg-elevated); border-radius: 20px; padding: 1.75rem 2rem; box-shadow: var(--shadow-soft); border: 1px solid rgba(112, 138, 255, 0.14); display: flex; flex-direction: column; gap: 1rem; }
-    #config-editor { width: 100%; min-height: 420px; border-radius: 16px; border: 1px solid rgba(112, 138, 255, 0.24); background: rgba(10, 19, 32, 0.9); color: var(--text-primary); font-family: "JetBrains Mono", Menlo, monospace; font-size: 0.9rem; padding: 1rem; }
-    .button-row { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: flex-end; }
-    .status-banner { padding: 0.85rem 1.2rem; border-radius: 14px; border: 1px solid rgba(112, 138, 255, 0.22); background: rgba(9, 18, 32, 0.85); font-size: 0.95rem; }
+    .config-layout {
+      width: min(1100px, 100%);
+      margin: 0 auto 3rem;
+      padding: 2rem clamp(1rem, 3vw, 2.5rem);
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+    .config-card {
+      background: var(--bg-elevated);
+      border-radius: 22px;
+      padding: 1.75rem 2rem;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(112, 138, 255, 0.14);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .status-banner {
+      padding: 0.9rem 1.2rem;
+      border-radius: 14px;
+      border: 1px solid rgba(112, 138, 255, 0.22);
+      background: rgba(9, 18, 32, 0.85);
+      font-size: 0.95rem;
+    }
     .status-banner.success { border-color: rgba(6, 214, 160, 0.35); color: #6cffd6; }
     .status-banner.error { border-color: rgba(239, 71, 111, 0.35); color: #ff9fb4; }
     .status-banner.warning { border-color: rgba(255, 209, 102, 0.35); color: #ffdd91; }
-    .btn-link { background: transparent; color: var(--text-muted); padding: 0.35rem 0.75rem; }
-    .btn-link:hover { color: var(--text-primary); text-decoration: underline; }
+    .form-grid {
+      display: grid;
+      gap: 1rem 1.25rem;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    .roles-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .form-group label {
+      display: block;
+      margin-bottom: 0.35rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    .text-input,
+    .number-input,
+    .select-input,
+    .textarea {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(112, 138, 255, 0.24);
+      background: rgba(10, 19, 32, 0.9);
+      color: var(--text-primary);
+      padding: 0.65rem 0.75rem;
+      font-size: 0.95rem;
+    }
+    .textarea { min-height: 120px; resize: vertical; }
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: flex-end;
+    }
+    .button-row.align-start { justify-content: flex-start; }
+    .containers-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .container-card.config {
+      background: rgba(9, 18, 32, 0.78);
+      border: 1px solid rgba(112, 138, 255, 0.2);
+      border-radius: 18px;
+      padding: 1.35rem 1.5rem;
+      gap: 1.1rem;
+    }
+    .container-card .container-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    .container-card .container-title {
+      margin: 0;
+      font-size: 1.1rem;
+      letter-spacing: 0.04em;
+    }
+    .objects-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .object-card {
+      background: rgba(12, 22, 36, 0.85);
+      border: 1px solid rgba(84, 123, 227, 0.2);
+      border-radius: 16px;
+      padding: 1.1rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .object-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .object-fields {
+      display: grid;
+      gap: 0.9rem 1.2rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .empty-state {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      border: 1px dashed rgba(112, 138, 255, 0.24);
+      border-radius: 16px;
+    }
+    .btn-danger { background: linear-gradient(135deg, #ef476f, #ff6f91); }
+    .readonly .text-input,
+    .readonly .number-input,
+    .readonly .select-input,
+    .readonly .textarea {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+    .readonly .btn-editable {
+      pointer-events: none;
+      opacity: 0.6;
+    }
   </style>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
@@ -42,26 +160,56 @@
     </div>
   </header>
 
-  <main class="config-editor">
+  <main class="config-layout">
     <section class="config-card">
       <div id="status-banner" class="status-banner">Autenticate para cargar la configuracion.</div>
-      <div>
-        <p style="margin:0; color: var(--text-muted);">Esta herramienta carga el archivo <code>scada_config.json</code> desde el servidor, permite editarlo y guardarlo nuevamente. Se requiere rol de administrador para actualizarlo.</p>
+      <p style="margin:0; color: var(--text-muted);">Esta herramienta edita el archivo <code>scada_config.json</code> utilizado por el dashboard principal. Solo los usuarios con rol de administrador pueden guardar cambios en el servidor.</p>
+    </section>
+
+    <section class="config-card">
+      <h2>Datos generales</h2>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="mainTitle">Titulo principal</label>
+          <input id="mainTitle" type="text" class="text-input" placeholder="SCADA Web">
+        </div>
+      </div>
+      <div class="button-row align-start">
+        <button id="add-container" type="button" class="btn btn-editable">Agregar contenedor</button>
       </div>
     </section>
 
     <section class="config-card">
-      <div class="button-row">
-        <button id="reload-btn" class="btn">Recargar</button>
-        <button id="format-btn" class="btn">Formatear JSON</button>
-        <button id="import-btn" class="btn">Importar archivo</button>
-        <button id="download-btn" class="btn">Descargar</button>
-        <button id="save-btn" class="btn btn-save">Guardar en servidor</button>
+      <h2>Roles y permisos</h2>
+      <div class="form-grid roles-grid">
+        <div class="form-group">
+          <label for="roles-admins">Administradores (uno por linea)</label>
+          <textarea id="roles-admins" class="textarea"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="roles-operators">Operadores (uno por linea)</label>
+          <textarea id="roles-operators" class="textarea"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="roles-viewers">Visualizacion (uno por linea)</label>
+          <textarea id="roles-viewers" class="textarea"></textarea>
+        </div>
       </div>
-      <textarea id="config-editor" spellcheck="false" placeholder="{
-  "mainTitle": "SCADA Web",
-  ...
-}"></textarea>
+    </section>
+
+    <section class="config-card">
+      <h2>Contenedores</h2>
+      <div id="containers-list" class="containers-list"></div>
+    </section>
+
+    <section class="config-card">
+      <h2>Acciones</h2>
+      <div class="button-row">
+        <button id="reload-btn" type="button" class="btn">Recargar</button>
+        <button id="import-btn" type="button" class="btn btn-editable">Importar archivo</button>
+        <button id="download-btn" type="button" class="btn">Descargar</button>
+        <button id="save-btn" type="button" class="btn btn-save btn-editable">Guardar en servidor</button>
+      </div>
     </section>
   </main>
 

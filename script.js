@@ -30,6 +30,9 @@ const topicElementMap = new Map();
 const topicStateCache = new Map();
 const controlElements = new Set();
 const widgetBindings = [];
+const containerNodes = [];
+const sidebarButtons = [];
+let selectedContainerIndex = 0;
 
 function setStatus(text) {
   if (statusLabel) {
@@ -147,6 +150,13 @@ function scheduleReconnect() {
 function handleHello(msg) {
   uid = msg.uid;
   appendLog(`HELLO uid=${uid}`);
+  if (Array.isArray(msg.last_values)) {
+    msg.last_values.forEach((entry) => {
+      if (entry && entry.topic) {
+        handleTopicMessage({ topic: entry.topic, payload: entry.payload });
+      }
+    });
+  }
   applyScopedTopics();
 }
 
@@ -227,10 +237,13 @@ function clearDashboard() {
   widgetBindings.length = 0;
   controlElements.clear();
   topicElementMap.clear();
+  containerNodes.length = 0;
+  sidebarButtons.length = 0;
+  selectedContainerIndex = 0;
   scadaContainer.innerHTML = "";
   if (sidebarMenu) {
     sidebarMenu.innerHTML = "";
-    sidebarMenu.hidden = false;
+    sidebarMenu.hidden = true;
   }
 }
 
@@ -248,12 +261,20 @@ function renderDashboard() {
     const bodyEl = node.querySelector(".container-body");
     if (titleEl) titleEl.textContent = container.title || `Contenedor ${index + 1}`;
 
-    const navButton = document.createElement("button");
-    navButton.textContent = container.title || `Contenedor ${index + 1}`;
-    navButton.addEventListener("click", () => {
-      node.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-    sidebarMenu.appendChild(navButton);
+    if (sidebarMenu) {
+      const navButton = document.createElement("button");
+      navButton.type = "button";
+      navButton.className = "sidebar-nav-btn";
+      navButton.textContent = container.title || `Contenedor ${index + 1}`;
+      navButton.addEventListener("click", () => {
+        selectContainer(index);
+        if (currentView === "matrix") {
+          node.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+      sidebarButtons.push(navButton);
+      sidebarMenu.appendChild(navButton);
+    }
 
     (container.objects || []).forEach((objectDef, objIndex) => {
       const widget = buildWidget(objectDef, index, objIndex);
@@ -268,12 +289,51 @@ function renderDashboard() {
       }
     });
 
+    containerNodes.push(node);
     scadaContainer.appendChild(node);
   });
+
+  if (containerNodes.length) {
+    selectContainer(Math.min(selectedContainerIndex, containerNodes.length - 1));
+  } else if (sidebarMenu) {
+    sidebarMenu.hidden = true;
+  }
 
   renderView(currentView);
   applyScopedTopics();
   updateRoleUI();
+}
+
+function selectContainer(index) {
+  if (!containerNodes.length) return;
+  const clamped = Math.max(0, Math.min(index, containerNodes.length - 1));
+  selectedContainerIndex = clamped;
+  updateSidebarMenuState();
+  updateSidebarVisibility();
+}
+
+function updateSidebarMenuState() {
+  sidebarButtons.forEach((btn, idx) => {
+    btn.classList.toggle("active", idx === selectedContainerIndex);
+  });
+}
+
+function updateSidebarVisibility() {
+  const isSidebar = currentView === "sidebar";
+  containerNodes.forEach((node, idx) => {
+    if (isSidebar) {
+      if (idx === selectedContainerIndex) {
+        node.removeAttribute("hidden");
+        node.classList.add("sidebar-active");
+      } else {
+        node.setAttribute("hidden", "");
+        node.classList.remove("sidebar-active");
+      }
+    } else {
+      node.removeAttribute("hidden");
+      node.classList.remove("sidebar-active");
+    }
+  });
 }
 
 function buildWidget(definition, containerIndex, objectIndex) {
@@ -470,6 +530,11 @@ function renderView(view) {
   scadaContainer.classList.toggle("sidebar-view", view === "sidebar");
   viewMatrixBtn.classList.toggle("active", view === "matrix");
   viewSidebarBtn.classList.toggle("active", view === "sidebar");
+  if (sidebarMenu) {
+    sidebarMenu.hidden = view !== "sidebar" || containerNodes.length === 0;
+  }
+  updateSidebarMenuState();
+  updateSidebarVisibility();
 }
 
 function handleViewToggle() {
