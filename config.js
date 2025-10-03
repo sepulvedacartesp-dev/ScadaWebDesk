@@ -118,7 +118,6 @@ const state = {
   role: "viewer",
   canEdit: false,
   dirty: false,
-  expandAll: true,
   config: createEmptyConfig(),
 };
 
@@ -150,6 +149,9 @@ const dom = {
   importBtn: document.getElementById("import-btn"),
   importInput: document.getElementById("importInput"),
 };
+
+let containerUiState = new WeakMap();
+
 
 document.addEventListener("DOMContentLoaded", () => {
   attachStaticHandlers();
@@ -224,6 +226,7 @@ async function onAuthStateChanged(user) {
     state.role = "viewer";
     state.canEdit = false;
     state.config = createEmptyConfig();
+    containerUiState = new WeakMap();
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
@@ -263,6 +266,7 @@ async function loadConfig(force = false) {
     state.role = payload.role || determineRole(config, user.email);
     state.canEdit = state.role === "admin";
     state.config = config;
+    containerUiState = new WeakMap();
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
@@ -346,7 +350,10 @@ function renderContainers() {
       });
     }
     heading.textContent = formatContainerTitle(container.title, index);
-    card.classList.toggle("collapsed", !state.expandAll);
+    ensureContainerUiState(container);
+    const collapsed = isContainerCollapsed(container);
+    card.classList.toggle("collapsed", collapsed);
+    updateContainerToggleState(card, collapsed);
     updateContainerSummary(card, container);
     renderObjects(card, container, index);
     const editableButtons = card.querySelectorAll(".btn-editable");
@@ -359,6 +366,38 @@ function renderContainers() {
     });
     dom.containersList.appendChild(card);
   });
+  updateExpandCollapseButton();
+}
+
+function ensureContainerUiState(container) {
+  if (!container || typeof container !== "object") {
+    return;
+  }
+  if (!containerUiState.has(container)) {
+    containerUiState.set(container, { collapsed: false });
+  }
+}
+
+function isContainerCollapsed(container) {
+  const entry = containerUiState.get(container);
+  return !!(entry && entry.collapsed);
+}
+
+function setContainerCollapsed(container, collapsed) {
+  if (!container || typeof container !== "object") {
+    return;
+  }
+  const entry = containerUiState.get(container) || {};
+  entry.collapsed = !!collapsed;
+  containerUiState.set(container, entry);
+}
+
+function updateContainerToggleState(card, collapsed) {
+  if (!card) return;
+  const toggleBtn = card.querySelector('[data-action="toggle-collapse"]');
+  if (!toggleBtn) return;
+  toggleBtn.setAttribute("aria-expanded", String(!collapsed));
+  toggleBtn.textContent = collapsed ? "Expandir" : "Contraer";
 }
 
 function formatContainerTitle(title, index) {
@@ -614,11 +653,21 @@ function addContainer() {
 function handleContainerActions(event) {
   const actionBtn = event.target.closest("[data-action]");
   if (!actionBtn) return;
-  if (!state.canEdit) return;
   const card = actionBtn.closest("[data-container-index]");
   if (!card) return;
   const containerIndex = Number(card.dataset.containerIndex || "0");
   const action = actionBtn.dataset.action;
+  if (action === "toggle-collapse") {
+    const container = state.config.containers[containerIndex];
+    if (!container) return;
+    const shouldCollapse = !card.classList.contains("collapsed");
+    setContainerCollapsed(container, shouldCollapse);
+    card.classList.toggle("collapsed", shouldCollapse);
+    updateContainerToggleState(card, shouldCollapse);
+    updateExpandCollapseButton();
+    return;
+  }
+  if (!state.canEdit) return;
   if (action === "add-object") {
     addObject(containerIndex);
   } else if (action === "remove-container") {
@@ -688,15 +737,32 @@ function duplicateObject(containerIndex, objectIndex) {
 }
 
 function toggleAllContainers() {
-  state.expandAll = !state.expandAll;
+  const containers = state.config.containers || [];
+  if (!containers.length) {
+    updateExpandCollapseButton();
+    return;
+  }
+  const allExpanded = containers.every((container) => !isContainerCollapsed(container));
+  const collapseAll = allExpanded;
+  containers.forEach((container) => {
+    setContainerCollapsed(container, collapseAll);
+  });
   const cards = dom.containersList?.querySelectorAll("[data-container-index]") || [];
   cards.forEach((card) => {
-    card.classList.toggle("collapsed", !state.expandAll);
+    card.classList.toggle("collapsed", collapseAll);
+    updateContainerToggleState(card, collapseAll);
   });
-  if (dom.expandCollapse) {
-    dom.expandCollapse.dataset.expanded = String(state.expandAll);
-    dom.expandCollapse.textContent = state.expandAll ? "Contraer todo" : "Expandir todo";
-  }
+  updateExpandCollapseButton();
+}
+
+function updateExpandCollapseButton() {
+  if (!dom.expandCollapse) return;
+  const containers = state.config.containers || [];
+  const total = containers.length;
+  const allExpanded = total === 0 || containers.every((container) => !isContainerCollapsed(container));
+  dom.expandCollapse.dataset.expanded = String(allExpanded);
+  dom.expandCollapse.textContent = allExpanded ? "Contraer todo" : "Expandir todo";
+  dom.expandCollapse.disabled = total === 0;
 }
 
 function updateContainerSummary(card, container) {
@@ -778,6 +844,7 @@ function handleImportFile(event) {
       const parsed = JSON.parse(text);
       const normalized = normalizeConfig(parsed);
       state.config = normalized;
+      containerUiState = new WeakMap();
       setDirty(true);
       renderAll();
       setStatus("Archivo importado. Revisa y guarda para aplicar.", "info");
