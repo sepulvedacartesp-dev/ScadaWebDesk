@@ -13,7 +13,6 @@ const loginForm = document.getElementById("login-form");
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const statusLabel = document.getElementById("status");
-const logArea = document.getElementById("log");
 const logoutBtn = document.getElementById("logout-btn");
 const openLoginBtn = document.getElementById("open-login");
 const closeLoginBtn = document.getElementById("close-login");
@@ -41,12 +40,6 @@ function setStatus(text) {
   }
 }
 
-function appendLog(entry) {
-  if (!logArea) return;
-  const now = new Date().toISOString();
-  logArea.textContent += '[' + now + '] ' + entry + '\n';
-  logArea.scrollTop = logArea.scrollHeight;
-}
 
 function normalizeRelativePath(relPath) {
   return relPath.split("/").filter(Boolean).join("/");
@@ -71,7 +64,7 @@ function disconnectWs(reason) {
   ws = null;
   updateConnectionChip(false);
   if (reason) {
-    appendLog(`WS cerrado (${reason})`);
+    console.info(`WS cerrado (${reason})`);
   }
 }
 
@@ -96,7 +89,7 @@ async function connectWs(user) {
     ws = new WebSocket(url);
 
     ws.onopen = () => {
-      appendLog("WS abierto");
+      console.info("WS abierto");
       updateConnectionChip(true);
       setStatus(`Conectado como ${user.email}`);
     };
@@ -107,19 +100,19 @@ async function connectWs(user) {
         if (msg.type === "hello") {
           handleHello(msg);
         } else if (msg.type === "ack") {
-          appendLog(`ACK ${msg.topic}`);
+          console.debug(`ACK ${msg.topic}`);
         } else if (msg.type === "error") {
-          appendLog(`ERROR ${msg.error}`);
+          console.error(`ERROR ${msg.error}`);
         } else if (msg.topic) {
           handleTopicMessage(msg);
         }
       } catch (err) {
-        appendLog(`Mensaje WS inválido: ${err}`);
+        console.error(`Mensaje WS inválido: ${err}`);
       }
     };
 
     ws.onclose = (event) => {
-      appendLog(`WS cerrado codigo=${event.code}`);
+      console.warn(`WS cerrado codigo=${event.code}`);
       ws = null;
       updateConnectionChip(false);
       if (firebase.auth().currentUser) {
@@ -130,10 +123,10 @@ async function connectWs(user) {
     };
 
     ws.onerror = (err) => {
-      appendLog(`WS error ${err.message || err}`);
+      console.error(`WS error ${err.message || err}`);
     };
   } catch (error) {
-    appendLog(`No se pudo abrir WS: ${error.message || error}`);
+    console.error(`No se pudo abrir WS: ${error.message || error}`);
     scheduleReconnect();
   }
 }
@@ -150,7 +143,7 @@ function scheduleReconnect() {
 
 function handleHello(msg) {
   uid = msg.uid;
-  appendLog(`HELLO uid=${uid}`);
+  console.debug(`HELLO uid=${uid}`);
   if (Array.isArray(msg.last_values)) {
     msg.last_values.forEach((entry) => {
       if (entry && entry.topic) {
@@ -321,18 +314,61 @@ function updateSidebarMenuState() {
 
 function updateSidebarVisibility() {
   const isSidebar = currentView === "sidebar";
-  containerNodes.forEach((node, idx) => {
-    if (isSidebar) {
-      if (idx === selectedContainerIndex) {
+  const trackedNodes = containerNodes.length ? containerNodes : Array.from(scadaContainer.querySelectorAll(".container-card"));
+  if (!trackedNodes.length) {
+    const fallbackNodes = Array.from(scadaContainer.querySelectorAll(".container-card"));
+    fallbackNodes.forEach((node) => {
+      if (isSidebar) {
+        node.classList.remove("sidebar-active");
+        node.setAttribute("hidden", "");
+        node.style.display = "none";
+        node.setAttribute("aria-hidden", "true");
+      } else {
+        node.classList.remove("sidebar-active");
         node.removeAttribute("hidden");
-        node.classList.add("sidebar-active");
+        node.style.display = "";
+        node.removeAttribute("aria-hidden");
+      }
+    });
+    return;
+  }
+
+  const activeIndex = Math.max(0, Math.min(selectedContainerIndex, trackedNodes.length - 1));
+  selectedContainerIndex = activeIndex;
+
+  trackedNodes.forEach((node, idx) => {
+    const isActive = isSidebar && idx === activeIndex;
+    if (isSidebar) {
+      node.classList.toggle("sidebar-active", isActive);
+      if (isActive) {
+        node.removeAttribute("hidden");
+        node.style.display = "";
+        node.removeAttribute("aria-hidden");
       } else {
         node.setAttribute("hidden", "");
-        node.classList.remove("sidebar-active");
+        node.style.display = "none";
+        node.setAttribute("aria-hidden", "true");
       }
     } else {
-      node.removeAttribute("hidden");
       node.classList.remove("sidebar-active");
+      node.removeAttribute("hidden");
+      node.style.display = "";
+      node.removeAttribute("aria-hidden");
+    }
+  });
+
+  const extras = Array.from(scadaContainer.querySelectorAll(".container-card")).filter((node) => !trackedNodes.includes(node));
+  extras.forEach((node) => {
+    if (isSidebar) {
+      node.classList.remove("sidebar-active");
+      node.setAttribute("hidden", "");
+      node.style.display = "none";
+      node.setAttribute("aria-hidden", "true");
+    } else {
+      node.classList.remove("sidebar-active");
+      node.removeAttribute("hidden");
+      node.style.display = "";
+      node.removeAttribute("aria-hidden");
     }
   });
 }
@@ -399,7 +435,7 @@ function createControlButton(kind, label, color, topic, payload) {
   }
   button.addEventListener("click", () => {
     if (currentRole === "viewer" || currentRole === "visualizacion") {
-      appendLog("Acción bloqueada: rol sin permisos de control");
+      console.warn("Acción bloqueada: rol sin permisos de control");
       return;
     }
     publishRelative(topic, payload ?? kind);
@@ -534,8 +570,17 @@ function renderView(view) {
   if (sidebarMenu) {
     sidebarMenu.hidden = view !== "sidebar" || containerNodes.length === 0;
   }
-  updateSidebarMenuState();
-  updateSidebarVisibility();
+  if (view === "sidebar") {
+    if (containerNodes.length) {
+      selectContainer(selectedContainerIndex);
+    } else {
+      updateSidebarMenuState();
+      updateSidebarVisibility();
+    }
+  } else {
+    updateSidebarMenuState();
+    updateSidebarVisibility();
+  }
 }
 
 function handleViewToggle() {
@@ -557,27 +602,27 @@ function setupLoginDialog() {
 
 function publishRelative(relativePath, payload, qos = 0, retain = false) {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    appendLog("No se puede publicar: WS cerrado");
+    console.warn("No se puede publicar: WS cerrado");
     return;
   }
   if (!uid) {
-    appendLog("No se puede publicar: UID no definido");
+    console.warn("No se puede publicar: UID no definido");
     return;
   }
   const topic = `scada/customers/${uid}/${normalizeRelativePath(relativePath)}`;
   const message = { type: "publish", topic, payload, qos, retain };
   ws.send(JSON.stringify(message));
-  appendLog(`TX ${topic} ${JSON.stringify(payload)}`);
+  console.debug(`TX ${topic} ${JSON.stringify(payload)}`);
 }
 
 function publishAbsolute(topic, payload, qos = 0, retain = false) {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    appendLog("No se puede publicar: WS cerrado");
+    console.warn("No se puede publicar: WS cerrado");
     return;
   }
   const message = { type: "publish", topic, payload, qos, retain };
   ws.send(JSON.stringify(message));
-  appendLog(`TX ${topic} ${JSON.stringify(payload)}`);
+  console.debug(`TX ${topic} ${JSON.stringify(payload)}`);
 }
 
 window.publishRelative = publishRelative;
@@ -634,7 +679,7 @@ if (loginForm) {
       loginForm.reset();
     } catch (error) {
       setStatus(error.message);
-      appendLog(`Login fallido: ${error.message}`);
+      console.error(`Login fallido: ${error.message}`);
     }
   });
 }
