@@ -1,5 +1,5 @@
 {
-  "mainTitle": "SCADA Web Demo Rev7.1",
+  "mainTitle": "SCADA Web Demo Rev7.2",
   "roles": {
     "admins": [
       "sepulvedacartes.p@gmail.com"
@@ -15,7 +15,7 @@
       "objects": [
         {
           "type": "startBtn",
-          "label": "Partir",
+          "label": "Partir_Vent",
           "topic": "Siemens/Partir",
           "color": "#00b3ff",
           "payload": "1"
@@ -74,6 +74,12 @@
           "topic": "Micro/PumpSts2",
           "onColor": "#00ff00",
           "offColor": "#6c757d"
+        },
+        {
+          "type": "number",
+          "label": "Nivel",
+          "topic": "Micro/NivelTK",
+          "unit": "%"
         }
       ]
     },
