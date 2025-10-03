@@ -107,7 +107,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---- MQTT Client ----
+# ---- MQTT Client ---- Rev6.6
 mqtt_client = mqtt.Client(client_id=MQTT_CLIENT_ID, clean_session=True)
 mqtt_client.enable_logger()
 

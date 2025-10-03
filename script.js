@@ -26,6 +26,7 @@ const viewMatrixBtn = document.getElementById("view-matrix");
 const viewSidebarBtn = document.getElementById("view-sidebar");
 const sidebarMenu = document.getElementById("sidebar-menu");
 
+
 const topicElementMap = new Map();
 const topicStateCache = new Map();
 const controlElements = new Set();
