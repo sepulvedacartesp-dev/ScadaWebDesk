@@ -1,5 +1,5 @@
 {
-  "mainTitle": "SCADA Web Rev7.3",
+  "mainTitle": "SCADA Web Demo Rev8",
   "roles": {
     "admins": [
       "sepulvedacartes.p@gmail.com"
@@ -52,7 +52,7 @@
           "unit": "%",
           "color": "#00b3ff",
           "min": 0,
-          "max": 200
+          "max": 100
         },
         {
           "type": "startBtn",
