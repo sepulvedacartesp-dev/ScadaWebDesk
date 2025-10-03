@@ -1,5 +1,5 @@
 {
-  "mainTitle": "SCADA Web Demo Rev7",
+  "mainTitle": "SCADA Web Demo Rev7.1",
   "roles": {
     "admins": [
       "sepulvedacartes.p@gmail.com"
@@ -15,7 +15,7 @@
       "objects": [
         {
           "type": "startBtn",
-          "label": "Partir_Vent",
+          "label": "Partir",
           "topic": "Siemens/Partir",
           "color": "#00b3ff",
           "payload": "1"
