@@ -6,13 +6,80 @@
   <title>Configuracion SCADA</title>
   <link rel="stylesheet" href="style.css">
   <style>
+    .config-header {
+      align-items: flex-start;
+      gap: 1.5rem 2.5rem;
+    }
+    .config-header .brand-copy {
+      max-width: 540px;
+    }
+    .header-back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      border: 1px solid rgba(112, 138, 255, 0.18);
+      background: rgba(9, 18, 32, 0.7);
+      color: var(--text-primary);
+      text-decoration: none;
+      box-shadow: inset 0 0 0 1px rgba(16, 46, 92, 0.45);
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    .header-back:hover {
+      transform: translateX(-2px);
+      background: rgba(58, 134, 255, 0.28);
+    }
+    .header-back__icon {
+      font-size: 1.3rem;
+      line-height: 0;
+    }
     .config-layout {
-      width: min(1150px, 100%);
+      width: min(1180px, 100%);
       margin: 0 auto 3.5rem;
-      padding: 2.2rem clamp(1rem, 3vw, 2.5rem);
+      padding: clamp(2rem, 4vw, 2.75rem) clamp(1rem, 4vw, 2.75rem) clamp(2.5rem, 4vw, 3.5rem);
       display: flex;
       flex-direction: column;
-      gap: 2rem;
+      gap: clamp(1.75rem, 4vw, 2.5rem);
+    }
+    .config-hero {
+      display: grid;
+      gap: clamp(1rem, 3vw, 1.75rem);
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      align-items: center;
+      background: var(--bg-elevated);
+      border-radius: 22px;
+      padding: 1.75rem 2rem;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(112, 138, 255, 0.14);
+    }
+    .config-hero__copy {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .config-content {
+      display: grid;
+      gap: clamp(1.5rem, 3vw, 2.25rem);
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .config-main {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1.5rem, 3vw, 2rem);
+    }
+    .config-aside {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1.25rem, 3vw, 1.75rem);
     }
     .config-card {
       background: var(--bg-elevated);
@@ -29,6 +96,14 @@
       margin: 0;
       font-size: 1.35rem;
       letter-spacing: 0.04em;
+    }
+    .config-card__head {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .config-card__head h2 {
+      font-size: 1.25rem;
     }
     .status-banner {
       padding: 1rem 1.25rem;
@@ -207,12 +282,6 @@
       background: rgba(58, 134, 255, 0.25);
       border: 1px solid rgba(112, 138, 255, 0.25);
     }
-    .object-toolbar .btn-link {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      padding: 0;
-    }
     .tags-strip {
       display: flex;
       gap: 0.5rem;
@@ -225,6 +294,18 @@
       border-radius: 999px;
       background: rgba(112, 138, 255, 0.18);
       border: 1px solid rgba(112, 138, 255, 0.25);
+    }
+    .tips-list {
+      margin: 0;
+      padding-left: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    .tips-list li {
+      line-height: 1.45;
     }
     .empty-state {
       text-align: center;
@@ -240,6 +321,11 @@
       background: rgba(5, 10, 18, 0.75);
       border: 1px solid rgba(112, 138, 255, 0.22);
       color: var(--text-muted);
+    }
+    .session-panel--dense {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 0.65rem;
     }
     .readonly .text-input,
     .readonly .number-input,
@@ -261,13 +347,25 @@
     .toolbar-separator {
       width: 1px;
       height: 28px;
-      background: rgba(112, 138, 255, 0.18);
+      background: rgba(112, 138, 255, 0.25);
       align-self: center;
+      display: inline-flex;
+    }
+    .object-advanced summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .object-advanced[open] summary {
+      color: var(--text-primary);
+    }
+    .tags-strip .pill[data-summary="widgets"] {
+      background: rgba(58, 134, 255, 0.28);
     }
     .object-color-input {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.5rem;
     }
     .object-color-input input[type="color"] {
       width: 44px;
@@ -276,18 +374,40 @@
       padding: 0;
       background: transparent;
     }
+    @media (min-width: 1100px) {
+      .config-content {
+        grid-template-columns: minmax(0, 1fr) 320px;
+      }
+      .config-aside .config-card {
+        position: sticky;
+        top: 136px;
+      }
+    }
+    @media (max-width: 900px) {
+      .config-header {
+        align-items: stretch;
+      }
+    }
     @media (max-width: 720px) {
-      .config-card { padding: 1.35rem 1.4rem; }
-      .config-layout { padding: 1.6rem 1.1rem; }
-      .object-fields { grid-template-columns: 1fr; }
-      .object-advanced { grid-template-columns: 1fr; }
+      .config-layout {
+        padding: 1.6rem 1.1rem 3rem;
+      }
+      .config-card,
+      .config-hero {
+        padding: 1.5rem 1.4rem;
+      }
+      .object-fields {
+        grid-template-columns: 1fr;
+      }
+      .object-advanced {
+        grid-template-columns: 1fr;
+      }
     }
     .container-card.collapsed .form-group,
     .container-card.collapsed .tags-strip,
     .container-card.collapsed .objects-wrap {
       display: none;
     }
-
   </style>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
@@ -300,13 +420,19 @@
     firebase.initializeApp(firebaseConfig);
   </script>
 </head>
-<body>
-  <header class="app-header">
-    <div>
-      <a class="btn btn-link" href="index.html"><< Volver al dashboard</a>
+<body class="config-page">
+  <header class="app-header config-header">
+    <div class="brand-group">
+      <a class="header-back" href="index.html" aria-label="Volver al dashboard">
+        <span class="header-back__icon">&larr;</span>
+      </a>
+      <div class="brand-copy">
+        <p class="brand-label">Administrador</p>
+        <h1>Editor de configuracion SCADA</h1>
+        <p class="brand-subtitle">Gestiona roles, contenedores y widgets de forma centralizada.</p>
+      </div>
     </div>
-    <h1>Editor de configuracion SCADA</h1>
-    <div class="session-panel">
+    <div class="session-panel session-panel--dense">
       <span id="session-status" class="session-status">Sin sesion</span>
       <span id="role-badge" class="chip chip-disconnected">Rol: -</span>
       <span class="readonly-hint">Modo lectura</span>
@@ -316,88 +442,117 @@
   </header>
 
   <main id="config-root" class="config-layout">
-    <section class="config-card">
-      <div id="status-banner" class="status-banner">Autenticate para cargar la configuracion.</div>
-      <p class="helper-text">Este asistente edita el archivo <code>scada_config.json</code> utilizado por el dashboard principal. Solo los administradores pueden guardar cambios en el servidor.</p>
-      <span class="badge-inline readonly-hint">Sesiona como administrador para desbloquear la edicion.</span>
+    <section class="config-hero">
+      <div class="config-hero__copy">
+        <h2 class="section-title">Configura tu tablero en minutos</h2>
+        <p class="helper-text">Autenticate con una cuenta de administrador para cargar la configuracion actual, editar los contenedores disponibles y guardar los cambios en el servidor.</p>
+        <p class="helper-text">Este asistente edita el archivo usado por el dashboard principal y mantiene la estructura del sistema.</p>
+      </div>
+      <div class="hero-actions">
+        <span class="badge-inline">Archivo base: scada_config.json</span>
+        <span class="badge-inline readonly-hint">Sesiona como administrador para desbloquear la edicion.</span>
+        <a class="btn btn-link" href="index.html">Volver al dashboard</a>
+      </div>
     </section>
 
-    <section class="config-card">
-      <h2>Guia rapida</h2>
-      <div class="step-grid">
-        <article class="step-card">
-          <div class="step-number">1</div>
-          <div>
-            <strong>Define los datos generales</strong>
-            <p class="helper-text">Actualiza el titulo del tablero y los roles autorizados. Usa una linea por usuario.</p>
+    <div class="config-content">
+      <div class="config-main">
+        <section class="config-card status-card">
+          <header class="config-card__head">
+            <h2>Estado general</h2>
+            <p class="helper-text">Mantiene la sesion activa para desbloquear la edicion.</p>
+          </header>
+          <div id="status-banner" class="status-banner">Autenticate para cargar la configuracion.</div>
+        </section>
+
+        <section class="config-card">
+          <div class="container-header">
+            <h2>Datos generales</h2>
+            <span class="badge-inline">Paso esencial</span>
           </div>
-        </article>
-        <article class="step-card">
-          <div class="step-number">2</div>
-          <div>
-            <strong>Configura tus contenedores</strong>
-            <p class="helper-text">Cada contenedor agrupa tarjetas relacionadas. Agrega los widgets que necesites y define el topic MQTT.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="mainTitle">Titulo principal</label>
+              <input id="mainTitle" type="text" class="text-input" placeholder="SCADA Web">
+            </div>
           </div>
-        </article>
-        <article class="step-card">
-          <div class="step-number">3</div>
-          <div>
-            <strong>Guarda y publica</strong>
-            <p class="helper-text">Revisa el resumen y presiona Guardar en servidor. Puedes descargar o importar configuraciones previas.</p>
+        </section>
+
+        <section class="config-card">
+          <div class="container-header">
+            <h2>Roles y permisos</h2>
+            <span class="badge-inline">Solo administradores pueden guardar cambios</span>
           </div>
-        </article>
-      </div>
-    </section>
+          <div class="form-grid roles-grid">
+            <div class="form-group">
+              <label for="roles-admins">Administradores <small>(uno por linea)</small></label>
+              <textarea id="roles-admins" class="textarea" placeholder="admin@empresa.com&#10;soporte@empresa.com"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="roles-operators">Operadores <small>(uno por linea)</small></label>
+              <textarea id="roles-operators" class="textarea" placeholder="operador@empresa.com"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="roles-viewers">Visualizacion <small>(uno por linea)</small></label>
+              <textarea id="roles-viewers" class="textarea" placeholder="cliente@empresa.com"></textarea>
+            </div>
+          </div>
+        </section>
 
-    <section class="config-card">
-      <div class="container-header">
-        <h2>Datos generales</h2>
-        <span class="badge-inline">Paso esencial</span>
+        <section class="config-card">
+          <div class="container-header">
+            <h2>Contenedores del tablero</h2>
+            <div class="button-row align-start">
+              <button id="add-container" type="button" class="btn btn-editable">Agregar contenedor</button>
+              <button id="expand-collapse" type="button" class="btn btn-ghost" data-expanded="true">Contraer todo</button>
+            </div>
+          </div>
+          <p class="helper-text">Crea grupos para tus procesos (por ejemplo: "Linea 1", "PLC CompactLogix", "Calderas"). Dentro de cada contenedor agrega widgets con la opcion "Agregar widget".</p>
+          <div id="containers-list" class="containers-list">
+            <div id="containers-empty" class="empty-state" hidden>No hay contenedores configurados. Usa "Agregar contenedor" para comenzar.</div>
+          </div>
+        </section>
       </div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="mainTitle">Titulo principal</label>
-          <input id="mainTitle" type="text" class="text-input" placeholder="SCADA Web">
-        </div>
-      </div>
-    </section>
 
-    <section class="config-card">
-      <div class="container-header">
-        <h2>Roles y permisos</h2>
-        <span class="badge-inline">Solo administradores pueden guardar cambios</span>
-      </div>
-      <div class="form-grid roles-grid">
-        <div class="form-group">
-          <label for="roles-admins">Administradores <small>(uno por linea)</small></label>
-          <textarea id="roles-admins" class="textarea" placeholder="admin@empresa.com&#10;soporte@empresa.com"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="roles-operators">Operadores <small>(uno por linea)</small></label>
-          <textarea id="roles-operators" class="textarea" placeholder="operador@empresa.com"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="roles-viewers">Visualizacion <small>(uno por linea)</small></label>
-          <textarea id="roles-viewers" class="textarea" placeholder="cliente@empresa.com"></textarea>
-        </div>
-      </div>
-    </section>
+      <aside class="config-aside">
+        <section class="config-card side-card">
+          <h2>Guia rapida</h2>
+          <div class="step-grid">
+            <article class="step-card">
+              <div class="step-number">1</div>
+              <div>
+                <strong>Define los datos generales</strong>
+                <p class="helper-text">Actualiza el titulo del tablero y los roles autorizados. Usa una linea por usuario.</p>
+              </div>
+            </article>
+            <article class="step-card">
+              <div class="step-number">2</div>
+              <div>
+                <strong>Configura tus contenedores</strong>
+                <p class="helper-text">Cada contenedor agrupa tarjetas relacionadas. Agrega los widgets que necesites y define el topic MQTT.</p>
+              </div>
+            </article>
+            <article class="step-card">
+              <div class="step-number">3</div>
+              <div>
+                <strong>Guarda y publica</strong>
+                <p class="helper-text">Revisa el resumen y presiona Guardar en servidor. Puedes descargar o importar configuraciones previas.</p>
+              </div>
+            </article>
+          </div>
+        </section>
+        <section class="config-card side-card">
+          <h2>Buenas practicas</h2>
+          <ul class="tips-list">
+            <li>Utiliza nombres descriptivos para encontrar contenedores rapidamente.</li>
+            <li>Duplica objetos para reciclar configuraciones y ajustar solo lo necesario.</li>
+            <li>Descarga la configuracion antes de cambios grandes para mantener un respaldo.</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
 
-    <section class="config-card">
-      <div class="container-header">
-        <h2>Contenedores del tablero</h2>
-        <div class="button-row align-start">
-          <button id="add-container" type="button" class="btn btn-editable">Agregar contenedor</button>
-          <button id="expand-collapse" type="button" class="btn btn-ghost" data-expanded="true">Contraer todo</button>
-        </div>
-      </div>
-      <p class="helper-text">Crea grupos para tus procesos (por ejemplo: "Linea 1", "PLC CompactLogix", "Calderas"). Dentro de cada contenedor agrega widgets con la opcion "Agregar widget".</p>
-      <div id="containers-list" class="containers-list">
-        <div id="containers-empty" class="empty-state" hidden>No hay contenedores configurados. Usa "Agregar contenedor" para comenzar.</div>
-      </div>
-    </section>
-
-    <section class="config-card">
+    <section class="config-card actions-card">
       <h2>Acciones</h2>
       <div class="button-row">
         <button id="reload-btn" type="button" class="btn">Recargar</button>
@@ -467,5 +622,3 @@
   <script src="config.js" defer></script>
 </body>
 </html>
-
-

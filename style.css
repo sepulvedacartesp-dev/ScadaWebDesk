@@ -26,36 +26,221 @@ body {
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
+  line-height: 1.6;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
 }
 
 .app-header {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 1rem 1.75rem;
-  background: rgba(5, 11, 20, 0.88);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(112, 138, 255, 0.12);
+  gap: 1rem 2rem;
+  padding: clamp(1rem, 2vw, 1.75rem) clamp(1.25rem, 4vw, 2.75rem);
+  background: rgba(5, 11, 20, 0.9);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(112, 138, 255, 0.16);
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 10;
 }
 
 .app-header h1 {
   margin: 0;
-  font-size: 1.85rem;
+  font-size: clamp(1.6rem, 2vw, 2rem);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .session-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(112, 138, 255, 0.18);
+  background: rgba(12, 22, 36, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(18, 44, 82, 0.2);
+}
+
+.session-panel .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 1rem;
+}
+
+.brand-group {
   display: flex;
   align-items: center;
+  gap: 1rem;
+}
+
+.brand-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--accent-alt), var(--accent));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(0, 180, 216, 0.25);
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.brand-label {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(159, 197, 255, 0.85);
+}
+
+.brand-subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  max-width: 520px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 1.45rem;
+  letter-spacing: 0.06em;
+}
+
+.helper-text {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.card-surface {
+  background: var(--bg-elevated);
+  border-radius: 22px;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  box-shadow: var(--shadow-soft);
+  border: 1px solid rgba(108, 132, 255, 0.18);
+}
+
+.intro-banner {
+  display: grid;
+  gap: clamp(1rem, 3vw, 2rem);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-items: start;
+}
+
+.intro-metrics {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.metric-card {
+  padding: 1rem 1.25rem;
+  border-radius: 16px;
+  border: 1px solid rgba(112, 138, 255, 0.2);
+  background: rgba(9, 18, 32, 0.78);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.metric-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(159, 197, 255, 0.85);
+}
+
+.toolbar-grid {
+  display: grid;
+  gap: clamp(1rem, 3vw, 1.5rem);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.toolbar-card {
+  background: var(--bg-elevated);
+  border-radius: 22px;
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  border: 1px solid rgba(108, 132, 255, 0.18);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
 }
 
-.session-status {
+.toolbar-card--primary {
+  grid-column: span 2;
+}
+
+.toolbar-title {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+}
+
+.toolbar-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.toolbar-list li {
+  display: flex;
+  align-items: center;
+}
+
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(112, 138, 255, 0.22);
+  background: rgba(12, 22, 36, 0.6);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.btn-link:hover {
+  background: rgba(58, 134, 255, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.scada-grid {
+  display: grid;
+  gap: clamp(1rem, 3vw, 2rem);
+}
+
+.scada-grid > #scada-container {
+  grid-column: 1 / -1;
+}
+
+.sidebar-nav-btn {
   font-size: 0.95rem;
+}
+
+
+.session-status {
+  font-size: 0.9rem;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
@@ -89,25 +274,16 @@ body {
 }
 
 .main-layout {
-  flex: 1;
-  display: grid;
-  gap: 1.5rem;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: auto 1fr;
-  padding: 1.5rem clamp(1rem, 4vw, 2.5rem) 2.5rem;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: clamp(1.75rem, 4vw, 3rem) clamp(1.25rem, 4vw, 2.75rem) clamp(2.5rem, 4vw, 3.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.5rem, 4vw, 2.25rem);
 }
 
 .view-toolbar {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1rem 2rem;
-  background: var(--bg-elevated);
-  padding: 1rem 1.5rem;
-  border-radius: 18px;
-  box-shadow: var(--shadow-soft);
-  border: 1px solid var(--border-soft);
+  margin: 0;
 }
 
 .view-buttons {
@@ -164,12 +340,11 @@ body {
 }
 
 .scada-wrapper {
-  background: var(--bg-elevated);
+  background: rgba(17, 28, 45, 0.92);
   border-radius: 22px;
-  padding: 1.75rem;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
   box-shadow: var(--shadow-soft);
-  border: 1px solid rgba(108, 132, 255, 0.14);
-  overflow: hidden;
+  border: 1px solid rgba(108, 132, 255, 0.18);
 }
 
 .system-group {
@@ -368,35 +543,40 @@ body {
 
 
 .sidebar-menu {
-  position: sticky;
-  top: 96px;
-  margin: 1.25rem auto 0;
   display: flex;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border-radius: 16px;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.25rem;
+  border-radius: 18px;
   background: rgba(9, 18, 32, 0.75);
-  border: 1px solid rgba(112, 138, 255, 0.16);
+  border: 1px solid rgba(112, 138, 255, 0.18);
   backdrop-filter: blur(12px);
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
 }
 
 .sidebar-menu[hidden] {
   display: none;
 }
 
-.sidebar-menu button,
-.sidebar-menu a {
+.sidebar-nav-btn {
   border: none;
-  background: transparent;
-  color: var(--text-muted);
+  background: rgba(21, 78, 135, 0.35);
+  color: var(--text-primary);
   font-weight: 600;
-  padding: 0.35rem 0.8rem;
-  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
   cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
-.sidebar-menu .active {
-  background: rgba(58, 134, 255, 0.22);
+.sidebar-nav-btn:hover {
+  transform: translateX(2px);
+  background: rgba(58, 134, 255, 0.45);
+}
+
+.sidebar-nav-btn.active {
+  background: linear-gradient(135deg, var(--accent-alt), var(--accent));
   color: #fff;
 }
 
@@ -445,30 +625,6 @@ body {
   gap: 0.75rem;
 }
 
-@media (max-width: 1080px) {
-  .main-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .app-header {
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .session-panel {
-    align-self: stretch;
-    justify-content: space-between;
-  }
-  .main-layout {
-    padding-bottom: 3rem;
-  }
-  .view-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
 .empty-state {
   text-align: center;
   padding: 3rem 1rem;
@@ -483,4 +639,48 @@ body {
 .system-group.sidebar-view {
   flex-direction: column;
   align-items: stretch;
+}
+@media (min-width: 900px) {
+  .toolbar-card--primary {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .toolbar-card--primary {
+    grid-column: span 1;
+  }
+  .app-header {
+    align-items: stretch;
+  }
+  .session-panel {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .session-panel {
+    justify-content: space-between;
+  }
+  .main-layout {
+    padding-left: 1.2rem;
+    padding-right: 1.2rem;
+  }
+  .intro-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1080px) {
+  .scada-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  }
+  .scada-grid > .sidebar-menu:not([hidden]) ~ #scada-container {
+    grid-column: 2;
+  }
 }

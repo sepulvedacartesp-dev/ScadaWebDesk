@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -16,46 +16,75 @@
     firebase.initializeApp(firebaseConfig);
   </script>
 </head>
-<body>
-  <header class="app-header">
-    <h1 id="main-title">SCADA Web Desk</h1>
+<body class="layout-shell dashboard-page">
+  <header class="app-header app-header--compact">
+    <div class="brand-group">
+      <span class="brand-logo" aria-hidden="true">SW</span>
+      <div class="brand-copy">
+        <p class="brand-label">SCADA Web</p>
+        <h1 id="main-title">SCADA Web Desk</h1>
+        <p class="brand-subtitle">Monitorea y controla tus procesos en tiempo real.</p>
+      </div>
+    </div>
     <div class="session-panel">
-      <span id="status" class="session-status">Sin sesión</span>
-      <button id="logout-btn" type="button" class="btn btn-logout" disabled>Cerrar sesión</button>
+      <span id="status" class="session-status">Sin sesion</span>
+      <button id="logout-btn" type="button" class="btn btn-logout" disabled>Cerrar sesion</button>
       <button id="open-login" type="button" class="btn btn-login">Ingresar</button>
     </div>
   </header>
 
-  <aside id="sidebar-menu" class="sidebar-menu" hidden></aside>
-
   <main class="main-layout">
-    <section class="view-toolbar">
-      <div class="view-buttons">
-        <button id="view-matrix" class="btn btn-view active">Vista en Matriz</button>
-        <button id="view-sidebar" class="btn btn-view">Vista Lateral</button>
+    <section class="intro-banner card-surface">
+      <div class="intro-copy">
+        <h2 class="section-title">Tablero operativo</h2>
+        <p class="helper-text">Mantiene visibilidad total de tus activos y alterna la distribucion segun el contexto de operacion.</p>
       </div>
-      <div class="connection-status">
-        <span>MQTT:</span>
-        <strong id="connect-status" class="chip chip-disconnected">Desconectado</strong>
-      </div>
-      <div class="user-badge">
-        <span>Usuario:</span>
-        <strong id="current-user">Anónimo</strong>
-        <a id="config-link" class="config-link" href="config.html" hidden>Configurar</a>
+      <div class="intro-metrics">
+        <article class="metric-card">
+          <span class="metric-label">MQTT</span>
+          <span id="connect-status" class="chip chip-disconnected">Desconectado</span>
+          <p class="helper-text">Conectate para recibir datos en vivo.</p>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Usuario activo</span>
+          <strong id="current-user">Anonimo</strong>
+          <p class="helper-text">Inicia sesion para desbloquear herramientas adicionales.</p>
+        </article>
       </div>
     </section>
 
+    <section class="view-toolbar toolbar-grid">
+      <article class="toolbar-card toolbar-card--primary">
+        <h2 class="toolbar-title">Disposicion del tablero</h2>
+        <p class="helper-text">Alterna la vista para trabajar con paneles simultaneos o enfocarte en un solo contenedor.</p>
+        <div class="view-buttons" role="group" aria-label="Cambiar vista">
+          <button id="view-matrix" class="btn btn-view active">Vista en Matriz</button>
+          <button id="view-sidebar" class="btn btn-view">Vista Lateral</button>
+        </div>
+      </article>
+      <article class="toolbar-card">
+        <h3 class="toolbar-title">Accesos rapidos</h3>
+        <ul class="toolbar-list">
+          <li><a id="config-link" class="config-link" href="config.html" hidden>Editor de configuracion</a></li>
+          <li><span class="helper-text">Duplica contenedores desde el modo lateral para reutilizar tus layouts.</span></li>
+        </ul>
+      </article>
+    </section>
+
     <section class="scada-wrapper">
-      <div id="scada-container" class="system-group matrix-view"></div>
+      <div class="scada-grid">
+        <aside id="sidebar-menu" class="sidebar-menu" hidden></aside>
+        <div id="scada-container" class="system-group matrix-view"></div>
+      </div>
     </section>
   </main>
 
   <dialog id="login-dialog" class="login-dialog">
     <form id="login-form" method="dialog" class="login-form">
-      <h2>Iniciar Sesión</h2>
+      <h2>Iniciar Sesion</h2>
       <label for="email">Email</label>
       <input type="email" id="email" name="email" required autocomplete="username">
-      <label for="password">Contraseña</label>
+      <label for="password">Contrasena</label>
       <input type="password" id="password" name="password" required autocomplete="current-password">
       <div class="login-actions">
         <button type="submit" class="btn btn-login">Entrar</button>
