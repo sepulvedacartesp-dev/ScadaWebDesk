@@ -1,5 +1,5 @@
 {
-  "mainTitle": "SCADA Web Demo",
+  "mainTitle": "SCADA Web Demo Rev7",
   "roles": {
     "admins": [
       "sepulvedacartes.p@gmail.com"
@@ -15,7 +15,7 @@
       "objects": [
         {
           "type": "startBtn",
-          "label": "Partir",
+          "label": "Partir_Vent",
           "topic": "Siemens/Partir",
           "color": "#00b3ff",
           "payload": "1"
@@ -38,9 +38,7 @@
           "type": "number",
           "label": "Presión",
           "topic": "Siemens/PV",
-          "unit": "PSI",
-          "min": 0,
-          "max": 100
+          "unit": "PSI"
         }
       ]
     },
@@ -52,9 +50,9 @@
           "label": "Nivel Estanque",
           "topic": "Micro/NivelTK",
           "unit": "%",
+          "color": "#00b3ff",
           "min": 0,
-          "max": 100,
-          "color": "#00b3ff"
+          "max": 100
         },
         {
           "type": "startBtn",
@@ -87,9 +85,9 @@
           "label": "Estanque",
           "topic": "PLC/NivelTK",
           "unit": "m3",
+          "color": "#00b3ff",
           "min": 0,
-          "max": 1000,
-          "color": "#00b3ff"
+          "max": 1000
         },
         {
           "type": "startBtn",
