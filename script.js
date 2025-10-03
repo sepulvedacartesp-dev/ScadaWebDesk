@@ -385,7 +385,7 @@ function buildWidget(definition, containerIndex, objectIndex) {
 
   switch ((type || "").toLowerCase()) {
     case "level": {
-      const widget = createLevelIndicator(`${widgetId}-level`, label, unit || "%", color || "#3a86ff");
+      const widget = createLevelIndicator(`${widgetId}-level`, label, unit || "%", color || "#3a86ff", min ?? 0, max ?? 100);
       binding.update = widget.update;
       return { element: widget.element, binding };
     }
@@ -443,7 +443,7 @@ function createControlButton(kind, label, color, topic, payload) {
   return button;
 }
 
-function createLevelIndicator(id, label, unit, color) {
+function createLevelIndicator(id, label, unit, color, min, max) {
   const container = document.createElement("div");
   container.className = "tank-container";
   const level = document.createElement("div");
@@ -452,17 +452,41 @@ function createLevelIndicator(id, label, unit, color) {
   if (color) level.style.background = color;
   const indicator = document.createElement("p");
   indicator.className = "level-indicator";
-  indicator.innerHTML = `<span>${label || "Nivel"}:</span> <span id="${id}-value" class="value">0</span> ${unit}`;
+  const labelSpan = document.createElement("span");
+  labelSpan.textContent = `${label || "Nivel"}:`;
+  const valueSpan = document.createElement("span");
+  valueSpan.id = `${id}-value`;
+  valueSpan.className = "value";
+  valueSpan.textContent = "0";
+  indicator.append(labelSpan, document.createTextNode(" "), valueSpan);
+  if (unit) {
+    indicator.append(document.createTextNode(` ${unit}`));
+  }
   container.append(level, indicator);
+
+  const minValue = Number.isFinite(min) ? min : 0;
+  let maxValue;
+  if (Number.isFinite(max)) {
+    maxValue = max;
+  } else if (Number.isFinite(min)) {
+    maxValue = minValue + 100;
+  } else {
+    maxValue = 100;
+  }
+  if (maxValue <= minValue) {
+    maxValue = minValue + 1;
+  }
+  const span = maxValue - minValue;
+
   return {
     element: container,
     update: (value) => {
       const numeric = parseFloat(value);
-      if (Number.isFinite(numeric)) {
-        const pct = Math.max(0, Math.min(100, numeric));
-        document.getElementById(id).style.height = `${pct}%`;
-        document.getElementById(`${id}-value`).textContent = pct.toFixed(1);
-      }
+      if (!Number.isFinite(numeric)) return;
+      const clamped = Math.min(Math.max(numeric, minValue), maxValue);
+      const pct = span === 0 ? 0 : ((clamped - minValue) / span) * 100;
+      level.style.height = `${pct}%`;
+      valueSpan.textContent = numeric.toFixed(1);
     }
   };
 }
@@ -510,15 +534,31 @@ function createGauge(id, label, unit, min, max, color) {
   valueEl.className = "gauge-value";
   valueEl.textContent = "0";
   wrapper.append(dial, center, labelEl, valueEl);
+
+  const minValue = Number.isFinite(min) ? min : 0;
+  let maxValue;
+  if (Number.isFinite(max)) {
+    maxValue = max;
+  } else if (Number.isFinite(min)) {
+    maxValue = minValue + 100;
+  } else {
+    maxValue = 100;
+  }
+  if (maxValue <= minValue) {
+    maxValue = minValue + 1;
+  }
+  const span = maxValue - minValue;
+
   return {
     element: wrapper,
     update: (value) => {
       const numeric = parseFloat(value);
       if (!Number.isFinite(numeric)) return;
-      const clamped = Math.max(min ?? numeric, Math.min(max ?? numeric, numeric));
-      const angle = ((clamped - (min ?? 0)) / ((max ?? 100) - (min ?? 0))) * 180 - 90;
-      document.getElementById(id).style.transform = `rotate(${angle}deg)`;
-      document.getElementById(`${id}-value`).textContent = numeric.toFixed(1);
+      const clamped = Math.min(Math.max(numeric, minValue), maxValue);
+      const ratio = span === 0 ? 0 : (clamped - minValue) / span;
+      const angle = ratio * 180 - 90;
+      fill.style.transform = `rotate(${angle}deg)`;
+      valueEl.textContent = numeric.toFixed(1);
     }
   };
 }
@@ -715,3 +755,6 @@ firebase.auth().onIdTokenChanged(async (user) => {
     await connectWs(user);
   }
 });
+
+
+
