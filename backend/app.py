@@ -1,9 +1,11 @@
-import os
+﻿import os
 import json
+import base64
 import ssl
 import threading
 import asyncio
 import logging
+import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import List, Optional, Dict, Any
 from pathlib import Path
@@ -40,7 +42,25 @@ else:
 ADMIN_EMAILS = [email.strip() for email in os.getenv('CONFIG_ADMIN_EMAILS', '').split(',') if email.strip()]
 ADMIN_EMAILS_LOWER = {email.lower() for email in ADMIN_EMAILS}
 
+GITHUB_SYNC_ENABLED = os.getenv("GITHUB_SYNC_ENABLED", "0").strip() == "1"
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
+GITHUB_REPO = os.getenv("GITHUB_REPO", "").strip()
+GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main").strip()
+GITHUB_FILE_PATH = os.getenv("GITHUB_FILE_PATH", "scada_config.json").strip().lstrip("/")
+GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com").strip().rstrip("/")
+GITHUB_API_VERSION = os.getenv("GITHUB_API_VERSION", "2022-11-28").strip()
+GITHUB_HTTP_TIMEOUT = float(os.getenv("GITHUB_HTTP_TIMEOUT", "20"))
+GITHUB_COMMITTER_NAME = os.getenv("GITHUB_COMMITTER_NAME", "SCADA Bot").strip() or "SCADA Bot"
+GITHUB_COMMITTER_EMAIL = os.getenv("GITHUB_COMMITTER_EMAIL", "scada-bot@example.com").strip() or "scada-bot@example.com"
+GITHUB_COMMIT_MESSAGE = os.getenv("GITHUB_COMMIT_MESSAGE", "Actualiza scada_config.json desde SCADA Web").strip() or "Actualiza scada_config.json desde SCADA Web"
+GITHUB_AUTHOR_NAME = os.getenv("GITHUB_AUTHOR_NAME", "").strip()
 GOOGLE_REQUEST = google_requests.Request()
+
+
+class GithubSyncError(Exception):
+    """Raised when GitHub synchronisation fails."""
+    pass
+
 
 FIREBASE_APP_NAME = "bridge-app"
 firebase_app = None
@@ -221,12 +241,93 @@ def load_scada_config() -> Dict[str, Any]:
     return normalize_config(data)
 
 
-def save_scada_config(data: Dict[str, Any]) -> None:
+def save_scada_config(data: Dict[str, Any], actor_email: Optional[str] = None) -> None:
     normalized = normalize_config(data)
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(normalized, ensure_ascii=False, indent=2)
     with CONFIG_PATH.open("w", encoding="utf-8") as fh:
-        json.dump(normalized, fh, ensure_ascii=False, indent=2)
+        fh.write(serialized)
+        fh.write("\n")
+    sync_config_to_github(serialized, actor_email)
 
+def build_commit_message(actor_email: Optional[str]) -> str:
+    base = GITHUB_COMMIT_MESSAGE or "Actualiza scada_config.json desde SCADA Web"
+    if actor_email:
+        return f"{base} ({actor_email})"
+    return base
+
+
+def build_author_payload(actor_email: Optional[str]) -> Optional[Dict[str, str]]:
+    if not actor_email:
+        return None
+    author_name = GITHUB_AUTHOR_NAME or actor_email.split("@", 1)[0] or "SCADA Editor"
+    return {"name": author_name, "email": actor_email}
+
+
+def sync_config_to_github(serialized: str, actor_email: Optional[str]) -> None:
+    if not GITHUB_SYNC_ENABLED:
+        return
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        raise GithubSyncError("GITHUB_TOKEN y GITHUB_REPO son obligatorios cuando GITHUB_SYNC_ENABLED=1")
+
+    api_base = GITHUB_API_URL or "https://api.github.com"
+    path = GITHUB_FILE_PATH or "scada_config.json"
+    url = f"{api_base}/repos/{GITHUB_REPO}/contents/{path}"
+
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    if GITHUB_API_VERSION:
+        headers["X-GitHub-Api-Version"] = GITHUB_API_VERSION
+
+    params = {"ref": GITHUB_BRANCH} if GITHUB_BRANCH else None
+    timeout = GITHUB_HTTP_TIMEOUT if GITHUB_HTTP_TIMEOUT > 0 else 20.0
+
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=timeout)
+    except requests.RequestException as exc:
+        raise GithubSyncError(f"No se pudo consultar GitHub: {exc}") from exc
+
+    sha = None
+    if response.status_code == 200:
+        payload = response.json()
+        sha = payload.get("sha")
+        existing_encoded = payload.get("content", "")
+        try:
+            existing_text = base64.b64decode(existing_encoded.encode("ascii")).decode("utf-8")
+        except Exception:
+            existing_text = None
+        if existing_text is not None and existing_text.strip() == serialized.strip():
+            logger.info("GitHub sync omitido: sin cambios detectados para %s", path)
+            return
+    elif response.status_code != 404:
+        raise GithubSyncError(f"GitHub respondio {response.status_code} al consultar el archivo: {response.text}")
+
+    body = {
+        "message": build_commit_message(actor_email),
+        "content": base64.b64encode(serialized.encode("utf-8")).decode("ascii"),
+    }
+    if GITHUB_BRANCH:
+        body["branch"] = GITHUB_BRANCH
+    if sha:
+        body["sha"] = sha
+
+    author_payload = build_author_payload(actor_email)
+    if author_payload:
+        body["author"] = author_payload
+    if GITHUB_COMMITTER_NAME and GITHUB_COMMITTER_EMAIL:
+        body["committer"] = {"name": GITHUB_COMMITTER_NAME, "email": GITHUB_COMMITTER_EMAIL}
+
+    try:
+        put_resp = requests.put(url, headers=headers, json=body, timeout=timeout)
+    except requests.RequestException as exc:
+        raise GithubSyncError(f"No se pudo actualizar GitHub: {exc}") from exc
+
+    if put_resp.status_code not in (200, 201):
+        raise GithubSyncError(f"GitHub respondio {put_resp.status_code} al actualizar: {put_resp.text}")
+
+    logger.info("GitHub sync completado para %s en rama %s", path, GITHUB_BRANCH or "default")
 
 def role_for_email(cfg: Dict[str, Any], email: Optional[str]) -> str:
     if not email:
@@ -255,7 +356,7 @@ def ensure_admin(email: Optional[str], cfg: Optional[Dict[str, Any]] = None) -> 
     admin_list = [str(item).lower() for item in roles.get("admins", [])]
     if lower_email in admin_list:
         return
-    raise HTTPException(status_code=403, detail="Usuario no autorizado para modificar la configuración")
+    raise HTTPException(status_code=403, detail="Usuario no autorizado para modificar la configuraciÃ³n")
 
 
 def validate_config_payload(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -417,10 +518,13 @@ def update_config_endpoint(config: Dict[str, Any] = Body(...), authorization: Op
     ensure_admin(email, current_cfg)
     normalized = validate_config_payload(config)
     try:
-        save_scada_config(normalized)
+        save_scada_config(normalized, email)
+    except GithubSyncError as exc:
+        logger.exception("GitHub sync failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"No se pudo sincronizar con GitHub: {exc}") from exc
     except Exception as exc:
         logger.exception("Error writing configuration: %s", exc)
-        raise HTTPException(status_code=500, detail="No se pudo guardar la configuración") from exc
+        raise HTTPException(status_code=500, detail="No se pudo guardar la configuracion") from exc
     role = role_for_email(normalized, email)
     logger.info("Config updated by %s", email)
     return {"ok": True, "config": normalized, "role": role}
@@ -520,3 +624,9 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
             await websocket.close()
         except Exception:
             pass
+
+
+
+
+
+
