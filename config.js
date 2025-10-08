@@ -171,57 +171,6 @@ const dom = {
   tenantSubmit: document.getElementById("tenant-submit-btn"),
 };
 
-function updateRoleBadge() {
-  if (!dom.roleBadge) return;
-  const roleLabel = state.isMaster ? "master" : (state.role || "viewer");
-  dom.roleBadge.textContent = roleLabel.toUpperCase();
-}
-
-function applyPermissions() {
-  const root = dom.root;
-  const canEdit = Boolean(state.canEdit);
-  if (root) {
-    root.classList.toggle("readonly", !canEdit);
-  }
-  const toggleElements = [
-    dom.saveBtn,
-    dom.addContainer,
-    dom.expandCollapse,
-    dom.importBtn,
-    dom.downloadBtn,
-  ];
-  toggleElements.forEach((element) => {
-    if (!element) return;
-    if (canEdit) {
-      element.removeAttribute("disabled");
-    } else {
-      element.setAttribute("disabled", "");
-    }
-  });
-  dom.containersList?.classList.toggle("is-readonly", !canEdit);
-}
-
-function toggleAllContainers() {
-  if (!dom.containersList) return;
-  const cards = Array.from(dom.containersList.querySelectorAll('.container-card'));
-  if (!cards.length) return;
-  const shouldExpand = cards.some((card) => card.classList.contains('collapsed'));
-  cards.forEach((card) => {
-    const nextStateCollapsed = !shouldExpand;
-    card.classList.toggle('collapsed', nextStateCollapsed);
-    const toggleBtn = card.querySelector('[data-action="toggle-collapse"]');
-    if (toggleBtn) {
-      if (nextStateCollapsed) {
-        toggleBtn.textContent = 'Expandir';
-        toggleBtn.setAttribute('aria-expanded', 'false');
-      } else {
-        toggleBtn.textContent = 'Contraer';
-        toggleBtn.setAttribute('aria-expanded', 'true');
-      }
-    }
-  });
-}
-
 let containerUiState = new WeakMap();
 
 
@@ -394,6 +343,584 @@ async function loadConfig(force = false, targetEmpresaId = null) {
   }
 }
 
+
+function determineRole(config, email) {
+  if (!config || typeof config !== "object" || !email) return "operador";
+  const roles = config.roles || {};
+  const lowerEmail = String(email).trim().toLowerCase();
+  if (emailsFrom(roles.admins).includes(lowerEmail)) return "admin";
+  if (emailsFrom(roles.operators).includes(lowerEmail)) return "operador";
+  if (emailsFrom(roles.viewers).includes(lowerEmail)) return "visualizacion";
+  return "operador";
+}
+
+function emailsFrom(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[\r\n,;]+/)
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function renderAll() {
+  renderGeneralSection();
+  renderRolesSection();
+  renderContainers();
+}
+
+function renderGeneralSection() {
+  if (dom.mainTitle) {
+    dom.mainTitle.value = state.config.mainTitle || "";
+    dom.mainTitle.disabled = !state.canEdit;
+  }
+}
+
+function renderRolesSection() {
+  const roles = state.config.roles || {};
+  if (dom.rolesAdmins) {
+    dom.rolesAdmins.value = (roles.admins || []).join("\n");
+    dom.rolesAdmins.disabled = !state.canEdit;
+  }
+  if (dom.rolesOperators) {
+    dom.rolesOperators.value = (roles.operators || []).join("\n");
+    dom.rolesOperators.disabled = !state.canEdit;
+  }
+  if (dom.rolesViewers) {
+    dom.rolesViewers.value = (roles.viewers || []).join("\n");
+    dom.rolesViewers.disabled = !state.canEdit;
+  }
+}
+
+
+
+function renderContainers() {
+  if (!dom.containersList || !dom.containerTemplate) return;
+  dom.containersList.querySelectorAll('[data-container-index]').forEach((node) => node.remove());
+  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
+  const hasContainers = containers.length > 0;
+  if (dom.containersEmpty) {
+    dom.containersEmpty.hidden = hasContainers;
+  }
+  containers.forEach((container, index) => {
+    ensureContainerUiState(container);
+    const card = dom.containerTemplate.content.firstElementChild.cloneNode(true);
+    card.dataset.containerIndex = String(index);
+    const titleInput = card.querySelector('[data-field="title"]');
+    const heading = card.querySelector('.container-title');
+    if (titleInput) {
+      titleInput.value = container.title || "";
+      titleInput.disabled = !state.canEdit;
+      titleInput.addEventListener('input', (event) => {
+        const value = event.target.value || "";
+        state.config.containers[index].title = value;
+        heading.textContent = formatContainerTitle(value, index);
+        setDirty(true);
+      });
+    }
+    heading.textContent = formatContainerTitle(container.title, index);
+    const collapsed = isContainerCollapsed(container);
+    card.classList.toggle('collapsed', collapsed);
+    updateContainerToggleState(card, collapsed);
+    updateContainerSummary(card, container);
+    renderObjects(card, container, index);
+    const editableButtons = card.querySelectorAll('.btn-editable');
+    editableButtons.forEach((btn) => {
+      if (!state.canEdit) {
+        btn.setAttribute('disabled', '');
+      } else {
+        btn.removeAttribute('disabled');
+      }
+    });
+    dom.containersList.appendChild(card);
+  });
+  updateExpandCollapseButton();
+}
+
+function ensureContainerUiState(container) {
+  if (!container || typeof container !== "object") return;
+  if (!containerUiState.has(container)) {
+    containerUiState.set(container, { collapsed: false });
+  }
+}
+
+function isContainerCollapsed(container) {
+  const entry = containerUiState.get(container);
+  return !!(entry && entry.collapsed);
+}
+
+function setContainerCollapsed(container, collapsed) {
+  if (!container || typeof container !== "object") return;
+  const entry = containerUiState.get(container) || {};
+  entry.collapsed = !!collapsed;
+  containerUiState.set(container, entry);
+}
+
+function updateContainerToggleState(card, collapsed) {
+  if (!card) return;
+  const toggleBtn = card.querySelector('[data-action="toggle-collapse"]');
+  if (!toggleBtn) return;
+  toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+  toggleBtn.textContent = collapsed ? 'Expandir' : 'Contraer';
+}
+
+function formatContainerTitle(title, index) {
+  const base = title && title.trim() ? title.trim() : `Contenedor ${index + 1}`;
+  return base;
+}
+
+function renderObjects(card, container, containerIndex) {
+  const wrapper = card.querySelector('.objects-wrap');
+  if (!wrapper || !dom.objectTemplate) return;
+  wrapper.textContent = '';
+  const objects = Array.isArray(container.objects) ? container.objects : [];
+  if (!objects.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-state';
+    empty.textContent = 'Sin widgets. Usa "Agregar widget".';
+    wrapper.appendChild(empty);
+    return;
+  }
+  objects.forEach((object, objectIndex) => {
+    const objCard = dom.objectTemplate.content.firstElementChild.cloneNode(true);
+    objCard.dataset.objectIndex = String(objectIndex);
+    const header = objCard.querySelector('.object-header h4');
+    const toolbar = objCard.querySelector('.object-toolbar');
+    const fieldsHost = objCard.querySelector('.object-fields');
+    const advancedHost = objCard.querySelector('.object-advanced-fields');
+    const advancedWrapper = objCard.querySelector('[data-advanced="wrapper"]');
+    const meta = resolveObjectMeta(object.type);
+    const labelPreview = object.label && object.label.trim() ? object.label.trim() : `Widget ${objectIndex + 1}`;
+    if (header) {
+      header.textContent = `${labelPreview} - ${meta.label}`;
+    }
+    if (!state.canEdit && toolbar) {
+      toolbar.querySelectorAll('button').forEach((btn) => btn.setAttribute('disabled', ''));
+    }
+    buildPrimaryFields(fieldsHost, meta, object, containerIndex, objectIndex);
+    const advancedFields = meta.fields.filter((item) => item.section === 'advanced');
+    if (advancedWrapper) {
+      if (advancedFields.length) {
+        advancedWrapper.style.display = 'block';
+        buildAdvancedFields(advancedHost, advancedFields, object, containerIndex, objectIndex);
+      } else {
+        advancedWrapper.style.display = 'none';
+      }
+    }
+    wrapper.appendChild(objCard);
+  });
+}
+
+function buildPrimaryFields(host, meta, object, containerIndex, objectIndex) {
+  if (!host) return;
+  host.textContent = '';
+  const typeGroup = document.createElement('div');
+  typeGroup.className = 'form-group';
+  const typeLabel = document.createElement('label');
+  typeLabel.textContent = 'Tipo de widget';
+  typeGroup.appendChild(typeLabel);
+  const typeSelect = document.createElement('select');
+  typeSelect.className = 'select-input';
+  OBJECT_TYPES.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.value;
+    option.textContent = item.label;
+    option.dataset.hint = item.hint;
+    typeSelect.appendChild(option);
+  });
+  const currentType = normalizeType(object.type);
+  if (!OBJECT_TYPE_MAP.has(currentType)) {
+    const customOption = document.createElement('option');
+    customOption.value = object.type || '';
+    customOption.textContent = object.type ? `Personalizado (${object.type})` : 'Tipo no definido';
+    typeSelect.appendChild(customOption);
+  }
+  typeSelect.value = object.type || meta.value;
+  typeSelect.disabled = !state.canEdit;
+  typeSelect.addEventListener('change', (event) => {
+    updateObjectType(containerIndex, objectIndex, event.target.value);
+  });
+  typeGroup.appendChild(typeSelect);
+  if (meta.hint) {
+    const hint = document.createElement('p');
+    hint.className = 'helper-text';
+    hint.textContent = meta.hint;
+    typeGroup.appendChild(hint);
+  }
+  host.appendChild(typeGroup);
+  meta.fields
+    .filter((item) => item.section !== 'advanced')
+    .forEach((field) => {
+      host.appendChild(
+        createFieldElement(field, object[field.key], (value) => {
+          updateObjectField(containerIndex, objectIndex, field, value);
+        })
+      );
+    });
+}
+
+function buildAdvancedFields(host, fields, object, containerIndex, objectIndex) {
+  if (!host) return;
+  host.textContent = '';
+  fields.forEach((field) => {
+    host.appendChild(
+      createFieldElement(field, object[field.key], (value) => {
+        updateObjectField(containerIndex, objectIndex, field, value);
+      })
+    );
+  });
+}
+
+function createFieldElement(field, currentValue, onChange) {
+  const group = document.createElement('div');
+  group.className = 'form-group';
+  const label = document.createElement('label');
+  label.textContent = field.label || field.key;
+  group.appendChild(label);
+  let input;
+  if (field.type === 'color') {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'object-color-input';
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = ensureColor(currentValue);
+    colorInput.disabled = !state.canEdit;
+    const textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.className = 'text-input';
+    textInput.placeholder = field.placeholder || '#00b4d8';
+    textInput.value = ensureColor(currentValue);
+    textInput.disabled = !state.canEdit;
+    colorInput.addEventListener('input', (event) => {
+      const value = event.target.value;
+      onChange(value);
+      textInput.value = value;
+      setDirty(true);
+    });
+    textInput.addEventListener('change', (event) => {
+      const value = ensureColor(event.target.value);
+      event.target.value = value;
+      colorInput.value = value;
+      onChange(value);
+      setDirty(true);
+    });
+    wrapper.append(colorInput, textInput);
+    input = wrapper;
+  } else {
+    const element = document.createElement('input');
+    element.className = field.type === 'number' ? 'number-input' : 'text-input';
+    element.type = field.type === 'number' ? 'number' : 'text';
+    if (field.placeholder) {
+      element.placeholder = field.placeholder;
+    }
+    if (field.type === 'number' && typeof currentValue === 'number') {
+      element.value = String(currentValue);
+    } else {
+      element.value = currentValue !== undefined && currentValue !== null ? String(currentValue) : '';
+    }
+    element.disabled = !state.canEdit;
+    element.addEventListener('change', (event) => {
+      const value = field.type === 'number' ? parseNumber(event.target.value) : event.target.value;
+      onChange(value);
+      setDirty(true);
+    });
+    input = element;
+  }
+  group.appendChild(input);
+  return group;
+}
+
+function updateObjectField(containerIndex, objectIndex, field, value) {
+  const container = state.config.containers?.[containerIndex];
+  if (!container) return;
+  const object = container.objects?.[objectIndex];
+  if (!object) return;
+  if (field.type === 'number') {
+    if (value === null || value === '' || Number.isNaN(value)) {
+      delete object[field.key];
+    } else {
+      object[field.key] = value;
+    }
+  } else {
+    object[field.key] = value === undefined ? '' : value;
+  }
+  const cardElement = dom.containersList?.querySelector(`[
+    data-container-index="${containerIndex}"] [data-object-index="${objectIndex}"]
+  `);
+  if (cardElement) {
+    const header = cardElement.querySelector('.object-header h4');
+    if (header) {
+      const meta = resolveObjectMeta(object.type);
+      const labelPreview = object.label && object.label.trim() ? object.label.trim() : `Widget ${objectIndex + 1}`;
+      header.textContent = `${labelPreview} - ${meta.label}`;
+    }
+  }
+  updateContainerSummary(dom.containersList?.querySelector(`[data-container-index="${containerIndex}"]`), container);
+  setDirty(true);
+}
+
+function updateObjectType(containerIndex, objectIndex, nextType) {
+  const container = state.config.containers?.[containerIndex];
+  if (!container) return;
+  const current = container.objects?.[objectIndex];
+  if (!current) return;
+  const meta = resolveObjectMeta(nextType);
+  const template = clone(meta.defaults || { type: nextType });
+  const preservedLabel = current.label;
+  const preservedTopic = current.topic;
+  container.objects[objectIndex] = Object.assign({}, template, {
+    label: preservedLabel,
+    topic: preservedTopic,
+    type: meta.value,
+  });
+  setDirty(true);
+  renderContainers();
+}
+
+function resolveObjectMeta(type) {
+  const key = normalizeType(type);
+  if (OBJECT_TYPE_MAP.has(key)) {
+    return OBJECT_TYPE_MAP.get(key);
+  }
+  return {
+    value: type || '',
+    label: type ? `Tipo ${type}` : 'Tipo no definido',
+    hint: 'Este tipo no esta mapeado, los cambios se guardaran tal cual.',
+    defaults: { type: type || '' },
+    fields: [
+      { key: 'label', label: 'Nombre visible', type: 'text', placeholder: 'Widget', section: 'primary' },
+      { key: 'topic', label: 'Topic MQTT', type: 'text', placeholder: 'planta/tag', section: 'primary' },
+    ],
+  };
+}
+
+function ensureColor(value) {
+  const defaultColor = '#00b4d8';
+  if (!value) return defaultColor;
+  const hex = String(value).trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    return hex.toLowerCase();
+  }
+  return defaultColor;
+}
+
+function updateRolesFromInputs() {
+  state.config.roles = {
+    admins: splitLines(dom.rolesAdmins?.value),
+    operators: splitLines(dom.rolesOperators?.value),
+    viewers: splitLines(dom.rolesViewers?.value),
+  };
+  setDirty(true);
+}
+
+function splitLines(value) {
+  if (value === undefined || value === null) return [];
+  return String(value)
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+
+
+function addContainer() {
+  const container = { title: '', objects: [] };
+  if (!Array.isArray(state.config.containers)) {
+    state.config.containers = [];
+  }
+  state.config.containers.push(container);
+  setDirty(true);
+  renderContainers();
+}
+
+function handleContainerActions(event) {
+  const actionBtn = event.target.closest('[data-action]');
+  if (!actionBtn) return;
+  const card = actionBtn.closest('[data-container-index]');
+  if (!card) return;
+  const containerIndex = Number(card.dataset.containerIndex || '0');
+  const action = actionBtn.dataset.action;
+  if (action === 'toggle-collapse') {
+    const container = state.config.containers?.[containerIndex];
+    if (!container) return;
+    const shouldCollapse = !card.classList.contains('collapsed');
+    setContainerCollapsed(container, shouldCollapse);
+    card.classList.toggle('collapsed', shouldCollapse);
+    updateContainerToggleState(card, shouldCollapse);
+    updateExpandCollapseButton();
+    return;
+  }
+  if (!state.canEdit) return;
+  if (action === 'add-object') {
+    addObject(containerIndex);
+  } else if (action === 'remove-container') {
+    removeContainer(containerIndex);
+  } else if (action === 'duplicate-container') {
+    duplicateContainer(containerIndex);
+  } else if (action === 'remove-object') {
+    const objectCard = actionBtn.closest('[data-object-index]');
+    if (objectCard) {
+      removeObject(containerIndex, Number(objectCard.dataset.objectIndex || '0'));
+    }
+  } else if (action === 'duplicate-object') {
+    const objectCard = actionBtn.closest('[data-object-index]');
+    if (objectCard) {
+      duplicateObject(containerIndex, Number(objectCard.dataset.objectIndex || '0'));
+    }
+  }
+}
+
+function addObject(containerIndex, type = 'level') {
+  const container = state.config.containers?.[containerIndex];
+  if (!container) return;
+  const meta = resolveObjectMeta(type);
+  const object = clone(meta.defaults || { type });
+  container.objects = Array.isArray(container.objects) ? container.objects : [];
+  container.objects.push(object);
+  setDirty(true);
+  renderContainers();
+}
+
+function removeContainer(containerIndex) {
+  const container = state.config.containers?.[containerIndex];
+  if (!container) return;
+  if (!window.confirm('Eliminar contenedor y todos sus widgets?')) return;
+  state.config.containers.splice(containerIndex, 1);
+  setDirty(true);
+  renderContainers();
+}
+
+function duplicateContainer(containerIndex) {
+  const container = state.config.containers?.[containerIndex];
+  if (!container) return;
+  state.config.containers.splice(containerIndex + 1, 0, clone(container));
+  setDirty(true);
+  renderContainers();
+}
+
+function removeObject(containerIndex, objectIndex) {
+  const container = state.config.containers?.[containerIndex];
+  if (!container) return;
+  if (!window.confirm('Eliminar este widget?')) return;
+  container.objects.splice(objectIndex, 1);
+  setDirty(true);
+  renderContainers();
+}
+
+function duplicateObject(containerIndex, objectIndex) {
+  const container = state.config.containers?.[containerIndex];
+  if (!container) return;
+  const object = container.objects?.[objectIndex];
+  if (!object) return;
+  container.objects.splice(objectIndex + 1, 0, clone(object));
+  setDirty(true);
+  renderContainers();
+}
+
+function toggleAllContainers() {
+  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
+  if (!containers.length) {
+    updateExpandCollapseButton();
+    return;
+  }
+  const allExpanded = containers.every((container) => !isContainerCollapsed(container));
+  const collapseAll = allExpanded;
+  containers.forEach((container) => {
+    setContainerCollapsed(container, collapseAll);
+  });
+  const cards = dom.containersList?.querySelectorAll('[data-container-index]') || [];
+  cards.forEach((card, index) => {
+    card.classList.toggle('collapsed', collapseAll);
+    updateContainerToggleState(card, collapseAll);
+    updateContainerSummary(card, state.config.containers[index]);
+  });
+  updateExpandCollapseButton();
+}
+
+function updateExpandCollapseButton() {
+  if (!dom.expandCollapse) return;
+  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
+  const total = containers.length;
+  const allExpanded = total === 0 || containers.every((container) => !isContainerCollapsed(container));
+  dom.expandCollapse.dataset.expanded = String(allExpanded);
+  dom.expandCollapse.textContent = allExpanded ? 'Contraer todo' : 'Expandir todo';
+  dom.expandCollapse.disabled = total === 0;
+}
+
+function updateContainerSummary(card, container) {
+  if (!card || !container) return;
+  const summaryWidgets = card.querySelector('[data-summary="widgets"]');
+  const summaryTopics = card.querySelector('[data-summary="topics"]');
+  const widgets = Array.isArray(container.objects) ? container.objects.length : 0;
+  const topics = new Set((container.objects || []).map((obj) => (obj.topic || '').trim()).filter(Boolean));
+  if (summaryWidgets) {
+    summaryWidgets.textContent = widgets === 1 ? '1 widget' : `${widgets} widgets`;
+  }
+  if (summaryTopics) {
+    summaryTopics.textContent = topics.size === 1 ? '1 topic' : `${topics.size} topics`;
+  }
+}
+
+function setDirty(isDirty) {
+  state.dirty = !!isDirty;
+  if (state.dirty) {
+    setStatus('Tienes cambios sin guardar.', 'warning');
+  }
+}
+
+function applyPermissions() {
+  const canEdit = Boolean(state.canEdit);
+  dom.root?.classList.toggle('readonly', !canEdit);
+  if (typeof document !== 'undefined') {
+    document.body?.classList.toggle('readonly', !canEdit);
+  }
+  const editableButtons = [dom.saveBtn, dom.importBtn, dom.downloadBtn, dom.addContainer, dom.expandCollapse];
+  editableButtons.forEach((element) => {
+    if (!element) return;
+    if (canEdit) {
+      element.removeAttribute('disabled');
+    } else {
+      element.setAttribute('disabled', '');
+    }
+  });
+  dom.containersList?.classList.toggle('is-readonly', !canEdit);
+  if (!state.isMaster) {
+    dom.refreshTenantsBtn?.setAttribute('disabled', '');
+    dom.resetTenantFormBtn?.setAttribute('disabled', '');
+    dom.tenantSubmit?.setAttribute('disabled', '');
+  } else {
+    dom.refreshTenantsBtn?.removeAttribute('disabled');
+    dom.resetTenantFormBtn?.removeAttribute('disabled');
+    dom.tenantSubmit?.removeAttribute('disabled');
+  }
+}
+
+function updateRoleBadge() {
+  if (!dom.roleBadge) return;
+  const baseRole = state.isMaster ? 'MASTER' : (state.role || 'VIEWER').toUpperCase();
+  dom.roleBadge.textContent = state.empresaId ? `${baseRole} · ${state.empresaId}` : baseRole;
+}
+
+function parseNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function clone(value) {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeType(type) {
+  return String(type || '').toLowerCase();
+}
 
 
 function handleImportFile(event) {
