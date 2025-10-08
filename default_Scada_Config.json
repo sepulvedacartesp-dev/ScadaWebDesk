@@ -12,7 +12,7 @@
   },
   "containers": [
     {
-      "title": "Siemens",
+      "title": "SiemensDefault",
       "objects": [
         {
           "type": "startBtn",
