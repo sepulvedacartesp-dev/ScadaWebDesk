@@ -71,9 +71,13 @@ COMPANIES_LOCK = threading.Lock()
 
 def config_path_for_company(company_id: str) -> Path:
     sanitized = sanitize_company_id(company_id)
-    if LEGACY_SINGLE_CONFIG_PATH is not None and sanitized == DEFAULT_COMPANY_ID:
-        return LEGACY_SINGLE_CONFIG_PATH
-    return CONFIG_STORAGE_DIR / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
+    target = CONFIG_STORAGE_DIR / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
+    if sanitized == DEFAULT_COMPANY_ID and LEGACY_SINGLE_CONFIG_PATH is not None:
+        if target.exists():
+            return target
+        if LEGACY_SINGLE_CONFIG_PATH.exists():
+            return LEGACY_SINGLE_CONFIG_PATH
+    return target
 
 def github_path_for_company(company_id: str, local_path: Path) -> str:
     sanitized = sanitize_company_id(company_id)
