@@ -1,5 +1,6 @@
 {
-  "mainTitle": "SCADA Web Demo Rev8",
+  "empresaId": "default",
+  "mainTitle": "SCADA Web Demo Rev7",
   "roles": {
     "admins": [
       "sepulvedacartes.p@gmail.com"
@@ -36,7 +37,7 @@
         },
         {
           "type": "number",
-          "label": "Presión",
+          "label": "PresiÃ³n",
           "topic": "Siemens/PV",
           "unit": "PSI"
         }

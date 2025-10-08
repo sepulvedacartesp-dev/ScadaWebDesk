@@ -4,7 +4,7 @@ Este backend actua como puente seguro entre el frontend estatico, Firebase Authe
 - Validar tokens ID emitidos por Firebase antes de abrir la sesion WebSocket o aceptar publicaciones HTTP.
 - Conectarse a HiveMQ Cloud usando credenciales privadas almacenadas en variables de entorno (Render secrets).
 - Reenviar todos los mensajes MQTT permitidos hacia los navegadores conectados via WebSocket.
-- Restringir la lectura y la escritura al scope `TOPIC_BASE/{uid}/...` mas los prefijos publicos configurados.
+- Restringir la lectura y la escritura al scope `TOPIC_BASE/{empresaId}/{uid}/...` mas los prefijos publicos configurados.
 
 ## Requisitos previos
 - Proyecto de Firebase con Authentication (Email/Password) habilitado y al menos un usuario de prueba.
@@ -30,6 +30,9 @@ MQTT_CA_CERT_PATH=
 
 TOPIC_BASE=scada/customers
 PUBLIC_ALLOWED_PREFIXES=public/broadcast
+DEFAULT_EMPRESA_ID=default
+MASTER_ADMIN_EMAILS=maestro@tuempresa.com
+MASTER_ADMIN_ROLE_NAMES=master,root
 ```
 Si necesitas validar revocacion de tokens, agrega `FIREBASE_SERVICE_ACCOUNT` con el JSON completo del service account.
 
@@ -59,6 +62,9 @@ Configura el servicio exactamente con los siguientes valores:
   - `MQTT_TLS=1`, `MQTT_TLS_INSECURE=0`, `MQTT_CA_CERT_PATH=`
   - `TOPIC_BASE=scada/customers`
   - `PUBLIC_ALLOWED_PREFIXES=public/broadcast`
+  - `DEFAULT_EMPRESA_ID=default`
+  - `MASTER_ADMIN_EMAILS=maestro@tuempresa.com`
+  - `MASTER_ADMIN_ROLE_NAMES=master,root`
 
 ## Integracion del Frontend
 1. Incluye los SDK compat de Firebase en `index.html`.
@@ -66,7 +72,14 @@ Configura el servicio exactamente con los siguientes valores:
 3. Implementa login Email/Password y recupera el `ID Token` actual con `firebase.auth().currentUser.getIdToken(true)`.
 4. Abre el WebSocket contra `wss://scadawebdesk.onrender.com/ws?token=<ID_TOKEN>`.
 5. Publica usando el mensaje JSON `{type:"publish", topic, payload, qos, retain}`.
-6. Para publicar en tu scope, usa `const base = "scada/customers/" + uid + "/";` y concatena los paths relativos definidos en `scada_config.json`.
+6. Para publicar en tu scope, usa ``const base = `scada/customers/${empresaId}/${uid}/`;`` y concatena los paths relativos definidos para tu empresa en `scada_configs/<empresaId>_Scada_Config.json`.
+
+## Gestion de clientes multiempresa
+- `GET /tenants`: lista todas las empresas configuradas (solo para administradores maestros).
+- `GET /tenants/{empresaId}`: devuelve el detalle de una empresa.
+- `POST /tenants`: crea una nueva empresa (`empresaId`, `name`, `description`, `cloneFrom`). Genera automaticamente el archivo `scada_configs/<empresaId>_Scada_Config.json`.
+- `PUT /tenants/{empresaId}`: actualiza nombre, descripcion o estado `active`.
+- `GET /config?empresaId=<id>` y `PUT /config?empresaId=<id>` permiten a los maestros editar la configuracion de cualquier cliente.
 
 ## Pruebas y criterios de aceptacion
 1. `GET https://scadawebdesk.onrender.com/health` responde `{ "status": "ok" }`.

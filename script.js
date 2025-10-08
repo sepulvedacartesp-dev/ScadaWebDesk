@@ -1,4 +1,4 @@
-const BACKEND_HTTP = "https://scadawebdesk.onrender.com";
+﻿const BACKEND_HTTP = "https://scadawebdesk.onrender.com";
 const BACKEND_WS = "wss://scadawebdesk.onrender.com/ws";
 
 let ws = null;
@@ -6,6 +6,7 @@ let uid = null;
 let reconnectTimer = null;
 let lastToken = null;
 let scadaConfig = null;
+let currentCompanyId = null;
 let currentRole = "viewer";
 let currentView = "matrix";
 
@@ -47,13 +48,14 @@ function normalizeRelativePath(relPath) {
 
 function scopedTopic(relative) {
   if (!uid) return null;
-  return `scada/customers/${uid}/${normalizeRelativePath(relative)}`;
+  const base = currentCompanyId ? `scada/customers/${currentCompanyId}/${uid}` : `scada/customers/${uid}`;
+  return `${base}/${normalizeRelativePath(relative)}`;
 }
 
 async function login(email, password) {
-  setStatus("Iniciando sesión...");
+  setStatus("Iniciando sesiÃ³n...");
   await firebase.auth().signInWithEmailAndPassword(email, password);
-  setStatus("Sesión iniciada, conectando...");
+  setStatus("SesiÃ³n iniciada, conectando...");
 }
 
 function disconnectWs(reason) {
@@ -107,7 +109,7 @@ async function connectWs(user) {
           handleTopicMessage(msg);
         }
       } catch (err) {
-        console.error(`Mensaje WS inválido: ${err}`);
+        console.error(`Mensaje WS invÃ¡lido: ${err}`);
       }
     };
 
@@ -118,7 +120,7 @@ async function connectWs(user) {
       if (firebase.auth().currentUser) {
         scheduleReconnect();
       } else {
-        setStatus("Sesión cerrada");
+        setStatus("SesiÃ³n cerrada");
       }
     };
 
@@ -143,7 +145,19 @@ function scheduleReconnect() {
 
 function handleHello(msg) {
   uid = msg.uid;
-  console.debug(`HELLO uid=${uid}`);
+  if (msg.empresaId) {
+    currentCompanyId = msg.empresaId;
+  }
+  console.debug(`HELLO uid=${uid} empresa=${currentCompanyId || ""}`);
+  const helloCompany = msg.empresaId || null;
+  if (helloCompany && scadaConfig && scadaConfig.empresaId && scadaConfig.empresaId !== helloCompany) {
+    const user = firebase.auth().currentUser;
+    if (user) {
+      hydrateDashboard(user, { forceRefresh: true }).catch((err) => {
+        console.error("No se pudo actualizar configuración tras handshake", err);
+      });
+    }
+  }
   if (Array.isArray(msg.last_values)) {
     msg.last_values.forEach((entry) => {
       if (entry && entry.topic) {
@@ -204,7 +218,7 @@ function updateRoleUI() {
 }
 
 function setCurrentUser(email) {
-  currentUserLabel.textContent = email || "Anónimo";
+  currentUserLabel.textContent = email || "AnÃ³nimo";
 }
 
 function determineRole(email) {
@@ -216,17 +230,31 @@ function determineRole(email) {
   return "operador";
 }
 
-async function loadScadaConfig() {
-  if (scadaConfig) return scadaConfig;
-  const response = await fetch("scada_config.json", { cache: "no-cache" });
-  if (!response.ok) {
-    throw new Error("No se pudo cargar scada_config.json");
+async function fetchScadaConfig(user, forceRefresh = false) {
+  if (!user) {
+    throw new Error("Usuario no autenticado");
   }
-  const data = await response.json();
-  scadaConfig = data;
-  return scadaConfig;
+  if (!forceRefresh && scadaConfig && currentCompanyId) {
+    return { config: scadaConfig, role: currentRole, empresaId: currentCompanyId };
+  }
+  const idToken = await user.getIdToken(forceRefresh);
+  const response = await fetch(BACKEND_HTTP + "/config", {
+    headers: {
+      Authorization: "Bearer " + idToken,
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `No se pudo cargar configuración (${response.status})`);
+  }
+  const payload = await response.json();
+  scadaConfig = payload.config || {};
+  currentCompanyId = payload.empresaId || scadaConfig.empresaId || null;
+  scadaConfig.empresaId = currentCompanyId;
+  const email = user.email || "";
+  currentRole = payload.role || determineRole(email) || "operador";
+  return { config: scadaConfig, role: currentRole, empresaId: currentCompanyId };
 }
-
 function clearDashboard() {
   widgetBindings.length = 0;
   controlElements.clear();
@@ -243,7 +271,7 @@ function clearDashboard() {
 
 function renderDashboard() {
   if (!scadaConfig || !Array.isArray(scadaConfig.containers)) {
-    scadaContainer.innerHTML = "<p>No hay configuración disponible.</p>";
+    scadaContainer.innerHTML = "<p>No hay configuraciÃ³n disponible.</p>";
     return;
   }
 
@@ -435,7 +463,7 @@ function createControlButton(kind, label, color, topic, payload) {
   }
   button.addEventListener("click", () => {
     if (currentRole === "viewer" || currentRole === "visualizacion") {
-      console.warn("Acción bloqueada: rol sin permisos de control");
+      console.warn("AcciÃ³n bloqueada: rol sin permisos de control");
       return;
     }
     publishRelative(topic, payload ?? kind);
@@ -649,7 +677,11 @@ function publishRelative(relativePath, payload, qos = 0, retain = false) {
     console.warn("No se puede publicar: UID no definido");
     return;
   }
-  const topic = `scada/customers/${uid}/${normalizeRelativePath(relativePath)}`;
+  const topic = scopedTopic(relativePath);
+  if (!topic) {
+    console.warn("No se pudo publicar: empresa o UID no definidos");
+    return;
+  }
   const message = { type: "publish", topic, payload, qos, retain };
   ws.send(JSON.stringify(message));
   console.debug(`TX ${topic} ${JSON.stringify(payload)}`);
@@ -668,24 +700,33 @@ function publishAbsolute(topic, payload, qos = 0, retain = false) {
 window.publishRelative = publishRelative;
 window.publishAbsolute = publishAbsolute;
 
-function hydrateDashboard(email) {
-  loadScadaConfig()
-    .then((config) => {
-      scadaConfig = config;
-      if (config.mainTitle) {
-        document.getElementById("main-title").textContent = config.mainTitle;
-      }
-      currentRole = determineRole(email) || "operador";
-      clearDashboard();
-      renderDashboard();
-    })
-    .catch((error) => {
-      console.error("Error cargando configuración", error);
-      scadaContainer.innerHTML = `<p>Error cargando configuración: ${error.message}</p>`;
-    });
+async function hydrateDashboard(user, { forceRefresh = false } = {}) {
+  if (!user) {
+    return;
+  }
+  try {
+    const { config, role, empresaId } = await fetchScadaConfig(user, forceRefresh);
+    const titleNode = document.getElementById("main-title");
+    if (titleNode) {
+      titleNode.textContent = config.mainTitle || "SCADA Web";
+    }
+    currentRole = role || "operador";
+    clearDashboard();
+    renderDashboard();
+    if (empresaId) {
+      setStatus(`Tablero cargado (${empresaId})`);
+    } else {
+      setStatus("Tablero cargado");
+    }
+  } catch (error) {
+    console.error("Error cargando configuración", error);
+    scadaContainer.innerHTML = `<p>Error cargando configuración: ${error.message}</p>`;
+  }
 }
 
 function resetSessionState() {
+  scadaConfig = null;
+  currentCompanyId = null;
   currentRole = "viewer";
   uid = null;
   clearDashboard();
@@ -737,13 +778,13 @@ firebase.auth().onAuthStateChanged(async (user) => {
   clearTimeout(reconnectTimer);
   if (user) {
     setCurrentUser(user.email);
-    setStatus(`Sesión activa: ${user.email}`);
+    setStatus(`SesiÃ³n activa: ${user.email}`);
     logoutBtn?.removeAttribute("disabled");
     openLoginBtn?.setAttribute("disabled", "");
-    hydrateDashboard(user.email);
+    await hydrateDashboard(user);
     await connectWs(user);
   } else {
-    setStatus("Sin sesión");
+    setStatus("Sin sesiÃ³n");
     logoutBtn?.setAttribute("disabled", "");
     openLoginBtn?.removeAttribute("disabled");
     resetSessionState();
@@ -755,6 +796,16 @@ firebase.auth().onIdTokenChanged(async (user) => {
     await connectWs(user);
   }
 });
+
+
+
+
+
+
+
+
+
+
 
 
 

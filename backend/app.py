@@ -5,10 +5,12 @@ import ssl
 import threading
 import asyncio
 import logging
+import re
 import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 from pathlib import Path
+from datetime import datetime
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,12 +37,208 @@ logger.setLevel(logging.INFO)
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_ENV_PATH = os.getenv('SCADA_CONFIG_PATH')
+CONFIG_FILENAME_SUFFIX = "_Scada_Config.json"
+
+def sanitize_company_id(raw: Optional[str]) -> str:
+    if raw is None:
+        raise ValueError("Empresa no definida")
+    sanitized = re.sub(r'[^A-Za-z0-9_-]+', '_', str(raw).strip())
+    sanitized = sanitized.strip('_')
+    if not sanitized:
+        raise ValueError("Empresa no definida")
+    return sanitized
+
+
+DEFAULT_COMPANY_ID = sanitize_company_id(os.getenv('DEFAULT_EMPRESA_ID', 'default') or 'default')
+
 if CONFIG_ENV_PATH:
-    CONFIG_PATH = Path(CONFIG_ENV_PATH).expanduser().resolve()
+    CONFIG_BASE_PATH = Path(CONFIG_ENV_PATH).expanduser().resolve()
 else:
-    CONFIG_PATH = (BASE_DIR / '..' / 'scada_config.json').resolve()
+    CONFIG_BASE_PATH = (BASE_DIR / '..' / 'scada_configs').resolve()
+
+if CONFIG_BASE_PATH.suffix:
+    CONFIG_STORAGE_DIR = CONFIG_BASE_PATH.parent
+    LEGACY_SINGLE_CONFIG_PATH = CONFIG_BASE_PATH
+else:
+    CONFIG_STORAGE_DIR = CONFIG_BASE_PATH
+    legacy_candidate = (BASE_DIR / '..' / 'scada_config.json').resolve()
+    LEGACY_SINGLE_CONFIG_PATH = legacy_candidate if legacy_candidate.exists() else None
+
+CONFIG_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+COMPANIES_PATH = CONFIG_STORAGE_DIR / 'companies.json'
+COMPANIES_LOCK = threading.Lock()
+
+def config_path_for_company(company_id: str) -> Path:
+    sanitized = sanitize_company_id(company_id)
+    if LEGACY_SINGLE_CONFIG_PATH is not None and sanitized == DEFAULT_COMPANY_ID:
+        return LEGACY_SINGLE_CONFIG_PATH
+    return CONFIG_STORAGE_DIR / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
+
+def github_path_for_company(company_id: str, local_path: Path) -> str:
+    sanitized = sanitize_company_id(company_id)
+    if GITHUB_FILE_PATH:
+        if '{company}' in GITHUB_FILE_PATH:
+            return GITHUB_FILE_PATH.format(company=sanitized)
+        base_path = Path(GITHUB_FILE_PATH)
+        if base_path.suffix:
+            if sanitized == DEFAULT_COMPANY_ID:
+                target = base_path
+            else:
+                target = base_path.parent / f"{sanitized}_{base_path.name}"
+        else:
+            target = base_path / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
+        return str(target).replace('\\', '/')
+    try:
+        relative = local_path.relative_to(CONFIG_STORAGE_DIR)
+        rel_path = relative.as_posix()
+        if rel_path:
+            return rel_path
+    except ValueError:
+        pass
+    return local_path.name
+
+
+def current_utc_iso() -> str:
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def normalize_company_entry(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not isinstance(entry, dict):
+        return None
+    raw_id = entry.get("empresaId") or entry.get("empresa_id") or entry.get("id") or entry.get("slug")
+    try:
+        empresa_id = sanitize_company_id(raw_id) if raw_id is not None else None
+    except ValueError:
+        empresa_id = None
+    if not empresa_id:
+        return None
+    name = str(entry.get("name") or entry.get("displayName") or empresa_id).strip() or empresa_id
+    description = str(entry.get("description") or entry.get("notes") or "").strip()
+    active_value = entry.get("active")
+    active = bool(active_value) if active_value is not None else True
+    created_at = str(entry.get("createdAt") or entry.get("created_at") or entry.get("created") or "")
+    updated_at = str(entry.get("updatedAt") or entry.get("updated_at") or entry.get("updated") or "")
+    now = current_utc_iso()
+    if not created_at:
+        created_at = now
+    if not updated_at:
+        updated_at = created_at
+    return {
+        "empresaId": empresa_id,
+        "name": name,
+        "description": description,
+        "active": active,
+        "createdAt": created_at,
+        "updatedAt": updated_at,
+    }
+
+
+def load_companies() -> List[Dict[str, Any]]:
+    with COMPANIES_LOCK:
+        try:
+            with COMPANIES_PATH.open("r", encoding="utf-8") as fh:
+                raw = json.load(fh)
+        except FileNotFoundError:
+            raw = None
+        except json.JSONDecodeError as exc:
+            logger.warning("companies.json invalido: %s", exc)
+            raw = None
+    if isinstance(raw, dict):
+        items = raw.get("companies") or raw.get("tenants") or raw.get("items") or []
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        items = []
+    companies: Dict[str, Dict[str, Any]] = {}
+    for entry in items:
+        normalized = normalize_company_entry(entry)
+        if not normalized:
+            continue
+        companies[normalized["empresaId"]] = normalized
+    if DEFAULT_COMPANY_ID and DEFAULT_COMPANY_ID not in companies:
+        now = current_utc_iso()
+        companies[DEFAULT_COMPANY_ID] = {
+            "empresaId": DEFAULT_COMPANY_ID,
+            "name": DEFAULT_COMPANY_ID,
+            "description": "",
+            "active": True,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+    return sorted(companies.values(), key=lambda item: (item["empresaId"] != DEFAULT_COMPANY_ID, item["name"].lower(), item["empresaId"]))
+
+
+def save_companies(companies: List[Dict[str, Any]]) -> None:
+    sanitized: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    for entry in companies:
+        normalized = normalize_company_entry(entry)
+        if not normalized:
+            continue
+        empresa_id = normalized["empresaId"]
+        if empresa_id in seen:
+            continue
+        seen.add(empresa_id)
+        sanitized.append(normalized)
+    if DEFAULT_COMPANY_ID and DEFAULT_COMPANY_ID not in seen:
+        now = current_utc_iso()
+        sanitized.append({
+            "empresaId": DEFAULT_COMPANY_ID,
+            "name": DEFAULT_COMPANY_ID,
+            "description": "",
+            "active": True,
+            "createdAt": now,
+            "updatedAt": now,
+        })
+    sanitized.sort(key=lambda item: (item["empresaId"] != DEFAULT_COMPANY_ID, item["name"].lower(), item["empresaId"]))
+    payload = {"companies": sanitized, "updatedAt": current_utc_iso()}
+    with COMPANIES_LOCK:
+        COMPANIES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with COMPANIES_PATH.open("w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+
+
+def find_company(companies: List[Dict[str, Any]], empresa_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        sanitized = sanitize_company_id(empresa_id)
+    except ValueError:
+        return None
+    for entry in companies:
+        if entry.get("empresaId") == sanitized:
+            return entry
+    return None
+
+
+def is_master_admin(decoded: Optional[Dict[str, Any]]) -> bool:
+    if not decoded:
+        return False
+    for key in MASTER_ADMIN_FLAG_KEYS:
+        value = decoded.get(key)
+        if isinstance(value, bool) and value:
+            return True
+    for key in ("tenantRole", "role", "scadaRole", "empresaRole"):
+        value = decoded.get(key)
+        if isinstance(value, str) and value.strip().lower() in MASTER_ADMIN_ROLE_NAMES:
+            return True
+    email = decoded.get("email")
+    if email and email.lower() in MASTER_ADMIN_EMAILS_LOWER:
+        return True
+    return False
+
+
+def ensure_master_admin(decoded: Optional[Dict[str, Any]]) -> None:
+    if not is_master_admin(decoded):
+        raise HTTPException(status_code=403, detail="Solo administradores maestros")
+
 ADMIN_EMAILS = [email.strip() for email in os.getenv('CONFIG_ADMIN_EMAILS', '').split(',') if email.strip()]
 ADMIN_EMAILS_LOWER = {email.lower() for email in ADMIN_EMAILS}
+
+MASTER_ADMIN_EMAILS = [email.strip() for email in os.getenv('MASTER_ADMIN_EMAILS', '').split(',') if email.strip()]
+MASTER_ADMIN_EMAILS_LOWER = {email.lower() for email in MASTER_ADMIN_EMAILS}
+MASTER_ADMIN_ROLE_NAMES = {role.strip().lower() for role in os.getenv('MASTER_ADMIN_ROLE_NAMES', 'master,root').split(',') if role.strip()}
+MASTER_ADMIN_FLAG_KEYS = tuple(key.strip() for key in os.getenv('MASTER_ADMIN_FLAG_KEYS', 'isMasterAdmin,masterAdmin,superAdmin,isSuperUser').split(',') if key.strip()) or ('isMasterAdmin', 'masterAdmin', 'superAdmin', 'isSuperUser')
 
 GITHUB_SYNC_ENABLED = os.getenv("GITHUB_SYNC_ENABLED", "0").strip() == "1"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
@@ -54,6 +252,7 @@ GITHUB_COMMITTER_NAME = os.getenv("GITHUB_COMMITTER_NAME", "SCADA Bot").strip() 
 GITHUB_COMMITTER_EMAIL = os.getenv("GITHUB_COMMITTER_EMAIL", "scada-bot@example.com").strip() or "scada-bot@example.com"
 GITHUB_COMMIT_MESSAGE = os.getenv("GITHUB_COMMIT_MESSAGE", "Actualiza scada_config.json desde SCADA Web").strip() or "Actualiza scada_config.json desde SCADA Web"
 GITHUB_AUTHOR_NAME = os.getenv("GITHUB_AUTHOR_NAME", "").strip()
+EMPRESA_CLAIM_KEYS = ("empresaId", "empresa_id", "empresa", "companyId", "company_id", "company", "tenantId", "tenant_id", "tenant")
 GOOGLE_REQUEST = google_requests.Request()
 
 
@@ -207,6 +406,14 @@ def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
             "containers": []
         }
     result = dict(data)
+    empresa_candidate = result.get("empresaId") or result.get("empresa_id") or result.get("companyId") or result.get("company_id")
+    if empresa_candidate:
+        try:
+            result["empresaId"] = sanitize_company_id(empresa_candidate)
+        except ValueError:
+            result["empresaId"] = DEFAULT_COMPANY_ID
+    else:
+        result["empresaId"] = DEFAULT_COMPANY_ID
     result.setdefault("mainTitle", "SCADA Web")
     roles = result.get("roles")
     if not isinstance(roles, dict):
@@ -228,33 +435,46 @@ def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def load_scada_config() -> Dict[str, Any]:
+def load_scada_config(company_id: str) -> Dict[str, Any]:
     try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as fh:
+        path = config_path_for_company(company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Empresa inválida: {exc}") from exc
+    try:
+        with path.open("r", encoding="utf-8") as fh:
             data = json.load(fh)
     except FileNotFoundError:
-        logger.warning("Config file %s not found, using defaults", CONFIG_PATH)
+        logger.warning("Config file %s not found for empresa %s, using defaults", path, company_id)
         data = {}
     except json.JSONDecodeError as exc:
-        logger.error("Config JSON invalid: %s", exc)
+        logger.error("Config JSON invalid for %s: %s", path, exc)
         raise HTTPException(status_code=500, detail="Invalid configuration file")
-    return normalize_config(data)
-
-
-def save_scada_config(data: Dict[str, Any], actor_email: Optional[str] = None) -> None:
     normalized = normalize_config(data)
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    normalized.setdefault("empresaId", company_id)
+    return normalized
+
+
+def save_scada_config(data: Dict[str, Any], company_id: str, actor_email: Optional[str] = None) -> None:
+    try:
+        path = config_path_for_company(company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Empresa inválida: {exc}") from exc
+    payload = dict(data)
+    payload["empresaId"] = company_id
+    normalized = normalize_config(payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(normalized, ensure_ascii=False, indent=2)
-    with CONFIG_PATH.open("w", encoding="utf-8") as fh:
+    with path.open("w", encoding="utf-8") as fh:
         fh.write(serialized)
         fh.write("\n")
-    sync_config_to_github(serialized, actor_email)
+    sync_config_to_github(serialized, actor_email, company_id, path)
 
-def build_commit_message(actor_email: Optional[str]) -> str:
+def build_commit_message(actor_email: Optional[str], company_id: str) -> str:
     base = GITHUB_COMMIT_MESSAGE or "Actualiza scada_config.json desde SCADA Web"
+    suffix = f" [{company_id}]"
     if actor_email:
-        return f"{base} ({actor_email})"
-    return base
+        return f"{base}{suffix} ({actor_email})"
+    return f"{base}{suffix}"
 
 
 def build_author_payload(actor_email: Optional[str]) -> Optional[Dict[str, str]]:
@@ -264,15 +484,15 @@ def build_author_payload(actor_email: Optional[str]) -> Optional[Dict[str, str]]
     return {"name": author_name, "email": actor_email}
 
 
-def sync_config_to_github(serialized: str, actor_email: Optional[str]) -> None:
+def sync_config_to_github(serialized: str, actor_email: Optional[str], company_id: str, local_path: Path) -> None:
     if not GITHUB_SYNC_ENABLED:
         return
     if not GITHUB_TOKEN or not GITHUB_REPO:
         raise GithubSyncError("GITHUB_TOKEN y GITHUB_REPO son obligatorios cuando GITHUB_SYNC_ENABLED=1")
 
     api_base = GITHUB_API_URL or "https://api.github.com"
-    path = GITHUB_FILE_PATH or "scada_config.json"
-    url = f"{api_base}/repos/{GITHUB_REPO}/contents/{path}"
+    remote_path = github_path_for_company(company_id, local_path)
+    url = f"{api_base}/repos/{GITHUB_REPO}/contents/{remote_path}"
 
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
@@ -299,13 +519,13 @@ def sync_config_to_github(serialized: str, actor_email: Optional[str]) -> None:
         except Exception:
             existing_text = None
         if existing_text is not None and existing_text.strip() == serialized.strip():
-            logger.info("GitHub sync omitido: sin cambios detectados para %s", path)
+            logger.info("GitHub sync omitido: sin cambios detectados para %s", remote_path)
             return
     elif response.status_code != 404:
         raise GithubSyncError(f"GitHub respondio {response.status_code} al consultar el archivo: {response.text}")
 
     body = {
-        "message": build_commit_message(actor_email),
+        "message": build_commit_message(actor_email, company_id),
         "content": base64.b64encode(serialized.encode("utf-8")).decode("ascii"),
     }
     if GITHUB_BRANCH:
@@ -327,7 +547,7 @@ def sync_config_to_github(serialized: str, actor_email: Optional[str]) -> None:
     if put_resp.status_code not in (200, 201):
         raise GithubSyncError(f"GitHub respondio {put_resp.status_code} al actualizar: {put_resp.text}")
 
-    logger.info("GitHub sync completado para %s en rama %s", path, GITHUB_BRANCH or "default")
+    logger.info("GitHub sync completado para %s en rama %s", remote_path, GITHUB_BRANCH or "default")
 
 def role_for_email(cfg: Dict[str, Any], email: Optional[str]) -> str:
     if not email:
@@ -345,13 +565,13 @@ def role_for_email(cfg: Dict[str, Any], email: Optional[str]) -> str:
     return "operador"
 
 
-def ensure_admin(email: Optional[str], cfg: Optional[Dict[str, Any]] = None) -> None:
+def ensure_admin(email: Optional[str], company_id: str, cfg: Optional[Dict[str, Any]] = None) -> None:
     if not email:
         raise HTTPException(status_code=403, detail="Usuario sin email en token")
     lower_email = email.lower()
     if lower_email in ADMIN_EMAILS_LOWER:
         return
-    cfg = cfg or load_scada_config()
+    cfg = cfg or load_scada_config(company_id)
     roles = cfg.get("roles", {})
     admin_list = [str(item).lower() for item in roles.get("admins", [])]
     if lower_email in admin_list:
@@ -387,9 +607,10 @@ mqtt_client.loop_start()
 
 # ---- WebSocket connection manager ----
 class WSClient:
-    def __init__(self, ws: WebSocket, uid: str, allowed_prefixes: List[str]):
+    def __init__(self, ws: WebSocket, uid: str, company_id: str, allowed_prefixes: List[str]):
         self.ws = ws
         self.uid = uid
+        self.company_id = company_id
         self.allowed_prefixes = [p.rstrip("/") + "/" for p in allowed_prefixes]
 
     def can_receive(self, topic: str) -> bool:
@@ -426,7 +647,7 @@ class ConnectionManager:
                 try:
                     future.result(timeout=5)
                     delivered += 1
-                    logger.info("WS deliver topic=%s uid=%s", topic, c.uid)
+                    logger.info("WS deliver topic=%s uid=%s empresa=%s", topic, c.uid, getattr(c, "company_id", None))
                 except FutureTimeoutError:
                     logger.error("WS deliver timeout uid=%s topic=%s", c.uid, topic)
                     to_remove.append(c.ws)
@@ -488,9 +709,39 @@ def verify_bearer_token(authorization: Optional[str]) -> Dict[str, Any]:
         logger.warning("HTTP token invalid: %s", e)
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
-def allowed_prefixes_for_user(uid: str) -> List[str]:
+
+def extract_company_id(decoded: Dict[str, Any]) -> str:
+    candidates: List[str] = []
+    for key in EMPRESA_CLAIM_KEYS:
+        value = decoded.get(key)
+        if value:
+            candidates.append(value)
+    firebase_claims = decoded.get("firebase")
+    if isinstance(firebase_claims, dict):
+        tenant = firebase_claims.get("tenant")
+        if tenant:
+            candidates.append(tenant)
+    custom_claims = decoded.get("claims")
+    if isinstance(custom_claims, dict):
+        for key in EMPRESA_CLAIM_KEYS:
+            value = custom_claims.get(key)
+            if value:
+                candidates.append(value)
+    for candidate in candidates:
+        try:
+            return sanitize_company_id(candidate)
+        except ValueError:
+            continue
+    if DEFAULT_COMPANY_ID:
+        logger.warning("Token sin empresa; usando DEFAULT_EMPRESA_ID=%s", DEFAULT_COMPANY_ID)
+        return DEFAULT_COMPANY_ID
+    raise HTTPException(status_code=403, detail="El usuario no tiene empresa asignada")
+def allowed_prefixes_for_user(uid: str, company_id: Optional[str]) -> List[str]:
     base = TOPIC_BASE.rstrip("/")
-    per_user = f"{base}/{uid}"
+    if company_id:
+        per_user = f"{base}/{company_id}/{uid}"
+    else:
+        per_user = f"{base}/{uid}"
     prefixes = [per_user]
     prefixes.extend(PUBLIC_ALLOWED_PREFIXES)
     return prefixes
@@ -502,32 +753,55 @@ def ensure_mqtt_connected():
 
 
 @app.get("/config")
-def get_config_endpoint(authorization: Optional[str] = Header(None)):
+def get_config_endpoint(authorization: Optional[str] = Header(None), empresa_id: Optional[str] = Query(None)):
     decoded = verify_bearer_token(authorization)
-    cfg = load_scada_config()
+    is_master = is_master_admin(decoded)
+    if empresa_id:
+        if not is_master:
+            raise HTTPException(status_code=403, detail="Solo administradores maestros pueden consultar otras empresas")
+        try:
+            company_id = sanitize_company_id(empresa_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    else:
+        company_id = extract_company_id(decoded)
+    cfg = load_scada_config(company_id)
+    cfg.setdefault("empresaId", company_id)
     email = decoded.get("email")
-    role = role_for_email(cfg, email)
-    return {"config": cfg, "role": role}
+    role = "admin" if is_master else role_for_email(cfg, email)
+    return {"config": cfg, "role": role, "empresaId": company_id, "isMaster": is_master}
 
 
 @app.put("/config")
-def update_config_endpoint(config: Dict[str, Any] = Body(...), authorization: Optional[str] = Header(None)):
+def update_config_endpoint(config: Dict[str, Any] = Body(...), authorization: Optional[str] = Header(None), empresa_id: Optional[str] = Query(None)):
     decoded = verify_bearer_token(authorization)
     email = decoded.get("email")
-    current_cfg = load_scada_config()
-    ensure_admin(email, current_cfg)
+    is_master = is_master_admin(decoded)
+    if empresa_id:
+        if not is_master:
+            raise HTTPException(status_code=403, detail="Solo administradores maestros pueden actualizar otras empresas")
+        try:
+            company_id = sanitize_company_id(empresa_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    else:
+        company_id = extract_company_id(decoded)
+    current_cfg = load_scada_config(company_id)
+    if not is_master:
+        ensure_admin(email, company_id, current_cfg)
     normalized = validate_config_payload(config)
     try:
-        save_scada_config(normalized, email)
+        save_scada_config(normalized, company_id, email)
     except GithubSyncError as exc:
         logger.exception("GitHub sync failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"No se pudo sincronizar con GitHub: {exc}") from exc
     except Exception as exc:
         logger.exception("Error writing configuration: %s", exc)
         raise HTTPException(status_code=500, detail="No se pudo guardar la configuracion") from exc
-    role = role_for_email(normalized, email)
-    logger.info("Config updated by %s", email)
-    return {"ok": True, "config": normalized, "role": role}
+    role = "admin" if is_master else role_for_email(normalized, email)
+    logger.info("Config updated by %s en empresa %s", email, company_id)
+    return {"ok": True, "config": normalized, "role": role, "empresaId": company_id, "isMaster": is_master}
+
 
 # ---- API ----
 @app.get("/")
@@ -544,13 +818,122 @@ class PublishIn(BaseModel):
     qos: int = 0
     retain: bool = False
 
+
+class TenantBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    active: Optional[bool] = True
+
+
+class TenantCreate(TenantBase):
+    empresaId: str
+    cloneFrom: Optional[str] = None
+
+
+class TenantUpdate(TenantBase):
+    active: Optional[bool] = None
+
+
+@app.get("/tenants")
+def list_tenants_endpoint(authorization: Optional[str] = Header(None)):
+    decoded = verify_bearer_token(authorization)
+    ensure_master_admin(decoded)
+    companies = load_companies()
+    return {"companies": companies, "count": len(companies)}
+
+
+@app.get("/tenants/{empresa_id}")
+def get_tenant_endpoint(empresa_id: str, authorization: Optional[str] = Header(None)):
+    decoded = verify_bearer_token(authorization)
+    ensure_master_admin(decoded)
+    company = find_company(load_companies(), empresa_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    return {"company": company}
+
+
+@app.post("/tenants", status_code=201)
+def create_tenant_endpoint(payload: TenantCreate, authorization: Optional[str] = Header(None)):
+    decoded = verify_bearer_token(authorization)
+    ensure_master_admin(decoded)
+    actor_email = decoded.get("email")
+    try:
+        empresa_id = sanitize_company_id(payload.empresaId)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    companies = load_companies()
+    if any(entry.get("empresaId") == empresa_id for entry in companies):
+        raise HTTPException(status_code=409, detail="La empresa ya existe")
+    clone_from = None
+    if payload.cloneFrom:
+        try:
+            clone_from = sanitize_company_id(payload.cloneFrom)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"cloneFrom invalido: {exc}") from exc
+        if not any(entry.get("empresaId") == clone_from for entry in companies):
+            raise HTTPException(status_code=404, detail=f"Empresa origen {clone_from} no existe")
+    if clone_from:
+        base_config = load_scada_config(clone_from)
+    else:
+        base_config = load_scada_config(DEFAULT_COMPANY_ID) if DEFAULT_COMPANY_ID else normalize_config({})
+    base_data = json.loads(json.dumps(base_config)) if base_config else {}
+    now = current_utc_iso()
+    entry = normalize_company_entry({
+        "empresaId": empresa_id,
+        "name": payload.name.strip() if payload.name else empresa_id,
+        "description": payload.description.strip() if payload.description else "",
+        "active": bool(payload.active) if payload.active is not None else True,
+        "createdAt": now,
+        "updatedAt": now,
+    })
+    if not entry:
+        raise HTTPException(status_code=400, detail="Datos de empresa invalidos")
+    try:
+        save_scada_config(base_data or {}, empresa_id, actor_email)
+    except GithubSyncError as exc:
+        logger.exception("No se pudo sincronizar configuracion nueva: %s", exc)
+        raise HTTPException(status_code=502, detail=f"No se pudo sincronizar con GitHub: {exc}") from exc
+    except Exception as exc:
+        logger.exception("No se pudo crear configuracion base para %s: %s", empresa_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo crear la configuracion inicial") from exc
+    companies.append(entry)
+    save_companies(companies)
+    logger.info("Empresa creada %s por %s clone_from=%s", empresa_id, actor_email, clone_from)
+    return {"company": entry}
+
+
+@app.put("/tenants/{empresa_id}")
+def update_tenant_endpoint(empresa_id: str, payload: TenantUpdate, authorization: Optional[str] = Header(None)):
+    decoded = verify_bearer_token(authorization)
+    ensure_master_admin(decoded)
+    try:
+        target_id = sanitize_company_id(empresa_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    companies = load_companies()
+    for entry in companies:
+        if entry.get("empresaId") == target_id:
+            if payload.name is not None:
+                entry["name"] = payload.name.strip() or target_id
+            if payload.description is not None:
+                entry["description"] = payload.description.strip()
+            if payload.active is not None and target_id != DEFAULT_COMPANY_ID:
+                entry["active"] = bool(payload.active)
+            entry["updatedAt"] = current_utc_iso()
+            save_companies(companies)
+            updated = find_company(load_companies(), target_id) or entry
+            return {"company": updated}
+    raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+
 @app.post("/publish")
 def publish(p: PublishIn, authorization: Optional[str] = Header(None)):
     decoded = verify_bearer_token(authorization)
     uid = decoded["uid"]
-    allowed = [x.rstrip("/") + "/" for x in allowed_prefixes_for_user(uid)]
+    company_id = extract_company_id(decoded)
+    allowed = [x.rstrip("/") + "/" for x in allowed_prefixes_for_user(uid, company_id)]
     if not any(p.topic.startswith(pref) for pref in allowed):
-        raise HTTPException(status_code=403, detail=f"Topic not allowed for user {uid}")
+        raise HTTPException(status_code=403, detail=f"Topic not allowed for user {uid} en empresa {company_id}")
     ensure_mqtt_connected()
     payload = p.payload
     if isinstance(payload, (dict, list)):
@@ -580,12 +963,13 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
         return
 
     uid = decoded["uid"]
-    prefixes = allowed_prefixes_for_user(uid)
-    client = WSClient(websocket, uid, prefixes)
+    company_id = extract_company_id(decoded)
+    prefixes = allowed_prefixes_for_user(uid, company_id)
+    client = WSClient(websocket, uid, company_id, prefixes)
     ConnectionManager.add(client)
 
     initial_snapshot = snapshot_for_prefixes(prefixes)
-    await websocket.send_json({"type": "hello", "uid": uid, "allowed_prefixes": prefixes, "last_values": initial_snapshot})
+    await websocket.send_json({"type": "hello", "uid": uid, "empresaId": company_id, "allowed_prefixes": prefixes, "last_values": initial_snapshot})
 
     try:
         while True:
@@ -624,6 +1008,23 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
             await websocket.close()
         except Exception:
             pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

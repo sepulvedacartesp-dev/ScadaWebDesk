@@ -444,6 +444,21 @@
     .container-card.collapsed .objects-wrap {
       display: none;
     }
+    #master-panel[hidden] { display: none !important; }
+    .master-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: flex-end; align-items: center; }
+    .master-layout { display: grid; gap: 1.2rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .tenant-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+    .tenant-item { border: 1px solid rgba(112, 138, 255, 0.18); border-radius: 14px; padding: 0.85rem 1rem; background: rgba(9, 18, 32, 0.82); display: flex; flex-direction: column; gap: 0.55rem; transition: border-color 0.2s ease, background 0.2s ease; }
+    .tenant-item--active { border-color: rgba(100, 181, 246, 0.65); background: rgba(16, 46, 92, 0.55); }
+    .tenant-item__header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+    .tenant-item__title { margin: 0; font-size: 1rem; }
+    .tenant-item__meta { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; color: var(--text-muted); }
+    .tenant-item__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .tenant-badge { padding: 0.15rem 0.6rem; border-radius: 999px; border: 1px solid rgba(112, 138, 255, 0.25); font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+    .tenant-form-grid { display: grid; gap: 0.85rem 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .tenant-form-grid .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .tenant-form-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: flex-end; align-items: center; }
+
   </style>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
@@ -485,7 +500,7 @@
         <p class="helper-text">Este asistente edita el archivo usado por el dashboard principal y mantiene la estructura del sistema.</p>
       </div>
       <div class="hero-actions">
-        <span class="badge-inline">Archivo base: scada_config.json</span>
+        <span class="badge-inline">Archivo base: scada_configs/&lt;empresaId&gt;_Scada_Config.json</span>
         <span class="badge-inline readonly-hint">Sesiona como administrador para desbloquear la edicion.</span>
         <a class="btn btn-link" href="index.html">Volver al dashboard</a>
       </div>
@@ -493,6 +508,59 @@
 
     <div class="config-content">
       <div class="config-main">
+        <section id="master-panel" class="config-card" hidden>
+          <header class="config-card__head">
+            <h2>Gestion de clientes</h2>
+            <p class="helper-text">Disponible solo para administradores maestros. Crea nuevas empresas y cambia el contexto de edicion.</p>
+          </header>
+          <div class="master-actions">
+            <button id="refresh-tenants" type="button" class="btn">Actualizar lista</button>
+            <button id="reset-tenant-form" type="button" class="btn btn-link">Limpiar formulario</button>
+          </div>
+          <div class="master-layout">
+            <div class="tenant-column">
+              <h3>Clientes existentes</h3>
+              <ul id="tenant-list" class="tenant-list"></ul>
+            </div>
+            <div class="tenant-column">
+              <h3 id="tenant-form-title">Crear cliente</h3>
+              <form id="tenant-form" autocomplete="off">
+                <div class="tenant-form-grid">
+                  <div class="form-group">
+                    <label for="tenant-empresa-id">Empresa ID</label>
+                    <input id="tenant-empresa-id" class="text-input" type="text" required minlength="3" placeholder="cliente-demo">
+                  </div>
+                  <div class="form-group">
+                    <label for="tenant-name">Nombre visible</label>
+                    <input id="tenant-name" class="text-input" type="text" placeholder="Cliente Demo">
+                  </div>
+                  <div class="form-group">
+                    <label for="tenant-clone-from">Clonar desde</label>
+                    <select id="tenant-clone-from" class="select-input">
+                      <option value="">Config base (DEFAULT)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="tenant-active">Activo</label>
+                    <select id="tenant-active" class="select-input">
+                      <option value="true" selected>Activo</option>
+                      <option value="false">Inactivo</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="grid-column: 1 / -1;">
+                    <label for="tenant-description">Descripcion</label>
+                    <textarea id="tenant-description" class="textarea" rows="3" placeholder="Notas internas u observaciones"></textarea>
+                  </div>
+                </div>
+                <input type="hidden" id="tenant-mode" value="create">
+                <div class="tenant-form-actions">
+                  <span id="tenant-form-status" class="helper-text"></span>
+                  <button type="submit" class="btn" id="tenant-submit-btn">Crear cliente</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
         <section class="config-card status-card">
           <header class="config-card__head">
             <h2>Estado general</h2>

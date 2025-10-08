@@ -115,9 +115,16 @@ const OBJECT_TYPE_MAP = new Map(OBJECT_TYPES.map((item) => [item.value.toLowerCa
 
 const state = {
   token: null,
+  empresaId: null,
+  claimEmpresaId: null,
   role: "viewer",
+  isMaster: false,
   canEdit: false,
   dirty: false,
+  tenants: [],
+  tenantsLoaded: false,
+  tenantLoading: false,
+  editingTenantId: null,
   config: createEmptyConfig(),
 };
 
@@ -148,7 +155,52 @@ const dom = {
   downloadBtn: document.getElementById("download-btn"),
   importBtn: document.getElementById("import-btn"),
   importInput: document.getElementById("importInput"),
+  masterPanel: document.getElementById("master-panel"),
+  refreshTenantsBtn: document.getElementById("refresh-tenants"),
+  resetTenantFormBtn: document.getElementById("reset-tenant-form"),
+  tenantList: document.getElementById("tenant-list"),
+  tenantForm: document.getElementById("tenant-form"),
+  tenantFormTitle: document.getElementById("tenant-form-title"),
+  tenantEmpresaId: document.getElementById("tenant-empresa-id"),
+  tenantName: document.getElementById("tenant-name"),
+  tenantCloneFrom: document.getElementById("tenant-clone-from"),
+  tenantActive: document.getElementById("tenant-active"),
+  tenantDescription: document.getElementById("tenant-description"),
+  tenantMode: document.getElementById("tenant-mode"),
+  tenantStatus: document.getElementById("tenant-form-status"),
+  tenantSubmit: document.getElementById("tenant-submit-btn"),
 };
+
+function updateRoleBadge() {
+  if (!dom.roleBadge) return;
+  const roleLabel = state.isMaster ? "master" : (state.role || "viewer");
+  dom.roleBadge.textContent = roleLabel.toUpperCase();
+}
+
+function applyPermissions() {
+  const root = dom.root;
+  const canEdit = Boolean(state.canEdit);
+  if (root) {
+    root.classList.toggle("readonly", !canEdit);
+  }
+  const toggleElements = [
+    dom.saveBtn,
+    dom.addContainer,
+    dom.expandCollapse,
+    dom.importBtn,
+    dom.downloadBtn,
+  ];
+  toggleElements.forEach((element) => {
+    if (!element) return;
+    if (canEdit) {
+      element.removeAttribute("disabled");
+    } else {
+      element.setAttribute("disabled", "");
+    }
+  });
+  dom.containersList?.classList.toggle("is-readonly", !canEdit);
+}
+
 
 let containerUiState = new WeakMap();
 
@@ -209,6 +261,10 @@ function attachStaticHandlers() {
     }
   });
   dom.containersList?.addEventListener("click", handleContainerActions);
+  dom.refreshTenantsBtn?.addEventListener("click", () => loadTenants(true));
+  dom.resetTenantFormBtn?.addEventListener("click", () => resetTenantForm("create"));
+  dom.tenantForm?.addEventListener("submit", submitTenantForm);
+  dom.tenantList?.addEventListener("click", handleTenantListClick);
 }
 
 async function onAuthStateChanged(user) {
@@ -216,21 +272,41 @@ async function onAuthStateChanged(user) {
     dom.sessionStatus.textContent = "Sesion activa: " + user.email;
     dom.logoutBtn?.removeAttribute("disabled");
     dom.openLoginBtn?.setAttribute("disabled", "");
+    state.claimEmpresaId = null;
+    state.empresaId = null;
+    state.isMaster = false;
+    state.tenants = [];
+    state.tenantsLoaded = false;
+    state.tenantLoading = false;
+    state.editingTenantId = null;
+    renderMasterPanel();
     await refreshToken(user);
     await loadConfig();
+    if (state.isMaster) {
+      loadTenants().catch((err) => console.error("loadTenants", err));
+    }
   } else {
     dom.sessionStatus.textContent = "Sin sesion";
     dom.logoutBtn?.setAttribute("disabled", "");
     dom.openLoginBtn?.removeAttribute("disabled");
     state.token = null;
+    state.empresaId = null;
+    state.claimEmpresaId = null;
     state.role = "viewer";
+    state.isMaster = false;
     state.canEdit = false;
     state.config = createEmptyConfig();
+    state.tenants = [];
+    state.tenantsLoaded = false;
+    state.tenantLoading = false;
+    state.editingTenantId = null;
     containerUiState = new WeakMap();
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
     renderAll();
+    renderMasterPanel();
+    setTenantStatus("");
     setStatus("Autenticate para cargar la configuracion.", "info");
   }
 }
@@ -244,15 +320,17 @@ async function refreshToken(user) {
   return state.token;
 }
 
-async function loadConfig(force = false) {
+async function loadConfig(force = false, targetEmpresaId = null) {
   const user = firebase.auth().currentUser;
   if (!user) return;
   try {
     if (!state.token || force) {
       await refreshToken(user);
     }
+    const empresaId = targetEmpresaId ?? (state.isMaster && state.empresaId ? state.empresaId : null);
+    const query = empresaId ? `?empresaId=${encodeURIComponent(empresaId)}` : "";
     setStatus("Cargando configuracion...", "info");
-    const response = await fetch(BACKEND_HTTP + "/config", {
+    const response = await fetch(BACKEND_HTTP + "/config" + query, {
       headers: {
         Authorization: "Bearer " + state.token,
       },
@@ -263,576 +341,40 @@ async function loadConfig(force = false) {
     }
     const payload = await response.json();
     const config = normalizeConfig(payload.config || {});
+    state.isMaster = Boolean(payload.isMaster);
+    if (!state.isMaster) {
+      state.tenants = [];
+      state.tenantsLoaded = false;
+      state.tenantLoading = false;
+      state.editingTenantId = null;
+      setTenantStatus("");
+    }
+    if (!state.claimEmpresaId && payload.empresaId) {
+      state.claimEmpresaId = payload.empresaId;
+    }
+    state.empresaId = (payload.empresaId || config.empresaId || empresaId || state.empresaId || "").toString().trim();
     state.role = payload.role || determineRole(config, user.email);
     state.canEdit = state.role === "admin";
     state.config = config;
+    state.config.empresaId = state.empresaId;
     containerUiState = new WeakMap();
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
     renderAll();
-    setStatus(state.canEdit ? "Configuracion cargada. Puedes editar." : "Configuracion cargada en modo lectura.", state.canEdit ? "success" : "info");
+    if (state.isMaster) {
+      renderMasterPanel();
+    }
+    const statusMessage = state.canEdit ? "Configuracion cargada. Puedes editar." : "Configuracion cargada en modo lectura.";
+    const statusContext = state.empresaId ? `${statusMessage} (Empresa: ${state.empresaId})` : statusMessage;
+    setStatus(statusContext, state.canEdit ? "success" : "info");
   } catch (error) {
     console.error("loadConfig", error);
-    setStatus("Error al cargar: " + ((error && error.message) || error), "error");
+    setStatus("No se pudo cargar: " + ((error && error.message) || error), "error");
   }
 }
 
-function determineRole(config, email) {
-  if (!email || !config || typeof config !== "object") return "operador";
-  const roles = config.roles || {};
-  const lowerEmail = email.toLowerCase();
-  if (emailsFrom(roles.admins).includes(lowerEmail)) return "admin";
-  if (emailsFrom(roles.operators).includes(lowerEmail)) return "operador";
-  if (emailsFrom(roles.viewers).includes(lowerEmail)) return "visualizacion";
-  return "operador";
-}
 
-function emailsFrom(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value.split(/[\r\n,;]/).map((item) => item.trim().toLowerCase()).filter(Boolean);
-  }
-  return [];
-}
-
-function renderAll() {
-  renderGeneralSection();
-  renderRolesSection();
-  renderContainers();
-}
-
-function renderGeneralSection() {
-  if (dom.mainTitle) {
-    dom.mainTitle.value = state.config.mainTitle || "";
-    dom.mainTitle.disabled = !state.canEdit;
-  }
-}
-
-function renderRolesSection() {
-  if (dom.rolesAdmins) {
-    dom.rolesAdmins.value = (state.config.roles.admins || []).join("\n");
-    dom.rolesAdmins.disabled = !state.canEdit;
-  }
-  if (dom.rolesOperators) {
-    dom.rolesOperators.value = (state.config.roles.operators || []).join("\n");
-    dom.rolesOperators.disabled = !state.canEdit;
-  }
-  if (dom.rolesViewers) {
-    dom.rolesViewers.value = (state.config.roles.viewers || []).join("\n");
-    dom.rolesViewers.disabled = !state.canEdit;
-  }
-}
-
-function renderContainers() {
-  if (!dom.containersList || !dom.containerTemplate) return;
-  dom.containersList.querySelectorAll("[data-container-index]").forEach((node) => node.remove());
-  const containers = state.config.containers || [];
-  const hasContainers = containers.length > 0;
-  if (dom.containersEmpty) {
-    dom.containersEmpty.hidden = hasContainers;
-  }
-  containers.forEach((container, index) => {
-    const card = dom.containerTemplate.content.firstElementChild.cloneNode(true);
-    card.dataset.containerIndex = String(index);
-    const titleInput = card.querySelector('[data-field="title"]');
-    const heading = card.querySelector(".container-title");
-    if (titleInput) {
-      titleInput.value = container.title || "";
-      titleInput.disabled = !state.canEdit;
-      titleInput.addEventListener("input", (event) => {
-        const value = event.target.value || "";
-        state.config.containers[index].title = value;
-        heading.textContent = formatContainerTitle(value, index);
-        setDirty(true);
-      });
-    }
-    heading.textContent = formatContainerTitle(container.title, index);
-    ensureContainerUiState(container);
-    const collapsed = isContainerCollapsed(container);
-    card.classList.toggle("collapsed", collapsed);
-    updateContainerToggleState(card, collapsed);
-    updateContainerSummary(card, container);
-    renderObjects(card, container, index);
-    const editableButtons = card.querySelectorAll(".btn-editable");
-    editableButtons.forEach((btn) => {
-      if (!state.canEdit) {
-        btn.setAttribute("disabled", "");
-      } else {
-        btn.removeAttribute("disabled");
-      }
-    });
-    dom.containersList.appendChild(card);
-  });
-  updateExpandCollapseButton();
-}
-
-function ensureContainerUiState(container) {
-  if (!container || typeof container !== "object") {
-    return;
-  }
-  if (!containerUiState.has(container)) {
-    containerUiState.set(container, { collapsed: false });
-  }
-}
-
-function isContainerCollapsed(container) {
-  const entry = containerUiState.get(container);
-  return !!(entry && entry.collapsed);
-}
-
-function setContainerCollapsed(container, collapsed) {
-  if (!container || typeof container !== "object") {
-    return;
-  }
-  const entry = containerUiState.get(container) || {};
-  entry.collapsed = !!collapsed;
-  containerUiState.set(container, entry);
-}
-
-function updateContainerToggleState(card, collapsed) {
-  if (!card) return;
-  const toggleBtn = card.querySelector('[data-action="toggle-collapse"]');
-  if (!toggleBtn) return;
-  toggleBtn.setAttribute("aria-expanded", String(!collapsed));
-  toggleBtn.textContent = collapsed ? "Expandir" : "Contraer";
-}
-
-function formatContainerTitle(title, index) {
-  const base = title && title.trim() ? title.trim() : "Contenedor " + (index + 1);
-  return base;
-}
-function renderObjects(card, container, containerIndex) {
-  const wrapper = card.querySelector(".objects-wrap");
-  if (!wrapper || !dom.objectTemplate) return;
-  wrapper.textContent = "";
-  const objects = container.objects || [];
-  if (!objects.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "Sin widgets. Usa \"Agregar widget\".";
-    wrapper.appendChild(empty);
-    return;
-  }
-  objects.forEach((object, objectIndex) => {
-    const objCard = dom.objectTemplate.content.firstElementChild.cloneNode(true);
-    objCard.dataset.objectIndex = String(objectIndex);
-    const header = objCard.querySelector(".object-header h4");
-    const toolbar = objCard.querySelector(".object-toolbar");
-    const fieldsHost = objCard.querySelector(".object-fields");
-    const advancedHost = objCard.querySelector(".object-advanced-fields");
-    const advancedWrapper = objCard.querySelector('[data-advanced="wrapper"]');
-    const meta = resolveObjectMeta(object.type);
-    const labelPreview = object.label && object.label.trim() ? object.label.trim() : "Widget " + (objectIndex + 1);
-    header.textContent = `${labelPreview} - ${meta.label}`;
-    if (!state.canEdit) {
-      toolbar?.querySelectorAll("button").forEach((btn) => btn.setAttribute("disabled", ""));
-    }
-    buildPrimaryFields(fieldsHost, meta, object, containerIndex, objectIndex);
-    const advancedFields = meta.fields.filter((item) => item.section === "advanced");
-    if (advancedFields.length && advancedWrapper) {
-      advancedWrapper.style.display = "block";
-      buildAdvancedFields(advancedHost, advancedFields, object, containerIndex, objectIndex);
-    } else if (advancedWrapper) {
-      advancedWrapper.style.display = "none";
-    }
-    wrapper.appendChild(objCard);
-  });
-}
-
-function buildPrimaryFields(host, meta, object, containerIndex, objectIndex) {
-  if (!host) return;
-  host.textContent = "";
-  const typeGroup = document.createElement("div");
-  typeGroup.className = "form-group";
-  const typeLabel = document.createElement("label");
-  typeLabel.textContent = "Tipo de widget";
-  typeGroup.appendChild(typeLabel);
-  const typeSelect = document.createElement("select");
-  typeSelect.className = "select-input";
-  OBJECT_TYPES.forEach((item) => {
-    const option = document.createElement("option");
-    option.value = item.value;
-    option.textContent = item.label;
-    option.dataset.hint = item.hint;
-    typeSelect.appendChild(option);
-  });
-  const currentType = normalizeType(object.type);
-  if (!OBJECT_TYPE_MAP.has(currentType)) {
-    const customOption = document.createElement("option");
-    customOption.value = object.type || "";
-    customOption.textContent = object.type ? `Personalizado (${object.type})` : "Tipo no definido";
-    typeSelect.appendChild(customOption);
-  }
-  typeSelect.value = object.type || meta.value;
-  typeSelect.disabled = !state.canEdit;
-  typeSelect.addEventListener("change", (event) => {
-    updateObjectType(containerIndex, objectIndex, event.target.value);
-  });
-  typeGroup.appendChild(typeSelect);
-  if (meta.hint) {
-    const hint = document.createElement("p");
-    hint.className = "helper-text";
-    hint.textContent = meta.hint;
-    typeGroup.appendChild(hint);
-  }
-  host.appendChild(typeGroup);
-  meta.fields.filter((item) => item.section !== "advanced").forEach((field) => {
-    host.appendChild(createFieldElement(field, object[field.key], (value) => {
-      updateObjectField(containerIndex, objectIndex, field, value);
-    }));
-  });
-}
-
-function buildAdvancedFields(host, fields, object, containerIndex, objectIndex) {
-  if (!host) return;
-  host.textContent = "";
-  fields.forEach((field) => {
-    host.appendChild(createFieldElement(field, object[field.key], (value) => {
-      updateObjectField(containerIndex, objectIndex, field, value);
-    }));
-  });
-}
-
-function createFieldElement(field, currentValue, onChange) {
-  const group = document.createElement("div");
-  group.className = "form-group";
-  const label = document.createElement("label");
-  label.textContent = field.label || field.key;
-  group.appendChild(label);
-  let input;
-  if (field.type === "color") {
-    const wrapper = document.createElement("div");
-    wrapper.className = "object-color-input";
-    const colorInput = document.createElement("input");
-    colorInput.type = "color";
-    colorInput.value = ensureColor(currentValue);
-    colorInput.disabled = !state.canEdit;
-    const textInput = document.createElement("input");
-    textInput.type = "text";
-    textInput.className = "text-input";
-    textInput.placeholder = field.placeholder || "#00b4d8";
-    textInput.value = ensureColor(currentValue);
-    textInput.disabled = !state.canEdit;
-    colorInput.addEventListener("input", (event) => {
-      const value = event.target.value;
-      onChange(value);
-      textInput.value = value;
-      setDirty(true);
-    });
-    textInput.addEventListener("change", (event) => {
-      const value = ensureColor(event.target.value);
-      event.target.value = value;
-      colorInput.value = value;
-      onChange(value);
-      setDirty(true);
-    });
-    wrapper.append(colorInput, textInput);
-    input = wrapper;
-  } else {
-    const element = document.createElement("input");
-    element.className = field.type === "number" ? "number-input" : "text-input";
-    element.type = field.type === "number" ? "number" : "text";
-    if (field.placeholder) {
-      element.placeholder = field.placeholder;
-    }
-    if (field.type === "number" && typeof currentValue === "number") {
-      element.value = String(currentValue);
-    } else {
-      element.value = currentValue !== undefined && currentValue !== null ? String(currentValue) : "";
-    }
-    element.disabled = !state.canEdit;
-    element.addEventListener("change", (event) => {
-      const value = field.type === "number" ? parseNumber(event.target.value) : event.target.value;
-      onChange(value);
-      setDirty(true);
-    });
-    input = element;
-  }
-  group.appendChild(input);
-  return group;
-}
-
-function updateObjectField(containerIndex, objectIndex, field, value) {
-  const container = state.config.containers[containerIndex];
-  if (!container) return;
-  const object = container.objects[objectIndex];
-  if (!object) return;
-  if (field.type === "number") {
-    if (value === null || value === "" || Number.isNaN(value)) {
-      delete object[field.key];
-    } else {
-      object[field.key] = value;
-    }
-  } else {
-    object[field.key] = value === undefined ? "" : value;
-  }
-  const cardElement = dom.containersList?.querySelector(`[data-container-index="${containerIndex}"] [data-object-index="${objectIndex}"]`);
-  if (cardElement) {
-    const header = cardElement.querySelector(".object-header h4");
-    if (header) {
-      const meta = resolveObjectMeta(object.type);
-      const labelPreview = object.label && object.label.trim() ? object.label.trim() : "Widget " + (objectIndex + 1);
-      header.textContent = `${labelPreview} - ${meta.label}`;
-    }
-  }
-  updateContainerSummary(dom.containersList.querySelector(`[data-container-index="${containerIndex}"]`), container);
-}
-function updateObjectType(containerIndex, objectIndex, nextType) {
-  const container = state.config.containers[containerIndex];
-  if (!container) return;
-  const current = container.objects[objectIndex];
-  if (!current) return;
-  const meta = resolveObjectMeta(nextType);
-  const template = clone(meta.defaults || { type: nextType });
-  const preservedLabel = current.label;
-  const preservedTopic = current.topic;
-  container.objects[objectIndex] = Object.assign({}, template, {
-    label: preservedLabel,
-    topic: preservedTopic,
-    type: meta.value,
-  });
-  setDirty(true);
-  renderContainers();
-}
-
-function resolveObjectMeta(type) {
-  const key = normalizeType(type);
-  if (OBJECT_TYPE_MAP.has(key)) {
-    return OBJECT_TYPE_MAP.get(key);
-  }
-  return {
-    value: type || "",
-    label: type ? `Tipo ${type}` : "Tipo no definido",
-    hint: "Este tipo no esta mapeado, los cambios se guardaran tal cual.",
-    defaults: { type: type || "" },
-    fields: [
-      { key: "label", label: "Nombre visible", type: "text", placeholder: "Widget", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "planta/tag", section: "primary" },
-    ],
-  };
-}
-
-function ensureColor(value) {
-  const defaultColor = "#00b4d8";
-  if (!value) return defaultColor;
-  const hex = String(value).trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
-    return hex.toLowerCase();
-  }
-  return defaultColor;
-}
-
-function updateRolesFromInputs() {
-  state.config.roles = {
-    admins: splitLines(dom.rolesAdmins?.value),
-    operators: splitLines(dom.rolesOperators?.value),
-    viewers: splitLines(dom.rolesViewers?.value),
-  };
-  setDirty(true);
-}
-
-function splitLines(value) {
-  if (!value) return [];
-  return value
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-function addContainer() {
-  const container = {
-    title: "",
-    objects: [],
-  };
-  state.config.containers.push(container);
-  renderContainers();
-}
-
-function handleContainerActions(event) {
-  const actionBtn = event.target.closest("[data-action]");
-  if (!actionBtn) return;
-  const card = actionBtn.closest("[data-container-index]");
-  if (!card) return;
-  const containerIndex = Number(card.dataset.containerIndex || "0");
-  const action = actionBtn.dataset.action;
-  if (action === "toggle-collapse") {
-    const container = state.config.containers[containerIndex];
-    if (!container) return;
-    const shouldCollapse = !card.classList.contains("collapsed");
-    setContainerCollapsed(container, shouldCollapse);
-    card.classList.toggle("collapsed", shouldCollapse);
-    updateContainerToggleState(card, shouldCollapse);
-    updateExpandCollapseButton();
-    return;
-  }
-  if (!state.canEdit) return;
-  if (action === "add-object") {
-    addObject(containerIndex);
-  } else if (action === "remove-container") {
-    removeContainer(containerIndex);
-  } else if (action === "duplicate-container") {
-    duplicateContainer(containerIndex);
-  } else if (action === "remove-object") {
-    const objectCard = actionBtn.closest("[data-object-index]");
-    if (objectCard) {
-      removeObject(containerIndex, Number(objectCard.dataset.objectIndex || "0"));
-    }
-  } else if (action === "duplicate-object") {
-    const objectCard = actionBtn.closest("[data-object-index]");
-    if (objectCard) {
-      duplicateObject(containerIndex, Number(objectCard.dataset.objectIndex || "0"));
-    }
-  }
-}
-
-function addObject(containerIndex, type = "level") {
-  const container = state.config.containers[containerIndex];
-  if (!container) return;
-  const meta = resolveObjectMeta(type);
-  const object = clone(meta.defaults || { type });
-  container.objects.push(object);
-  setDirty(true);
-  renderContainers();
-}
-
-function removeContainer(containerIndex) {
-  const container = state.config.containers[containerIndex];
-  if (!container) return;
-  const confirmed = window.confirm("Eliminar contenedor y todos sus widgets?");
-  if (!confirmed) return;
-  state.config.containers.splice(containerIndex, 1);
-  setDirty(true);
-  renderContainers();
-}
-
-function duplicateContainer(containerIndex) {
-  const container = state.config.containers[containerIndex];
-  if (!container) return;
-  const copy = clone(container);
-  state.config.containers.splice(containerIndex + 1, 0, copy);
-  setDirty(true);
-  renderContainers();
-}
-
-function removeObject(containerIndex, objectIndex) {
-  const container = state.config.containers[containerIndex];
-  if (!container) return;
-  const confirmed = window.confirm("Eliminar este widget?");
-  if (!confirmed) return;
-  container.objects.splice(objectIndex, 1);
-  setDirty(true);
-  renderContainers();
-}
-
-function duplicateObject(containerIndex, objectIndex) {
-  const container = state.config.containers[containerIndex];
-  if (!container) return;
-  const object = container.objects[objectIndex];
-  if (!object) return;
-  container.objects.splice(objectIndex + 1, 0, clone(object));
-  setDirty(true);
-  renderContainers();
-}
-
-function toggleAllContainers() {
-  const containers = state.config.containers || [];
-  if (!containers.length) {
-    updateExpandCollapseButton();
-    return;
-  }
-  const allExpanded = containers.every((container) => !isContainerCollapsed(container));
-  const collapseAll = allExpanded;
-  containers.forEach((container) => {
-    setContainerCollapsed(container, collapseAll);
-  });
-  const cards = dom.containersList?.querySelectorAll("[data-container-index]") || [];
-  cards.forEach((card) => {
-    card.classList.toggle("collapsed", collapseAll);
-    updateContainerToggleState(card, collapseAll);
-  });
-  updateExpandCollapseButton();
-}
-
-function updateExpandCollapseButton() {
-  if (!dom.expandCollapse) return;
-  const containers = state.config.containers || [];
-  const total = containers.length;
-  const allExpanded = total === 0 || containers.every((container) => !isContainerCollapsed(container));
-  dom.expandCollapse.dataset.expanded = String(allExpanded);
-  dom.expandCollapse.textContent = allExpanded ? "Contraer todo" : "Expandir todo";
-  dom.expandCollapse.disabled = total === 0;
-}
-
-function updateContainerSummary(card, container) {
-  if (!card) return;
-  const summaryWidgets = card.querySelector('[data-summary="widgets"]');
-  const summaryTopics = card.querySelector('[data-summary="topics"]');
-  const widgets = container.objects ? container.objects.length : 0;
-  const topics = new Set((container.objects || []).map((obj) => (obj.topic || "").trim()).filter(Boolean));
-  if (summaryWidgets) {
-    summaryWidgets.textContent = widgets === 1 ? "1 widget" : `${widgets} widgets`;
-  }
-  if (summaryTopics) {
-    summaryTopics.textContent = topics.size === 1 ? "1 topic" : `${topics.size} topics`;
-  }
-}
-
-function setDirty(isDirty) {
-  state.dirty = isDirty;
-  if (!isDirty) return;
-  setStatus("Tienes cambios sin guardar.", "warning");
-}
-
-function applyPermissions() {
-  if (dom.root) {
-    dom.root.classList.toggle("readonly", !state.canEdit);
-  }
-  if (document.body) {
-    document.body.classList.toggle("readonly", !state.canEdit);
-  }
-  if (!state.canEdit) {
-    dom.saveBtn?.setAttribute("disabled", "");
-    dom.importBtn?.setAttribute("disabled", "");
-    dom.addContainer?.setAttribute("disabled", "");
-  } else {
-    dom.saveBtn?.removeAttribute("disabled");
-    dom.importBtn?.removeAttribute("disabled");
-    dom.addContainer?.removeAttribute("disabled");
-  }
-}
-function updateRoleBadge() {
-  dom.roleBadge.textContent = "Rol: " + state.role;
-  dom.roleBadge.classList.toggle("chip-connected", state.canEdit);
-  dom.roleBadge.classList.toggle("chip-disconnected", !state.canEdit);
-}
-
-function setStatus(message, tone = "info") {
-  if (!dom.statusBanner) return;
-  dom.statusBanner.textContent = message;
-  dom.statusBanner.classList.remove("success", "error", "warning");
-  if (tone !== "info") {
-    dom.statusBanner.classList.add(tone);
-  }
-}
-
-function parseNumber(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-}
-
-function clone(value) {
-  if (typeof structuredClone === "function") {
-    return structuredClone(value);
-  }
-  return JSON.parse(JSON.stringify(value));
-}
-
-function normalizeType(type) {
-  return String(type || "").toLowerCase();
-}
 
 function handleImportFile(event) {
   const file = event.target.files && event.target.files[0];
@@ -844,6 +386,8 @@ function handleImportFile(event) {
       const parsed = JSON.parse(text);
       const normalized = normalizeConfig(parsed);
       state.config = normalized;
+      state.empresaId = normalized.empresaId || state.empresaId;
+      state.config.empresaId = state.empresaId;
       containerUiState = new WeakMap();
       setDirty(true);
       renderAll();
@@ -860,6 +404,11 @@ function normalizeConfig(raw) {
   const base = createEmptyConfig();
   if (!raw || typeof raw !== "object") {
     return base;
+  }
+  if (typeof raw.empresaId === "string") {
+    base.empresaId = raw.empresaId.trim();
+  } else if (typeof raw.empresa_id === "string") {
+    base.empresaId = raw.empresa_id.trim();
   }
   if (typeof raw.mainTitle === "string") {
     base.mainTitle = raw.mainTitle;
@@ -903,6 +452,7 @@ function normalizeObject(raw) {
 
 function createEmptyConfig() {
   return {
+    empresaId: "",
     mainTitle: "",
     roles: {
       admins: [],
@@ -916,6 +466,296 @@ function createEmptyConfig() {
 function orFallback(code) {
   return "Error " + code;
 }
+function escapeHtml(value) {
+  if (value === undefined || value === null) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeCssEscape(value) {
+  if (typeof value !== "string") return "";
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(value);
+  }
+  return value.replace(/[^a-zA-Z0-9_-]/g, (match) => `\\${match}`);
+}
+
+async function loadTenants(force = false) {
+  if (!state.isMaster || !dom.masterPanel) return;
+  if (state.tenantLoading) return;
+  if (state.tenantsLoaded && !force) {
+    renderTenantList();
+    populateTenantCloneOptions();
+    return;
+  }
+  if (!state.token) return;
+  state.tenantLoading = true;
+  setTenantStatus("Cargando clientes...", "info");
+  try {
+    const response = await fetch(BACKEND_HTTP + "/tenants", {
+      headers: {
+        Authorization: "Bearer " + state.token,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const payload = await response.json();
+    const companies = Array.isArray(payload.companies) ? payload.companies : [];
+    state.tenants = companies.sort((a, b) => {
+      const nameA = (a.name || a.empresaId || "").toLowerCase();
+      const nameB = (b.name || b.empresaId || "").toLowerCase();
+      if (nameA < nameB) return -1;
+      if (nameA > nameB) return 1;
+      return 0;
+    });
+    state.tenantsLoaded = true;
+    renderTenantList();
+    populateTenantCloneOptions();
+    setTenantStatus("Lista actualizada", "success");
+  } catch (error) {
+    console.error("loadTenants", error);
+    setTenantStatus("No se pudo cargar la lista: " + ((error && error.message) || error), "error");
+  } finally {
+    state.tenantLoading = false;
+  }
+}
+
+function renderMasterPanel() {
+  if (!dom.masterPanel) return;
+  if (!state.isMaster) {
+    dom.masterPanel.hidden = true;
+    return;
+  }
+  dom.masterPanel.hidden = false;
+  if (!state.editingTenantId) {
+    resetTenantForm("create");
+  }
+  if (!state.tenantsLoaded && !state.tenantLoading) {
+    loadTenants().catch((err) => console.error("loadTenants", err));
+  } else {
+    renderTenantList();
+    populateTenantCloneOptions();
+  }
+  updateTenantFormHeader();
+}
+
+function renderTenantList() {
+  if (!dom.tenantList) return;
+  if (!state.tenants || !state.tenants.length) {
+    dom.tenantList.innerHTML = '<li class="tenant-item"><div class="tenant-item__header"><h4 class="tenant-item__title">Sin clientes registrados</h4></div><div class="tenant-item__meta">Crea uno nuevo desde el formulario.</div></li>';
+    return;
+  }
+  dom.tenantList.innerHTML = state.tenants
+    .map((tenant) => {
+      const title = escapeHtml(tenant.name || tenant.empresaId);
+      const description = tenant.description ? `<div class="tenant-item__meta">${escapeHtml(tenant.description)}</div>` : "";
+      const activeLabel = tenant.active ? 'Activo' : 'Inactivo';
+      const badge = `<span class="tenant-badge">${escapeHtml(tenant.empresaId)}</span>`;
+      const meta = `<div class="tenant-item__meta">${escapeHtml(activeLabel)}</div>`;
+      const isActive = state.empresaId && state.empresaId === tenant.empresaId;
+      const activeClass = isActive ? ' tenant-item--active' : '';
+      return `
+      <li class="tenant-item${activeClass}">
+        <div class="tenant-item__header">
+          <h4 class="tenant-item__title">${title}</h4>
+          ${badge}
+        </div>
+        ${meta}
+        ${description}
+        <div class="tenant-item__actions">
+          <button type="button" class="btn btn-link" data-action="switch" data-empresa="${escapeHtml(tenant.empresaId)}">Seleccionar</button>
+          <button type="button" class="btn btn-link" data-action="edit" data-empresa="${escapeHtml(tenant.empresaId)}">Editar</button>
+        </div>
+      </li>`;
+    })
+    .join("");
+}
+
+function populateTenantCloneOptions() {
+  if (!dom.tenantCloneFrom) return;
+  const current = dom.tenantCloneFrom.value;
+  const options = (state.tenants || [])
+    .map((tenant) => `<option value="${escapeHtml(tenant.empresaId)}">${escapeHtml(tenant.name || tenant.empresaId)}</option>`)
+    .join("");
+  dom.tenantCloneFrom.innerHTML = '<option value="">Config base (DEFAULT)</option>' + options;
+  if (current && dom.tenantCloneFrom.querySelector(`option[value="${safeCssEscape(current)}"]`)) {
+    dom.tenantCloneFrom.value = current;
+  }
+}
+
+function resetTenantForm(mode = "create") {
+  if (!dom.tenantForm) return;
+  dom.tenantForm.reset();
+  if (dom.tenantMode) {
+    dom.tenantMode.value = mode;
+  }
+  state.editingTenantId = mode === "update" ? state.editingTenantId : null;
+  if (dom.tenantEmpresaId) {
+    dom.tenantEmpresaId.disabled = mode === "update";
+    if (mode === "create") {
+      dom.tenantEmpresaId.value = "";
+    }
+  }
+  if (dom.tenantActive) {
+    dom.tenantActive.value = "true";
+  }
+  if (dom.tenantDescription) {
+    dom.tenantDescription.value = "";
+  }
+  if (dom.tenantCloneFrom) {
+    dom.tenantCloneFrom.value = "";
+  }
+  setTenantStatus("");
+  updateTenantFormHeader();
+}
+
+function fillTenantForm(tenant) {
+  if (!tenant) return;
+  state.editingTenantId = tenant.empresaId;
+  if (dom.tenantMode) {
+    dom.tenantMode.value = "update";
+  }
+  if (dom.tenantEmpresaId) {
+    dom.tenantEmpresaId.value = tenant.empresaId;
+    dom.tenantEmpresaId.disabled = true;
+  }
+  if (dom.tenantName) {
+    dom.tenantName.value = tenant.name || "";
+  }
+  if (dom.tenantDescription) {
+    dom.tenantDescription.value = tenant.description || "";
+  }
+  if (dom.tenantActive) {
+    dom.tenantActive.value = tenant.active ? "true" : "false";
+  }
+  setTenantStatus("Editando cliente " + tenant.empresaId);
+  updateTenantFormHeader();
+}
+
+function updateTenantFormHeader() {
+  if (!dom.tenantFormTitle || !dom.tenantSubmit) return;
+  const mode = dom.tenantMode.value || "create";
+  if (mode === "update" && state.editingTenantId) {
+    dom.tenantFormTitle.textContent = "Editar cliente";
+    dom.tenantSubmit.textContent = "Guardar cambios";
+  } else {
+    dom.tenantFormTitle.textContent = "Crear cliente";
+    dom.tenantSubmit.textContent = "Crear cliente";
+  }
+}
+
+function setTenantStatus(message, type = "info") {
+  if (!dom.tenantStatus) return;
+  dom.tenantStatus.textContent = message || "";
+  switch (type) {
+    case "success":
+      dom.tenantStatus.style.color = "#6cffd6";
+      break;
+    case "error":
+      dom.tenantStatus.style.color = "#ff9fb4";
+      break;
+    default:
+      dom.tenantStatus.style.color = "var(--text-muted)";
+  }
+}
+
+async function submitTenantForm(event) {
+  event.preventDefault();
+  if (!state.token) {
+    setTenantStatus("Sesion expirada. Vuelve a iniciar sesion.", "error");
+    return;
+  }
+  if (!dom.tenantEmpresaId || !dom.tenantActive) {
+    setTenantStatus("Formulario no disponible", "error");
+    return;
+  }
+  const mode = dom.tenantMode?.value || "create";
+  const empresaId = dom.tenantEmpresaId.value.trim();
+  const name = dom.tenantName?.value?.trim() || "";
+  const description = dom.tenantDescription?.value?.trim() || "";
+  const active = dom.tenantActive.value === "true";
+  const cloneFrom = dom.tenantCloneFrom?.value?.trim() || "";
+  if (!empresaId && mode === "create") {
+    setTenantStatus("Debes indicar un empresaId.", "error");
+    dom.tenantEmpresaId.focus();
+    return;
+  }
+  try {
+    setTenantStatus(mode === "create" ? "Creando cliente..." : "Actualizando cliente...", "info");
+    let response;
+    if (mode === "create") {
+      const payload = { empresaId, name, description, active, cloneFrom: cloneFrom || undefined };
+      response = await fetch(BACKEND_HTTP + "/tenants", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + state.token,
+        },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      if (!state.editingTenantId) {
+        throw new Error("Selecciona un cliente para editar");
+      }
+      const payload = { name, description, active };
+      response = await fetch(`${BACKEND_HTTP}/tenants/${encodeURIComponent(state.editingTenantId)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + state.token,
+        },
+        body: JSON.stringify(payload),
+      });
+    }
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    await loadTenants(true);
+    if (mode === "create") {
+      resetTenantForm("create");
+      setTenantStatus("Cliente creado", "success");
+    } else {
+      setTenantStatus("Cliente actualizado", "success");
+    }
+  } catch (error) {
+    console.error("submitTenantForm", error);
+    setTenantStatus("Operacion fallida: " + ((error && error.message) || error), "error");
+  }
+}
+
+function handleTenantListClick(event) {
+  const target = event.target.closest('button[data-action]');
+  if (!target) return;
+  const empresaId = target.dataset.empresa || "";
+  if (!empresaId) return;
+  if (target.dataset.action === "switch") {
+    selectTenant(empresaId);
+  } else if (target.dataset.action === "edit") {
+    const tenant = (state.tenants || []).find((item) => item.empresaId === empresaId);
+    if (tenant) {
+      fillTenantForm(tenant);
+    }
+  }
+}
+
+function selectTenant(empresaId) {
+  if (!empresaId) return;
+  state.empresaId = empresaId;
+  setDirty(false);
+  loadConfig(true, empresaId).catch((err) => {
+    console.error("selectTenant", err);
+    setStatus("No se pudo cambiar de empresa: " + ((err && err.message) || err), "error");
+  });
+}
+
+
 async function saveConfig() {
   if (!state.canEdit) {
     setStatus("No tienes permisos para guardar.", "warning");
@@ -923,7 +763,9 @@ async function saveConfig() {
   }
   try {
     const prepared = prepareConfigForSave();
-    const response = await fetch(BACKEND_HTTP + "/config", {
+    const empresaId = state.isMaster && state.empresaId ? state.empresaId : null;
+    const query = empresaId ? `?empresaId=${encodeURIComponent(empresaId)}` : "";
+    const response = await fetch(BACKEND_HTTP + "/config" + query, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -944,6 +786,7 @@ async function saveConfig() {
 }
 function prepareConfigForSave() {
   const cloneConfig = clone(state.config);
+  cloneConfig.empresaId = state.empresaId || cloneConfig.empresaId || "";
   cloneConfig.roles = {
     admins: splitLines(dom.rolesAdmins?.value),
     operators: splitLines(dom.rolesOperators?.value),
@@ -1022,11 +865,20 @@ function downloadConfig() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "scada_config.json";
+  const empresaSlug = (state.empresaId || "config").replace(/[^A-Za-z0-9_-]+/g, "_") || "config";
+  link.download = `${empresaSlug}_scada_config.json`;
   link.click();
   URL.revokeObjectURL(url);
   setStatus("Archivo descargado.", "success");
 }
+
+
+
+
+
+
+
+
 
 
 
