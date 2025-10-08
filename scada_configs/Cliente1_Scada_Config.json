@@ -1,6 +1,6 @@
 {
   "empresaId": "default",
-  "mainTitle": "SCADA Web Demo Rev7",
+  "mainTitle": "SCADA Web Lagia",
   "roles": {
     "admins": [
       "lagia.sur.p@gmail.com"
@@ -11,38 +11,7 @@
     "viewers": []
   },
   "containers": [
-    {
-      "title": "Siemens",
-      "objects": [
-        {
-          "type": "startBtn",
-          "label": "Partir_Vent",
-          "topic": "Siemens/Partir",
-          "color": "#00b3ff",
-          "payload": "1"
-        },
-        {
-          "type": "stopBtn",
-          "label": "Parar",
-          "topic": "Siemens/Parar",
-          "color": "#ff0000",
-          "payload": "0"
-        },
-        {
-          "type": "pumpStatus",
-          "label": "Estado Ventilador",
-          "topic": "Siemens/Sts",
-          "onColor": "#00ff00",
-          "offColor": "#6c757d"
-        },
-        {
-          "type": "number",
-          "label": "PresiÃ³n",
-          "topic": "Siemens/PV",
-          "unit": "PSI"
-        }
-      ]
-    },
+  
     {
       "title": "Micrologix",
       "objects": [
