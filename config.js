@@ -907,3 +907,11 @@ function downloadConfig() {
 
 
 
+
+
+function setStatus(message, type = "info") {
+  if (!dom.statusBanner) return;
+  dom.statusBanner.textContent = message || "";
+  dom.statusBanner.classList.remove("success", "error", "warning", "info");
+  dom.statusBanner.classList.add(type || "info");
+}
