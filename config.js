@@ -201,6 +201,26 @@ function applyPermissions() {
   dom.containersList?.classList.toggle("is-readonly", !canEdit);
 }
 
+function toggleAllContainers() {
+  if (!dom.containersList) return;
+  const cards = Array.from(dom.containersList.querySelectorAll('.container-card'));
+  if (!cards.length) return;
+  const shouldExpand = cards.some((card) => card.classList.contains('collapsed'));
+  cards.forEach((card) => {
+    const nextStateCollapsed = !shouldExpand;
+    card.classList.toggle('collapsed', nextStateCollapsed);
+    const toggleBtn = card.querySelector('[data-action="toggle-collapse"]');
+    if (toggleBtn) {
+      if (nextStateCollapsed) {
+        toggleBtn.textContent = 'Expandir';
+        toggleBtn.setAttribute('aria-expanded', 'false');
+      } else {
+        toggleBtn.textContent = 'Contraer';
+        toggleBtn.setAttribute('aria-expanded', 'true');
+      }
+    }
+  });
+}
 
 let containerUiState = new WeakMap();
 
