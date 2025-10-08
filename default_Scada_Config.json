@@ -1,0 +1,117 @@
+{
+  "empresaId": "default",
+  "mainTitle": "SCADA Web Demo default Rev8.3",
+  "roles": {
+    "admins": [
+      "sepulvedacartes.p@gmail.com"
+    ],
+    "operators": [
+      "sepulvedacartes.p@gmail.com"
+    ],
+    "viewers": []
+  },
+  "containers": [
+    {
+      "title": "Siemens",
+      "objects": [
+        {
+          "type": "startBtn",
+          "label": "Partir_Vent",
+          "topic": "Siemens/Partir",
+          "color": "#00b3ff",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "Siemens/Parar",
+          "color": "#ff0000",
+          "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Estado Ventilador",
+          "topic": "Siemens/Sts",
+          "onColor": "#00ff00",
+          "offColor": "#6c757d"
+        },
+        {
+          "type": "number",
+          "label": "PresiÃ³n",
+          "topic": "Siemens/PV",
+          "unit": "PSI"
+        }
+      ]
+    },
+    {
+      "title": "Micrologix",
+      "objects": [
+        {
+          "type": "level",
+          "label": "Nivel Estanque",
+          "topic": "Micro/NivelTK",
+          "unit": "%",
+          "color": "#00b3ff",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir bba 1",
+          "topic": "Micro/PumpCmdStart2",
+          "color": "#1eff00",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar bba 1",
+          "topic": "Micro/PumpCmdStop2",
+          "color": "#ff0000",
+          "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Estado bomba",
+          "topic": "Micro/PumpSts2",
+          "onColor": "#00ff00",
+          "offColor": "#6c757d"
+        }
+      ]
+    },
+    {
+      "title": "Compact Logix",
+      "objects": [
+        {
+          "type": "level",
+          "label": "Estanque",
+          "topic": "PLC/NivelTK",
+          "unit": "m3",
+          "color": "#00b3ff",
+          "min": 0,
+          "max": 1000
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "PLC/PumpCmdStart",
+          "color": "#00b3ff",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Detener",
+          "topic": "PLC/PumpCmdStop",
+          "color": "#ff0000",
+          "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Estado",
+          "topic": "PLC/PumpSts",
+          "onColor": "#00ff00",
+          "offColor": "#6c757d"
+        }
+      ]
+    }
+  ]
+}
