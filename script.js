@@ -21,6 +21,7 @@ const loginDialog = document.getElementById("login-dialog");
 const connectChip = document.getElementById("connect-status");
 const configLink = document.getElementById("config-link");
 const currentUserLabel = document.getElementById("current-user");
+const currentCompanyLabel = document.getElementById("current-company");
 const scadaContainer = document.getElementById("scada-container");
 const viewMatrixBtn = document.getElementById("view-matrix");
 const viewSidebarBtn = document.getElementById("view-sidebar");
