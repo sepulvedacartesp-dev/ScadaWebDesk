@@ -6,5 +6,34 @@
     "operators": [],
     "viewers": []
   },
-  "containers": []
+  "containers": [
+    {
+      "title": "PLC Siemens S71211C",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "Presion",
+          "topic": "Siemens/PV",
+          "unit": "PSI",
+          "color": "#00b4d8",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "startBtn",
+          "label": "Start FAN",
+          "topic": "Siemens/Partir",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "Siemens/Parar",
+          "color": "#ef476f",
+          "payload": "0"
+        }
+      ]
+    }
+  ]
 }
