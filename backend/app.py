@@ -71,7 +71,28 @@ COMPANIES_LOCK = threading.Lock()
 
 def config_path_for_company(company_id: str) -> Path:
     sanitized = sanitize_company_id(company_id)
-    return CONFIG_STORAGE_DIR / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
+    target = CONFIG_STORAGE_DIR / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
+    if target.exists():
+        return target
+
+    legacy_name = f"{sanitized}{CONFIG_FILENAME_SUFFIX}".lower()
+    try:
+        for candidate in CONFIG_STORAGE_DIR.glob(f"*{CONFIG_FILENAME_SUFFIX}"):
+            if not candidate.is_file():
+                continue
+            if candidate.name.lower() != legacy_name:
+                continue
+            if candidate == target:
+                return candidate
+            try:
+                candidate.rename(target)
+                return target
+            except OSError as exc:
+                logger.warning("No se pudo renombrar %s a %s: %s", candidate, target, exc)
+                return candidate
+    except FileNotFoundError:
+        CONFIG_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    return target
 
 def github_path_for_company(company_id: str, local_path: Path) -> str:
     sanitized = sanitize_company_id(company_id)
