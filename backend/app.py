@@ -71,25 +71,24 @@ COMPANIES_LOCK = threading.Lock()
 
 def config_path_for_company(company_id: str) -> Path:
     sanitized = sanitize_company_id(company_id)
-    target = CONFIG_STORAGE_DIR / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
-    if sanitized == DEFAULT_COMPANY_ID and LEGACY_SINGLE_CONFIG_PATH is not None:
-        if target.exists():
-            return target
-        if LEGACY_SINGLE_CONFIG_PATH.exists():
-            return LEGACY_SINGLE_CONFIG_PATH
-    return target
+    return CONFIG_STORAGE_DIR / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
 
 def github_path_for_company(company_id: str, local_path: Path) -> str:
     sanitized = sanitize_company_id(company_id)
     if GITHUB_FILE_PATH:
-        if '{company}' in GITHUB_FILE_PATH:
-            return GITHUB_FILE_PATH.format(company=sanitized)
-        base_path = Path(GITHUB_FILE_PATH)
+        template = GITHUB_FILE_PATH
+        if '{empresa}' in template and '{company}' not in template:
+            template = template.replace('{empresa}', '{company}')
+        if '{company}' in template:
+            return template.format(company=sanitized)
+        base_path = Path(template)
         if base_path.suffix:
+            directory = base_path.parent
             if sanitized == DEFAULT_COMPANY_ID:
                 target = base_path
             else:
-                target = base_path.parent / f"{sanitized}_{base_path.name}"
+                filename = f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
+                target = directory / filename if directory.parts else Path(filename)
         else:
             target = base_path / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
         return str(target).replace('\\', '/')
@@ -248,7 +247,7 @@ GITHUB_SYNC_ENABLED = os.getenv("GITHUB_SYNC_ENABLED", "0").strip() == "1"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
 GITHUB_REPO = os.getenv("GITHUB_REPO", "").strip()
 GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main").strip()
-GITHUB_FILE_PATH = os.getenv("GITHUB_FILE_PATH", "scada_config.json").strip().lstrip("/")
+GITHUB_FILE_PATH = os.getenv("GITHUB_FILE_PATH", "scada_configs/{company}_Scada_Config.json").strip().lstrip("/")
 GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com").strip().rstrip("/")
 GITHUB_API_VERSION = os.getenv("GITHUB_API_VERSION", "2022-11-28").strip()
 GITHUB_HTTP_TIMEOUT = float(os.getenv("GITHUB_HTTP_TIMEOUT", "20"))
@@ -441,20 +440,39 @@ def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def load_scada_config(company_id: str) -> Dict[str, Any]:
     try:
-        path = config_path_for_company(company_id)
+        sanitized = sanitize_company_id(company_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Empresa inválida: {exc}") from exc
+    path = config_path_for_company(sanitized)
+    legacy_path: Optional[Path] = None
+    if sanitized == DEFAULT_COMPANY_ID and LEGACY_SINGLE_CONFIG_PATH is not None and LEGACY_SINGLE_CONFIG_PATH.exists():
+        legacy_path = LEGACY_SINGLE_CONFIG_PATH
     try:
         with path.open("r", encoding="utf-8") as fh:
             data = json.load(fh)
     except FileNotFoundError:
-        logger.warning("Config file %s not found for empresa %s, using defaults", path, company_id)
+        if legacy_path:
+            logger.info("Migrating legacy config from %s to %s", legacy_path, path)
+            try:
+                with legacy_path.open("r", encoding="utf-8") as legacy_fh:
+                    legacy_data = json.load(legacy_fh)
+            except json.JSONDecodeError as exc:
+                logger.error("Legacy config JSON invalid for %s: %s", legacy_path, exc)
+                raise HTTPException(status_code=500, detail="Invalid configuration file")
+            normalized = normalize_config(legacy_data)
+            normalized["empresaId"] = sanitized
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w", encoding="utf-8") as fh:
+                json.dump(normalized, fh, ensure_ascii=False, indent=2)
+                fh.write("\n")
+            return normalized
+        logger.warning("Config file %s not found for empresa %s, using defaults", path, sanitized)
         data = {}
     except json.JSONDecodeError as exc:
         logger.error("Config JSON invalid for %s: %s", path, exc)
         raise HTTPException(status_code=500, detail="Invalid configuration file")
     normalized = normalize_config(data)
-    normalized["empresaId"] = company_id
+    normalized["empresaId"] = sanitized
     return normalized
 
 
