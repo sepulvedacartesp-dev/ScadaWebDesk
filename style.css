@@ -516,7 +516,7 @@ body {
   left: 50%;
   bottom: 0;
   width: 0;
-  height: 46%;
+  height: 92%;
   transform-origin: bottom center;
   transform: rotate(-90deg);
   transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
