@@ -557,25 +557,34 @@ function createPumpStatus(id, label, onColor, offColor) {
 function createGauge(id, label, unit, min, max, color) {
   const wrapper = document.createElement("div");
   wrapper.className = "gauge-container";
+  if (color) {
+    wrapper.style.setProperty('--gauge-accent', color);
+  }
   const dial = document.createElement("div");
   dial.className = "gauge-dial";
-  const fill = document.createElement("div");
-  fill.id = id;
-  fill.className = "gauge-fill";
-  if (color) {
-    fill.style.background = color;
+
+  const ticksFragment = document.createDocumentFragment();
+  const tickSteps = 10;
+  for (let i = 0; i <= tickSteps; i += 1) {
+    const tick = document.createElement('span');
+    tick.className = 'gauge-tick';
+    if (i % 5 === 0) {
+      tick.classList.add('is-major');
+    }
+    const rotation = -90 + (i / tickSteps) * 180;
+    tick.style.transform = `rotate(${rotation}deg) translateY(-6%)`;
+    ticksFragment.appendChild(tick);
   }
-  dial.appendChild(fill);
-  const center = document.createElement("div");
-  center.className = "gauge-center";
-  const labelEl = document.createElement("div");
-  labelEl.className = "gauge-label";
-  labelEl.textContent = `${label || "Indicador"} (${unit || ""})`;
-  const valueEl = document.createElement("div");
-  valueEl.id = `${id}-value`;
-  valueEl.className = "gauge-value";
-  valueEl.textContent = "0";
-  wrapper.append(dial, center, labelEl, valueEl);
+  dial.appendChild(ticksFragment);
+
+  const needle = document.createElement('div');
+  needle.id = id;
+  needle.className = 'gauge-needle';
+  dial.appendChild(needle);
+
+  const center = document.createElement('div');
+  center.className = 'gauge-center';
+  dial.appendChild(center);
 
   const minValue = Number.isFinite(min) ? min : 0;
   let maxValue;
@@ -591,6 +600,43 @@ function createGauge(id, label, unit, min, max, color) {
   }
   const span = maxValue - minValue;
 
+  const formatValue = (num, digits = 1) => {
+    if (!Number.isFinite(num)) return '--';
+    return Number.isInteger(num) ? num.toString() : num.toFixed(digits);
+  };
+
+  const scale = document.createElement('div');
+  scale.className = 'gauge-scale';
+  const minLabel = document.createElement('span');
+  minLabel.textContent = formatValue(minValue);
+  const maxLabel = document.createElement('span');
+  maxLabel.textContent = formatValue(maxValue);
+  scale.append(minLabel, maxLabel);
+
+  const info = document.createElement('div');
+  info.className = 'gauge-info';
+  const labelEl = document.createElement('div');
+  labelEl.className = 'gauge-label';
+  labelEl.textContent = label || 'Indicador';
+  const reading = document.createElement('div');
+  reading.className = 'gauge-reading';
+  const valueEl = document.createElement('span');
+  valueEl.id = `${id}-value`;
+  valueEl.className = 'gauge-value';
+  valueEl.textContent = '0';
+  const unitEl = document.createElement('span');
+  unitEl.className = 'gauge-unit';
+  const unitText = unit ? String(unit).trim() : '';
+  if (unitText) {
+    unitEl.textContent = unitText;
+  } else {
+    unitEl.classList.add('is-hidden');
+  }
+  reading.append(valueEl, unitEl);
+  info.append(labelEl, reading);
+
+  wrapper.append(dial, scale, info);
+
   return {
     element: wrapper,
     update: (value) => {
@@ -599,8 +645,8 @@ function createGauge(id, label, unit, min, max, color) {
       const clamped = Math.min(Math.max(numeric, minValue), maxValue);
       const ratio = span === 0 ? 0 : (clamped - minValue) / span;
       const angle = ratio * 180 - 90;
-      fill.style.transform = `rotate(${angle}deg)`;
-      valueEl.textContent = numeric.toFixed(1);
+      needle.style.transform = `rotate(${angle}deg)`;
+      valueEl.textContent = formatValue(clamped);
     }
   };
 }
