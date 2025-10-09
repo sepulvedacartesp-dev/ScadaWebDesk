@@ -112,6 +112,7 @@ const OBJECT_TYPES = [
 ];
 
 const OBJECT_TYPE_MAP = new Map(OBJECT_TYPES.map((item) => [item.value.toLowerCase(), item]));
+const MAX_WIDGETS_PER_CONTAINER = 6;
 
 const state = {
   token: null,
@@ -172,6 +173,7 @@ const dom = {
 };
 
 let containerUiState = new WeakMap();
+let objectUiState = new WeakMap();
 
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -270,6 +272,7 @@ async function onAuthStateChanged(user) {
     state.tenantLoading = false;
     state.editingTenantId = null;
     containerUiState = new WeakMap();
+    objectUiState = new WeakMap();
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
@@ -327,6 +330,7 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     state.config = config;
     state.config.empresaId = state.empresaId;
     containerUiState = new WeakMap();
+    objectUiState = new WeakMap();
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
@@ -436,6 +440,7 @@ function renderContainers() {
         btn.removeAttribute('disabled');
       }
     });
+    applyContainerCapacityState(card, container);
     dom.containersList.appendChild(card);
   });
   updateExpandCollapseButton();
@@ -468,6 +473,33 @@ function updateContainerToggleState(card, collapsed) {
   toggleBtn.textContent = collapsed ? 'Expandir' : 'Contraer';
 }
 
+function ensureObjectUiState(object) {
+  if (!object || typeof object !== 'object') return;
+  if (!objectUiState.has(object)) {
+    objectUiState.set(object, { collapsed: false });
+  }
+}
+
+function isObjectCollapsed(object) {
+  const entry = objectUiState.get(object);
+  return !!(entry && entry.collapsed);
+}
+
+function setObjectCollapsed(object, collapsed) {
+  if (!object || typeof object !== 'object') return;
+  const entry = objectUiState.get(object) || {};
+  entry.collapsed = !!collapsed;
+  objectUiState.set(object, entry);
+}
+
+function updateObjectToggleState(card, collapsed) {
+  if (!card) return;
+  const toggleBtn = card.querySelector('[data-action="toggle-object-collapse"]');
+  if (!toggleBtn) return;
+  toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+  toggleBtn.textContent = collapsed ? 'Expandir' : 'Contraer';
+}
+
 function formatContainerTitle(title, index) {
   const base = title && title.trim() ? title.trim() : `Contenedor ${index + 1}`;
   return base;
@@ -495,6 +527,13 @@ function renderObjects(card, container, containerIndex) {
     const advancedWrapper = objCard.querySelector('[data-advanced="wrapper"]');
     const meta = resolveObjectMeta(object.type);
     const labelPreview = object.label && object.label.trim() ? object.label.trim() : `Widget ${objectIndex + 1}`;
+    ensureObjectUiState(object);
+    const collapsed = isObjectCollapsed(object);
+    objCard.classList.toggle('collapsed', collapsed);
+    updateObjectToggleState(objCard, collapsed);
+    if (advancedWrapper && collapsed && typeof advancedWrapper.open === 'boolean') {
+      advancedWrapper.open = false;
+    }
     if (header) {
       header.textContent = `${labelPreview} - ${meta.label}`;
     }
@@ -754,6 +793,24 @@ function handleContainerActions(event) {
     updateExpandCollapseButton();
     return;
   }
+  if (action === 'toggle-object-collapse') {
+    const container = state.config.containers?.[containerIndex];
+    if (!container) return;
+    const objectCard = actionBtn.closest('[data-object-index]');
+    if (!objectCard) return;
+    const objectIndex = Number(objectCard.dataset.objectIndex || '0');
+    const targetObject = container.objects?.[objectIndex];
+    if (!targetObject) return;
+    const shouldCollapse = !objectCard.classList.contains('collapsed');
+    setObjectCollapsed(targetObject, shouldCollapse);
+    objectCard.classList.toggle('collapsed', shouldCollapse);
+    updateObjectToggleState(objectCard, shouldCollapse);
+    const advancedWrapper = objectCard.querySelector('[data-advanced="wrapper"]');
+    if (shouldCollapse && advancedWrapper && typeof advancedWrapper.open === 'boolean') {
+      advancedWrapper.open = false;
+    }
+    return;
+  }
   if (!state.canEdit) return;
   if (action === 'add-object') {
     addObject(containerIndex);
@@ -777,9 +834,13 @@ function handleContainerActions(event) {
 function addObject(containerIndex, type = 'level') {
   const container = state.config.containers?.[containerIndex];
   if (!container) return;
+  container.objects = Array.isArray(container.objects) ? container.objects : [];
+  if (!containerHasCapacity(container)) {
+    setStatus(`Cada contenedor admite un maximo de ${MAX_WIDGETS_PER_CONTAINER} widgets.`, 'warning');
+    return;
+  }
   const meta = resolveObjectMeta(type);
   const object = clone(meta.defaults || { type });
-  container.objects = Array.isArray(container.objects) ? container.objects : [];
   container.objects.push(object);
   setDirty(true);
   renderContainers();
@@ -814,6 +875,11 @@ function removeObject(containerIndex, objectIndex) {
 function duplicateObject(containerIndex, objectIndex) {
   const container = state.config.containers?.[containerIndex];
   if (!container) return;
+  container.objects = Array.isArray(container.objects) ? container.objects : [];
+  if (!containerHasCapacity(container)) {
+    setStatus(`Cada contenedor admite un maximo de ${MAX_WIDGETS_PER_CONTAINER} widgets.`, 'warning');
+    return;
+  }
   const object = container.objects?.[objectIndex];
   if (!object) return;
   container.objects.splice(objectIndex + 1, 0, clone(object));
@@ -863,6 +929,36 @@ function updateContainerSummary(card, container) {
   if (summaryTopics) {
     summaryTopics.textContent = topics.size === 1 ? '1 topic' : `${topics.size} topics`;
   }
+}
+
+function containerHasCapacity(container) {
+  const objects = Array.isArray(container?.objects) ? container.objects : [];
+  return objects.length < MAX_WIDGETS_PER_CONTAINER;
+}
+
+function applyContainerCapacityState(card, container) {
+  if (!card || !container) return;
+  const hasCapacity = containerHasCapacity(container);
+  const addBtn = card.querySelector('[data-action="add-object"]');
+  if (addBtn) {
+    if (!state.canEdit || !hasCapacity) {
+      addBtn.setAttribute('disabled', '');
+    } else {
+      addBtn.removeAttribute('disabled');
+    }
+  }
+  const capacityMessage = card.querySelector('[data-capacity-message]');
+  if (capacityMessage) {
+    capacityMessage.hidden = hasCapacity;
+  }
+  const duplicateButtons = card.querySelectorAll('[data-action="duplicate-object"]');
+  duplicateButtons.forEach((btn) => {
+    if (!state.canEdit || !hasCapacity) {
+      btn.setAttribute('disabled', '');
+    } else {
+      btn.removeAttribute('disabled');
+    }
+  });
 }
 
 function setDirty(isDirty) {
@@ -936,6 +1032,7 @@ function handleImportFile(event) {
       state.empresaId = normalized.empresaId || state.empresaId;
       state.config.empresaId = state.empresaId;
       containerUiState = new WeakMap();
+      objectUiState = new WeakMap();
       setDirty(true);
       renderAll();
       setStatus("Archivo importado. Revisa y guarda para aplicar.", "info");
