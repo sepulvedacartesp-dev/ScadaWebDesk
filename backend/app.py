@@ -459,6 +459,64 @@ def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def fetch_config_from_github(company_id: str, local_path: Path) -> Optional[Dict[str, Any]]:
+    if not GITHUB_SYNC_ENABLED:
+        return None
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        logger.warning("GitHub fetch omitido: falta GITHUB_TOKEN o GITHUB_REPO")
+        return None
+    api_base = GITHUB_API_URL or "https://api.github.com"
+    remote_path = github_path_for_company(company_id, local_path)
+    url = f"{api_base}/repos/{GITHUB_REPO}/contents/{remote_path}"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    if GITHUB_API_VERSION:
+        headers["X-GitHub-Api-Version"] = GITHUB_API_VERSION
+    params = {"ref": GITHUB_BRANCH} if GITHUB_BRANCH else None
+    timeout = GITHUB_HTTP_TIMEOUT if GITHUB_HTTP_TIMEOUT > 0 else 20.0
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=timeout)
+    except requests.RequestException as exc:
+        logger.error("No se pudo obtener config %s desde GitHub: %s", remote_path, exc)
+        return None
+    if response.status_code == 404:
+        logger.warning("Config %s no encontrada en GitHub", remote_path)
+        return None
+    if response.status_code != 200:
+        logger.error("GitHub respondio %s al obtener %s: %s", response.status_code, remote_path, response.text)
+        raise HTTPException(status_code=502, detail="Error al obtener configuracion desde GitHub")
+    payload = response.json()
+    encoded = payload.get("content")
+    if not encoded:
+        logger.error("Respuesta de GitHub sin contenido para %s", remote_path)
+        raise HTTPException(status_code=502, detail="Contenido de GitHub invalido")
+    encoding = payload.get("encoding", "base64")
+    if encoding != "base64":
+        logger.error("GitHub devolvio encoding %s para %s", encoding, remote_path)
+        raise HTTPException(status_code=502, detail="Codificacion de GitHub no soportada")
+    try:
+        raw_bytes = base64.b64decode(encoded)
+        text_payload = raw_bytes.decode("utf-8")
+    except Exception as exc:
+        logger.error("No se pudo decodificar contenido de GitHub para %s: %s", remote_path, exc)
+        raise HTTPException(status_code=502, detail="Contenido de GitHub no decodificable")
+    try:
+        data = json.loads(text_payload)
+    except json.JSONDecodeError as exc:
+        logger.error("Config JSON invalido obtenido de GitHub para %s: %s", remote_path, exc)
+        raise HTTPException(status_code=500, detail="Configuracion remota invalida")
+    normalized = normalize_config(data if isinstance(data, dict) else {})
+    normalized["empresaId"] = company_id
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    with local_path.open("w", encoding="utf-8") as fh:
+        json.dump(normalized, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    logger.info("Config %s cargada desde GitHub", remote_path)
+    return normalized
+
+
 def load_scada_config(company_id: str) -> Dict[str, Any]:
     try:
         sanitized = sanitize_company_id(company_id)
@@ -487,6 +545,9 @@ def load_scada_config(company_id: str) -> Dict[str, Any]:
                 json.dump(normalized, fh, ensure_ascii=False, indent=2)
                 fh.write("\n")
             return normalized
+        fetched = fetch_config_from_github(sanitized, path)
+        if fetched is not None:
+            return fetched
         logger.warning("Config file %s not found for empresa %s, using defaults", path, sanitized)
         data = {}
     except json.JSONDecodeError as exc:
