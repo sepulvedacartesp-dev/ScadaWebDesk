@@ -217,9 +217,22 @@ function updateRoleUI() {
   });
 }
 
-function setCurrentUser(email) {
-  currentUserLabel.textContent = email || "AnÃ³nimo";
+function setCurrentUser(email, empresaId) {
+  if (currentUserLabel) {
+    currentUserLabel.textContent = email || 'Anonimo';
+  }
+  if (currentCompanyLabel) {
+    if (empresaId) {
+      currentCompanyLabel.hidden = false;
+      currentCompanyLabel.textContent = `Empresa: ${empresaId}`;
+    } else {
+      currentCompanyLabel.hidden = true;
+      currentCompanyLabel.textContent = '';
+    }
+  }
 }
+
+
 
 function determineRole(email) {
   if (!scadaConfig || !email) return "operador";
@@ -713,6 +726,8 @@ async function hydrateDashboard(user, { forceRefresh = false } = {}) {
     currentRole = role || "operador";
     clearDashboard();
     renderDashboard();
+    const resolvedEmpresa = empresaId || currentCompanyId;
+    setCurrentUser(user.email, resolvedEmpresa);
     if (empresaId) {
       setStatus(`Tablero cargado (${empresaId})`);
     } else {
