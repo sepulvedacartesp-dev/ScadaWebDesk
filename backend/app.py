@@ -1,4 +1,6 @@
 ﻿import os
+import io
+import hmac
 import json
 import base64
 import ssl
@@ -8,14 +10,15 @@ import logging
 import re
 import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any, Set, Tuple
 from pathlib import Path
 from datetime import datetime
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from fastapi.responses import StreamingResponse, JSONResponse
 
 import firebase_admin
 from firebase_admin import auth as firebase_auth
@@ -276,6 +279,9 @@ GITHUB_COMMITTER_NAME = os.getenv("GITHUB_COMMITTER_NAME", "SCADA Bot").strip() 
 GITHUB_COMMITTER_EMAIL = os.getenv("GITHUB_COMMITTER_EMAIL", "scada-bot@example.com").strip() or "scada-bot@example.com"
 GITHUB_COMMIT_MESSAGE = os.getenv("GITHUB_COMMIT_MESSAGE", "Actualiza scada_config.json desde SCADA Web").strip() or "Actualiza scada_config.json desde SCADA Web"
 GITHUB_AUTHOR_NAME = os.getenv("GITHUB_AUTHOR_NAME", "").strip()
+GITHUB_CONFIG_TEMPLATE = os.getenv("GITHUB_CONFIG_TEMPLATE", "configs/{empresa_id}_config.xlsx").strip().lstrip("/")
+GITHUB_PLAN_TEMPLATE = os.getenv("GITHUB_PLAN_TEMPLATE", "status/{empresa_id}.json").strip().lstrip("/")
+PROXY_SHARED_SECRET = os.getenv("PROXY_SHARED_SECRET", "").strip()
 EMPRESA_CLAIM_KEYS = ("empresaId", "empresa_id", "empresa", "companyId", "company_id", "company", "tenantId", "tenant_id", "tenant")
 GOOGLE_REQUEST = google_requests.Request()
 
@@ -460,6 +466,7 @@ def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def fetch_config_from_github(company_id: str, local_path: Path) -> Optional[Dict[str, Any]]:
+
     if not GITHUB_SYNC_ENABLED:
         return None
     if not GITHUB_TOKEN or not GITHUB_REPO:
@@ -515,6 +522,41 @@ def fetch_config_from_github(company_id: str, local_path: Path) -> Optional[Dict
         fh.write("\n")
     logger.info("Config %s cargada desde GitHub", remote_path)
     return normalized
+
+
+def render_github_template(template: str, empresa_id: str) -> str:
+    sanitized = sanitize_company_id(empresa_id)
+    try:
+        rendered = template.format(empresa_id=sanitized, empresa=sanitized, company=sanitized)
+    except KeyError as exc:
+        raise ValueError(f"Plantilla GitHub inválida: {exc}") from exc
+    return rendered.strip().lstrip("/")
+
+
+def fetch_github_binary(remote_path: str) -> Tuple[bytes, Dict[str, Any]]:
+    if not remote_path:
+        raise HTTPException(status_code=500, detail="Ruta remota vacía")
+    if not GITHUB_REPO:
+        raise HTTPException(status_code=503, detail="GITHUB_REPO no está configurado")
+    timeout = GITHUB_HTTP_TIMEOUT if GITHUB_HTTP_TIMEOUT > 0 else 20.0
+    url = f"{GITHUB_API_URL or 'https://api.github.com'}/repos/{GITHUB_REPO}/contents/{remote_path.lstrip('/')}"
+    headers: Dict[str, str] = {"Accept": "application/vnd.github.raw"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    if GITHUB_API_VERSION:
+        headers["X-GitHub-Api-Version"] = GITHUB_API_VERSION
+    params = {"ref": GITHUB_BRANCH} if GITHUB_BRANCH else None
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=timeout)
+    except requests.RequestException as exc:
+        logger.error("No se pudo descargar %s desde GitHub: %s", remote_path, exc)
+        raise HTTPException(status_code=502, detail="No se pudo contactar a GitHub") from exc
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    if response.status_code != 200:
+        logger.error("GitHub respondió %s al solicitar %s: %s", response.status_code, remote_path, response.text)
+        raise HTTPException(status_code=502, detail="Error al descargar archivo de GitHub")
+    return response.content, response.headers
 
 
 def load_scada_config(company_id: str) -> Dict[str, Any]:
@@ -856,6 +898,62 @@ def ensure_mqtt_connected():
 
 
 
+def require_proxy_token(x_proxy_token: Optional[str] = Header(None, alias="X-Proxy-Token")) -> None:
+    if not PROXY_SHARED_SECRET:
+        return
+    if not x_proxy_token:
+        raise HTTPException(status_code=401, detail="Falta X-Proxy-Token")
+    if not hmac.compare_digest(x_proxy_token, PROXY_SHARED_SECRET):
+        raise HTTPException(status_code=401, detail="X-Proxy-Token inválido")
+
+
+@app.get("/api/proxy/config/{empresa_id}")
+async def proxy_download_config(empresa_id: str, _: None = Depends(require_proxy_token)):
+    try:
+        remote_path = render_github_template(GITHUB_CONFIG_TEMPLATE, empresa_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    content, headers = fetch_github_binary(remote_path)
+    filename = Path(remote_path).name or f"{sanitize_company_id(empresa_id)}.xlsx"
+    buffer = io.BytesIO(content)
+    buffer.seek(0)
+    stream = StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    stream.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    etag = headers.get("ETag") if isinstance(headers, dict) else None
+    if etag:
+        stream.headers["ETag"] = etag
+    last_modified = headers.get("Last-Modified") if isinstance(headers, dict) else None
+    if last_modified:
+        stream.headers["Last-Modified"] = last_modified
+    stream.headers.setdefault("Cache-Control", "private, max-age=60")
+    return stream
+
+
+@app.get("/api/proxy/plan/{empresa_id}")
+async def proxy_plan_status(empresa_id: str, _: None = Depends(require_proxy_token)):
+    try:
+        remote_path = render_github_template(GITHUB_PLAN_TEMPLATE, empresa_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    content, headers = fetch_github_binary(remote_path)
+    try:
+        data = json.loads(content.decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=502, detail="Plan remoto no es texto UTF-8") from exc
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail="Plan remoto no es JSON válido") from exc
+    response = JSONResponse(content=data)
+    etag = headers.get("ETag") if isinstance(headers, dict) else None
+    if etag:
+        response.headers["ETag"] = etag
+    last_modified = headers.get("Last-Modified") if isinstance(headers, dict) else None
+    if last_modified:
+        response.headers["Last-Modified"] = last_modified
+    response.headers.setdefault("Cache-Control", "private, max-age=60")
+    return response
+
+
+
 @app.get("/config")
 def get_config_endpoint(authorization: Optional[str] = Header(None), empresa_id: Optional[str] = Query(None)):
     decoded = verify_bearer_token(authorization)
@@ -1112,6 +1210,12 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
             await websocket.close()
         except Exception:
             pass
+
+
+
+
+
+
 
 
 
