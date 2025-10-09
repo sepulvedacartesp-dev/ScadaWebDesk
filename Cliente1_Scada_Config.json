@@ -1,5 +1,5 @@
 {
-  "empresaId": "default",
+  "empresaId": "Cliente1",
   "mainTitle": "SCADA Web Lagia",
   "roles": {
     "admins": [
@@ -12,41 +12,6 @@
   },
   "containers": [
   
-    {
-      "title": "Micrologix",
-      "objects": [
-        {
-          "type": "level",
-          "label": "Nivel Estanque",
-          "topic": "Micro/NivelTK",
-          "unit": "%",
-          "color": "#00b3ff",
-          "min": 0,
-          "max": 100
-        },
-        {
-          "type": "startBtn",
-          "label": "Partir bba 1",
-          "topic": "Micro/PumpCmdStart2",
-          "color": "#1eff00",
-          "payload": "1"
-        },
-        {
-          "type": "stopBtn",
-          "label": "Parar bba 1",
-          "topic": "Micro/PumpCmdStop2",
-          "color": "#ff0000",
-          "payload": "0"
-        },
-        {
-          "type": "pumpStatus",
-          "label": "Estado bomba",
-          "topic": "Micro/PumpSts2",
-          "onColor": "#00ff00",
-          "offColor": "#6c757d"
-        }
-      ]
-    },
     {
       "title": "Compact Logix",
       "objects": [

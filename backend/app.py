@@ -454,7 +454,7 @@ def load_scada_config(company_id: str) -> Dict[str, Any]:
         logger.error("Config JSON invalid for %s: %s", path, exc)
         raise HTTPException(status_code=500, detail="Invalid configuration file")
     normalized = normalize_config(data)
-    normalized.setdefault("empresaId", company_id)
+    normalized["empresaId"] = company_id
     return normalized
 
 
