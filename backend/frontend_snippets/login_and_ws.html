@@ -1,4 +1,4 @@
-<!-- Agrega esto en tu index.html o en una página de login -->
+<!-- Agrega esto en tu index.html o en una pagina de login -->
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
 <script>
@@ -12,13 +12,14 @@
 
 <form onsubmit="doLogin(event)">
   <input type="email" id="email" placeholder="Email" required>
-  <input type="password" id="password" placeholder="Contraseña" required>
+  <input type="password" id="password" placeholder="Contrasena" required>
   <button type="submit">Ingresar</button>
 </form>
 
 <script>
 let ws = null;
 let uid = null;
+let empresaId = null;
 let idToken = null;
 
 async function doLogin(ev) {
@@ -39,8 +40,12 @@ function connectWS() {
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === "hello") {
-      console.log("Conectado como", msg.uid, "prefixes:", msg.allowed_prefixes);
-    } else if (msg.topic) {
+      uid = msg.uid;
+      empresaId = msg.empresaId || null;
+      console.log("Conectado como", uid, "empresa:", empresaId, "prefixes:", msg.allowed_prefixes);
+      return;
+    }
+    if (msg.topic) {
       console.log("MQTT", msg.topic, msg.payload);
       // TODO: actualizar UI
     }
@@ -50,7 +55,11 @@ function connectWS() {
 
 function publishRelative(relativePath, payload, qos=0, retain=false) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  const base = "scada/customers/" + uid + "/";
+  if (!empresaId) {
+    console.warn("Empresa no asignada aun; espera el mensaje hello del backend.");
+    return;
+  }
+  const base = "scada/customers/" + empresaId + "/";
   ws.send(JSON.stringify({type: "publish", topic: base + relativePath, payload, qos, retain}));
 }
 </script>

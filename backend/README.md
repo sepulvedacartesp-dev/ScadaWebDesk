@@ -46,7 +46,7 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 - Healthcheck: `GET http://127.0.0.1:8000/health`
 - WebSocket: `ws://127.0.0.1:8000/ws?token=<ID_TOKEN>`
-- Publicar: `POST http://127.0.0.1:8000/publish` con header `Authorization: Bearer <ID_TOKEN>` y cuerpo JSON `{ "topic": "scada/customers/<uid>/demo", "payload": {"ok": true} }`.
+- Publicar: `POST http://127.0.0.1:8000/publish` con header `Authorization: Bearer <ID_TOKEN>` y cuerpo JSON `{ "topic": "scada/customers/<empresaId>/demo", "payload": {"ok": true} }`.
 
 ## Despliegue en Render
 Configura el servicio exactamente con los siguientes valores:
@@ -72,7 +72,7 @@ Configura el servicio exactamente con los siguientes valores:
 3. Implementa login Email/Password y recupera el `ID Token` actual con `firebase.auth().currentUser.getIdToken(true)`.
 4. Abre el WebSocket contra `wss://scadawebdesk.onrender.com/ws?token=<ID_TOKEN>`.
 5. Publica usando el mensaje JSON `{type:"publish", topic, payload, qos, retain}`.
-6. Para publicar en tu scope, usa ``const base = `scada/customers/${empresaId}/${uid}/`;`` y concatena los paths relativos definidos para tu empresa en `scada_configs/<empresaId>_Scada_Config.json`.
+6. Para publicar en tu scope, usa ``const base = `scada/customers/${empresaId}/`;`` y concatena los paths relativos definidos para tu empresa en `scada_configs/<empresaId>_Scada_Config.json`.
 
 ## Gestion de clientes multiempresa
 - `GET /tenants`: lista todas las empresas configuradas (solo para administradores maestros).
@@ -85,7 +85,7 @@ Configura el servicio exactamente con los siguientes valores:
 1. `GET https://scadawebdesk.onrender.com/health` responde `{ "status": "ok" }`.
 2. Login correcto en el frontend muestra el mensaje `hello` inicial con `uid` y `allowed_prefixes` desde el WebSocket.
 3. Llamada `publishRelative("lab/echo", { msg: "hola", ts: Date.now() })` emite el `ack` y el mensaje se refleja en la consola del navegador.
-4. Publicar desde HiveMQ (con las credenciales del backend) en `scada/customers/<uid>/lab/externo` se refleja en el navegador.
+4. Publicar desde HiveMQ (con las credenciales del backend) en `scada/customers/<empresaId>/lab/externo` se refleja en el navegador.
 5. (Opcional) Solicitud `GET /` o `/publish` con token invalido responde `401`.
 6. Render mantiene el servicio activo tras cold start (espera hasta 50 s en primer request).
 

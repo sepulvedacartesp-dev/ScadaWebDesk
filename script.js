@@ -48,8 +48,9 @@ function normalizeRelativePath(relPath) {
 }
 
 function scopedTopic(relative) {
-  if (!uid) return null;
-  const base = currentCompanyId ? `scada/customers/${currentCompanyId}/${uid}` : `scada/customers/${uid}`;
+  const empresa = currentCompanyId || scadaConfig?.empresaId || null;
+  if (!empresa) return null;
+  const base = `scada/customers/${empresa}`;
   return `${base}/${normalizeRelativePath(relative)}`;
 }
 
@@ -185,7 +186,6 @@ function handleTopicMessage({ topic, payload }) {
 
 function applyScopedTopics() {
   topicElementMap.clear();
-  if (!uid) return;
   widgetBindings.forEach((binding) => {
     const fullTopic = scopedTopic(binding.topic);
     if (!fullTopic) return;
@@ -687,13 +687,9 @@ function publishRelative(relativePath, payload, qos = 0, retain = false) {
     console.warn("No se puede publicar: WS cerrado");
     return;
   }
-  if (!uid) {
-    console.warn("No se puede publicar: UID no definido");
-    return;
-  }
   const topic = scopedTopic(relativePath);
   if (!topic) {
-    console.warn("No se pudo publicar: empresa o UID no definidos");
+    console.warn("No se pudo publicar: empresa no definida");
     return;
   }
   const message = { type: "publish", topic, payload, qos, retain };

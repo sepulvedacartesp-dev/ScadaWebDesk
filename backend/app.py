@@ -843,10 +843,10 @@ def extract_company_id(decoded: Dict[str, Any]) -> str:
 def allowed_prefixes_for_user(uid: str, company_id: Optional[str]) -> List[str]:
     base = TOPIC_BASE.rstrip("/")
     if company_id:
-        per_user = f"{base}/{company_id}/{uid}"
+        scoped = f"{base}/{company_id}"
     else:
-        per_user = f"{base}/{uid}"
-    prefixes = [per_user]
+        scoped = f"{base}/{uid}"
+    prefixes = [scoped]
     prefixes.extend(PUBLIC_ALLOWED_PREFIXES)
     return prefixes
 
