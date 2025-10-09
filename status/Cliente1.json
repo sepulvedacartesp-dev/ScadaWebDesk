@@ -1,0 +1,9 @@
+{
+    "empresa_id": "Cliente1",
+    "active": true,
+    "message": "Suscripción activa para Cliente1",
+    "expires_at": "2025-12-31T23:59:59Z",
+    "plan": "PRO",
+    "updated_at": "2025-10-09T21:50:00Z"
+  }
+  
