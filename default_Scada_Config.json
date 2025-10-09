@@ -1,0 +1,10 @@
+{
+  "empresaId": "default",
+  "mainTitle": "SCADA TuNetgocio",
+  "roles": {
+    "admins": [],
+    "operators": [],
+    "viewers": []
+  },
+  "containers": []
+}
