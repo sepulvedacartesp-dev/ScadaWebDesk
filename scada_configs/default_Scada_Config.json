@@ -29,14 +29,14 @@
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "Micro/PumpSmdStart",
+          "topic": "Micro/PumpCmdStart",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "Micro/PumpSmdStop",
+          "topic": "Micro/PumpCmdStop",
           "color": "#ef476f",
           "payload": "0"
         }
