@@ -6,5 +6,41 @@
     "operators": [],
     "viewers": []
   },
-  "containers": []
+  "containers": [
+    {
+      "title": "PLC Micrologix 1100",
+      "objects": [
+        {
+          "type": "level",
+          "label": "Nivel",
+          "topic": "Micro/NivelTK",
+          "unit": "%",
+          "color": "#00b4d8",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Nivel",
+          "topic": "Micro/PumpSts",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "Micro/PumpSmdStart",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "Micro/PumpSmdStop",
+          "color": "#ef476f",
+          "payload": "0"
+        }
+      ]
+    }
+  ]
 }
