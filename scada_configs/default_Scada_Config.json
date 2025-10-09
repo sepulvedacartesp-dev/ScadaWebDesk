@@ -21,7 +21,7 @@
         },
         {
           "type": "pumpStatus",
-          "label": "Nivel",
+          "label": "Bomba",
           "topic": "Micro/PumpSts",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
