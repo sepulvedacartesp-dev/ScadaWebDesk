@@ -1,9 +1,11 @@
-{
-    "empresa_id": "default",
-    "active": true,
-    "message": "Suscripción activa para default",
-    "expires_at": "2025-12-31T23:59:59Z",
-    "plan": "PRO",
-    "updated_at": "2025-10-09T21:50:00Z"
-  }
-  
+﻿{
+    "empresa_id":  "default",
+    "active":  true,
+    "message":  "SuscripciÃ³n activa para Cliente1",
+    "expires_at":  "2025-12-31T23:59:59Z",
+    "plan":  "PRO",
+    "updated_at":  "2025-10-09T21:50:00Z",
+    "mqtt_client_id":  "550bffa3b80b4956be6a94fdcd65b4d1.s1.eu.hivemq.cloud",
+    "mqtt_user":  "hivemq.webclient.1760456891150",
+    "mqtt_pass":  "!A07Y1<,v&er4LfHFpQo"
+}
