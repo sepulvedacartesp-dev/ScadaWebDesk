@@ -3,7 +3,9 @@
   "mainTitle": "SCADA Web Lagia V1",
   "roles": {
     "admins": [],
-    "operators": [],
+    "operators": [
+      "alt.f4-do41i4d7@yopmail.com"
+    ],
     "viewers": []
   },
   "containers": [
