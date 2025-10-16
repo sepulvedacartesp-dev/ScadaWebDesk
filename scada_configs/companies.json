@@ -1,0 +1,23 @@
+{
+  "companies": [
+    {
+      "empresaId": "default",
+      "name": "default",
+      "description": "",
+      "active": true,
+      "createdAt": "2025-01-01T00:00:00Z",
+      "updatedAt": "2025-01-01T00:00:00Z",
+      "mqttBrokerKey": "default"
+    },
+    {
+      "empresaId": "cliente1",
+      "name": "Cliente 1",
+      "description": "Empresa de ejemplo con broker dedicado",
+      "active": true,
+      "createdAt": "2025-01-01T00:00:00Z",
+      "updatedAt": "2025-01-01T00:00:00Z",
+      "mqttBrokerKey": "cliente1"
+    }
+  ],
+  "updatedAt": "2025-01-01T00:00:00Z"
+}
