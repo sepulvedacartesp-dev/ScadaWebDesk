@@ -1140,7 +1140,7 @@ def list_company_users(company_id: str) -> List[Dict[str, Any]]:
     normalized = normalize_config(cfg)
     roles = normalize_role_lists(normalized)
     try:
-        page = firebase_auth.list_users()
+        page = firebase_auth.list_users(app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         logger.warning("No se pudo listar usuarios desde Firebase: %s", exc)
         return users_from_roles_snapshot(company_id, roles)
@@ -1606,7 +1606,7 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
     if not email:
         raise HTTPException(status_code=400, detail="email requerido")
     try:
-        user_record = firebase_auth.create_user(email=email)
+        user_record = firebase_auth.create_user(email=email, app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         if getattr(exc, "code", "") == "email-already-exists":
             raise HTTPException(status_code=409, detail="El correo ya esta registrado") from exc
@@ -1617,18 +1617,18 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
         raise HTTPException(status_code=502, detail=f"No se pudo crear el usuario: {exc}") from exc
     claims = merge_custom_claims({}, company_id, role)
     try:
-        firebase_auth.set_custom_user_claims(user_record.uid, claims)
+        firebase_auth.set_custom_user_claims(user_record.uid, claims, app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         logger.exception("No se pudo asignar claims para %s: %s", email, exc)
         try:
-            firebase_auth.delete_user(user_record.uid)
+            firebase_auth.delete_user(user_record.uid, app=firebase_app)
         except Exception:
             logger.exception("No se pudo revertir usuario creado %s", email)
         raise HTTPException(status_code=502, detail=f"No se pudo asignar claims al usuario: {exc}") from exc
     except Exception as exc:
         logger.exception("Error inesperado asignando claims para %s: %s", email, exc)
         try:
-            firebase_auth.delete_user(user_record.uid)
+            firebase_auth.delete_user(user_record.uid, app=firebase_app)
         except Exception:
             logger.exception("No se pudo revertir usuario creado %s", email)
         raise HTTPException(status_code=502, detail=f"No se pudo asignar claims al usuario: {exc}") from exc
@@ -1637,7 +1637,7 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
     except Exception as exc:
         logger.exception("No se pudo actualizar roles para %s: %s", email, exc)
         try:
-            firebase_auth.delete_user(user_record.uid)
+            firebase_auth.delete_user(user_record.uid, app=firebase_app)
         except Exception:
             logger.exception("No se pudo revertir usuario tras fallo de configuracion %s", email)
         raise HTTPException(status_code=500, detail="No se pudo actualizar la configuracion de la empresa") from exc
@@ -1647,7 +1647,7 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
     action_settings = build_action_code_settings()
     reset_link = None
     try:
-        reset_link = firebase_auth.generate_password_reset_link(email, action_settings)
+        reset_link = firebase_auth.generate_password_reset_link(email, action_settings, app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         logger.warning("No se pudo generar link de recuperacion para %s: %s", email, exc)
     invite_sent = False
@@ -1675,7 +1675,7 @@ def delete_user_endpoint(uid: str, authorization: Optional[str] = Header(None), 
     decoded = verify_bearer_token(authorization)
     actor_email = decoded.get("email")
     try:
-        user_record = firebase_auth.get_user(uid)
+        user_record = firebase_auth.get_user(uid, app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         if getattr(exc, "code", "") == "user-not-found":
             raise HTTPException(status_code=404, detail="Usuario no encontrado") from exc
@@ -1690,7 +1690,7 @@ def delete_user_endpoint(uid: str, authorization: Optional[str] = Header(None), 
         if claims.get("isMasterAdmin") or claims.get("masterAdmin"):
             raise HTTPException(status_code=403, detail="No puedes eliminar un administrador maestro")
     try:
-        firebase_auth.delete_user(uid)
+        firebase_auth.delete_user(uid, app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         logger.exception("No se pudo eliminar usuario %s: %s", uid, exc)
         raise HTTPException(status_code=502, detail="No se pudo eliminar el usuario") from exc
@@ -1707,7 +1707,7 @@ def reset_user_password(uid: str, payload: UserResetRequest, authorization: Opti
     decoded = verify_bearer_token(authorization)
     actor_email = decoded.get("email")
     try:
-        user_record = firebase_auth.get_user(uid)
+        user_record = firebase_auth.get_user(uid, app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         if getattr(exc, "code", "") == "user-not-found":
             raise HTTPException(status_code=404, detail="Usuario no encontrado") from exc
@@ -1721,7 +1721,7 @@ def reset_user_password(uid: str, payload: UserResetRequest, authorization: Opti
     company_id = ensure_company_admin(decoded, target_company)
     action_settings = build_action_code_settings(payload.continueUrl)
     try:
-        reset_link = firebase_auth.generate_password_reset_link(user_record.email, action_settings)
+        reset_link = firebase_auth.generate_password_reset_link(user_record.email, action_settings, app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         logger.exception("No se pudo generar enlace de reinicio para %s: %s", user_record.email, exc)
         raise HTTPException(status_code=502, detail="No se pudo generar el enlace de restablecimiento") from exc
