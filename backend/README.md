@@ -27,6 +27,8 @@ HIVEMQ_PASSWORD=PASSWORD_MQTT
 MQTT_TLS=1
 MQTT_TLS_INSECURE=0
 MQTT_CA_CERT_PATH=
+MQTT_KEEPALIVE=30
+MQTT_BROKER_PROFILES={"default":{"host":"xxxxxx.s1.eu.hivemq.cloud","port":8883,"username":"USUARIO_MQTT","password":"PASSWORD_MQTT"}}
 
 TOPIC_BASE=scada/customers
 PUBLIC_ALLOWED_PREFIXES=public/broadcast
@@ -34,6 +36,7 @@ DEFAULT_EMPRESA_ID=default
 MASTER_ADMIN_EMAILS=maestro@tuempresa.com
 MASTER_ADMIN_ROLE_NAMES=master,root
 ```
+`MQTT_BROKER_PROFILES` permite definir un mapa JSON plano `{ "claveBroker": { ... } }`. Cada entrada hereda las credenciales base (`HIVEMQ_*`) y puede sobrescribir `host`, `port`, `username`, `password`, `tls`, `tlsInsecure`, `caCertPath`, `clientId` y `keepalive`. Usa la clave `default` para la configuración por omisión y agrega entradas adicionales (`cliente1`, `cliente2`, etc.) para asignarlas a empresas concretas.
 Si necesitas validar revocacion de tokens, agrega `FIREBASE_SERVICE_ACCOUNT` con el JSON completo del service account.
 
 ## Ejecucion local
@@ -77,17 +80,18 @@ Configura el servicio exactamente con los siguientes valores:
 ## Gestion de clientes multiempresa
 - `GET /tenants`: lista todas las empresas configuradas (solo para administradores maestros).
 - `GET /tenants/{empresaId}`: devuelve el detalle de una empresa.
-- `POST /tenants`: crea una nueva empresa (`empresaId`, `name`, `description`, `cloneFrom`). Genera automaticamente el archivo `scada_configs/<empresaId>_Scada_Config.json`.
-- `PUT /tenants/{empresaId}`: actualiza nombre, descripcion o estado `active`.
+- `POST /tenants`: crea una nueva empresa (`empresaId`, `name`, `description`, `cloneFrom`, `mqttBrokerKey`). Genera automaticamente el archivo `scada_configs/<empresaId>_Scada_Config.json`.
+- `PUT /tenants/{empresaId}`: actualiza nombre, descripcion, estado `active` y la asignación `mqttBrokerKey`.
 - `GET /config?empresaId=<id>` y `PUT /config?empresaId=<id>` permiten a los maestros editar la configuracion de cualquier cliente.
 
 ## Pruebas y criterios de aceptacion
 1. `GET https://scadawebdesk.onrender.com/health` responde `{ "status": "ok" }`.
-2. Login correcto en el frontend muestra el mensaje `hello` inicial con `uid` y `allowed_prefixes` desde el WebSocket.
+2. Login correcto en el frontend muestra el mensaje `hello` inicial con `uid`, `empresaId`, `allowed_prefixes` y `broker` desde el WebSocket.
 3. Llamada `publishRelative("lab/echo", { msg: "hola", ts: Date.now() })` emite el `ack` y el mensaje se refleja en la consola del navegador.
-4. Publicar desde HiveMQ (con las credenciales del backend) en `scada/customers/<empresaId>/lab/externo` se refleja en el navegador.
-5. (Opcional) Solicitud `GET /` o `/publish` con token invalido responde `401`.
-6. Render mantiene el servicio activo tras cold start (espera hasta 50 s en primer request).
+4. El `ack` de `/publish` y del WebSocket incluye la clave de broker utilizada (`broker`).
+5. Publicar desde HiveMQ (con las credenciales del broker asignado) en `scada/customers/<empresaId>/lab/externo` se refleja en el navegador.
+6. (Opcional) Solicitud `GET /` o `/publish` con token invalido responde `401`.
+7. Render mantiene el servicio activo tras cold start (espera hasta 50 s en primer request).
 
 ## Buenas practicas adicionales
 - Mantener `MQTT_TLS_INSECURE=0`; solo cambiar a 1 si usas certificados autofirmados.

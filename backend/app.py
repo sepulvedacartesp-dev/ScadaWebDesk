@@ -1,6 +1,4 @@
 ﻿import os
-import io
-import hmac
 import json
 import base64
 import ssl
@@ -10,15 +8,15 @@ import logging
 import re
 import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import List, Optional, Dict, Any, Set, Tuple
+from typing import List, Optional, Dict, Any, Set
 from pathlib import Path
 from datetime import datetime
+from dataclasses import dataclass
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from fastapi.responses import StreamingResponse, JSONResponse
 
 import firebase_admin
 from firebase_admin import auth as firebase_auth
@@ -42,6 +40,11 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_ENV_PATH = os.getenv('SCADA_CONFIG_PATH')
 CONFIG_FILENAME_SUFFIX = "_Scada_Config.json"
 
+DEFAULT_BROKER_KEY = "default"
+AVAILABLE_BROKER_KEYS: Set[str] = set()
+COMPANY_BROKER_MAP: Dict[str, str] = {}
+COMPANY_BROKER_LOCK = threading.Lock()
+
 def sanitize_company_id(raw: Optional[str]) -> str:
     if raw is None:
         raise ValueError("Empresa no definida")
@@ -50,6 +53,41 @@ def sanitize_company_id(raw: Optional[str]) -> str:
     if not sanitized:
         raise ValueError("Empresa no definida")
     return sanitized
+
+
+def sanitize_broker_key(raw: Optional[str]) -> str:
+    if raw is None:
+        raise ValueError("Broker no definido")
+    sanitized = re.sub(r'[^A-Za-z0-9_-]+', '_', str(raw).strip())
+    sanitized = sanitized.strip('_')
+    if not sanitized:
+        raise ValueError("Broker no definido")
+    return sanitized
+
+
+def coerce_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def coerce_int(value: Any, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def coerce_str(value: Any, default: str) -> str:
+    if value is None:
+        return default
+    return str(value).strip()
 
 
 DEFAULT_COMPANY_ID = sanitize_company_id(os.getenv('DEFAULT_EMPRESA_ID', 'default') or 'default')
@@ -151,6 +189,23 @@ def normalize_company_entry(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         created_at = now
     if not updated_at:
         updated_at = created_at
+    broker_candidate = (
+        entry.get("mqttBrokerKey")
+        or entry.get("mqtt_broker_key")
+        or entry.get("mqttBroker")
+        or entry.get("brokerKey")
+        or entry.get("broker")
+    )
+    broker_key = DEFAULT_BROKER_KEY
+    if broker_candidate:
+        try:
+            broker_key = sanitize_broker_key(broker_candidate)
+        except ValueError:
+            logger.warning("Clave de broker invalida %s para empresa %s; usando default", broker_candidate, empresa_id)
+            broker_key = DEFAULT_BROKER_KEY
+    if AVAILABLE_BROKER_KEYS and broker_key not in AVAILABLE_BROKER_KEYS:
+        logger.warning("Broker %s no configurado; usando default para empresa %s", broker_key, empresa_id)
+        broker_key = DEFAULT_BROKER_KEY
     return {
         "empresaId": empresa_id,
         "name": name,
@@ -158,6 +213,7 @@ def normalize_company_entry(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "active": active,
         "createdAt": created_at,
         "updatedAt": updated_at,
+        "mqttBrokerKey": broker_key,
     }
 
 
@@ -192,8 +248,17 @@ def load_companies() -> List[Dict[str, Any]]:
             "active": True,
             "createdAt": now,
             "updatedAt": now,
+            "mqttBrokerKey": DEFAULT_BROKER_KEY,
         }
-    return sorted(companies.values(), key=lambda item: (item["empresaId"] != DEFAULT_COMPANY_ID, item["name"].lower(), item["empresaId"]))
+    sorted_companies = sorted(
+        companies.values(),
+        key=lambda item: (item["empresaId"] != DEFAULT_COMPANY_ID, item["name"].lower(), item["empresaId"])
+    )
+    with COMPANY_BROKER_LOCK:
+        COMPANY_BROKER_MAP.clear()
+        for entry in sorted_companies:
+            COMPANY_BROKER_MAP[entry["empresaId"]] = entry.get("mqttBrokerKey") or DEFAULT_BROKER_KEY
+    return sorted_companies
 
 
 def save_companies(companies: List[Dict[str, Any]]) -> None:
@@ -217,6 +282,7 @@ def save_companies(companies: List[Dict[str, Any]]) -> None:
             "active": True,
             "createdAt": now,
             "updatedAt": now,
+            "mqttBrokerKey": DEFAULT_BROKER_KEY,
         })
     sanitized.sort(key=lambda item: (item["empresaId"] != DEFAULT_COMPANY_ID, item["name"].lower(), item["empresaId"]))
     payload = {"companies": sanitized, "updatedAt": current_utc_iso()}
@@ -225,6 +291,10 @@ def save_companies(companies: List[Dict[str, Any]]) -> None:
         with COMPANIES_PATH.open("w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False, indent=2)
             fh.write("\n")
+    with COMPANY_BROKER_LOCK:
+        COMPANY_BROKER_MAP.clear()
+        for entry in sanitized:
+            COMPANY_BROKER_MAP[entry["empresaId"]] = entry.get("mqttBrokerKey") or DEFAULT_BROKER_KEY
 
 
 def find_company(companies: List[Dict[str, Any]], empresa_id: str) -> Optional[Dict[str, Any]]:
@@ -236,6 +306,23 @@ def find_company(companies: List[Dict[str, Any]], empresa_id: str) -> Optional[D
         if entry.get("empresaId") == sanitized:
             return entry
     return None
+
+
+def broker_key_for_company(company_id: str) -> str:
+    try:
+        sanitized = sanitize_company_id(company_id)
+    except ValueError:
+        return DEFAULT_BROKER_KEY
+    with COMPANY_BROKER_LOCK:
+        cached = COMPANY_BROKER_MAP.get(sanitized)
+    if cached and cached in AVAILABLE_BROKER_KEYS:
+        return cached
+    load_companies()
+    with COMPANY_BROKER_LOCK:
+        cached = COMPANY_BROKER_MAP.get(sanitized)
+    if cached and cached in AVAILABLE_BROKER_KEYS:
+        return cached
+    return DEFAULT_BROKER_KEY
 
 
 def is_master_admin(decoded: Optional[Dict[str, Any]]) -> bool:
@@ -279,9 +366,6 @@ GITHUB_COMMITTER_NAME = os.getenv("GITHUB_COMMITTER_NAME", "SCADA Bot").strip() 
 GITHUB_COMMITTER_EMAIL = os.getenv("GITHUB_COMMITTER_EMAIL", "scada-bot@example.com").strip() or "scada-bot@example.com"
 GITHUB_COMMIT_MESSAGE = os.getenv("GITHUB_COMMIT_MESSAGE", "Actualiza scada_config.json desde SCADA Web").strip() or "Actualiza scada_config.json desde SCADA Web"
 GITHUB_AUTHOR_NAME = os.getenv("GITHUB_AUTHOR_NAME", "").strip()
-GITHUB_CONFIG_TEMPLATE = os.getenv("GITHUB_CONFIG_TEMPLATE", "configs/{empresa_id}_config.xlsx").strip().lstrip("/")
-GITHUB_PLAN_TEMPLATE = os.getenv("GITHUB_PLAN_TEMPLATE", "status/{empresa_id}.json").strip().lstrip("/")
-PROXY_SHARED_SECRET = os.getenv("PROXY_SHARED_SECRET", "").strip()
 EMPRESA_CLAIM_KEYS = ("empresaId", "empresa_id", "empresa", "companyId", "company_id", "company", "tenantId", "tenant_id", "tenant")
 GOOGLE_REQUEST = google_requests.Request()
 
@@ -306,6 +390,8 @@ MQTT_TLS = os.getenv("MQTT_TLS", "1").strip() == "1"
 MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "0").strip() == "1"
 MQTT_CA_CERT_PATH = os.getenv("MQTT_CA_CERT_PATH", "").strip()
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "webbridge-backend")
+MQTT_KEEPALIVE = int(os.getenv("MQTT_KEEPALIVE", "30"))
+MQTT_BROKER_PROFILES_RAW = os.getenv("MQTT_BROKER_PROFILES", "").strip()
 
 TOPIC_BASE = os.getenv("TOPIC_BASE", "scada/customers").strip()
 PUBLIC_ALLOWED_PREFIXES = [p.strip() for p in os.getenv("PUBLIC_ALLOWED_PREFIXES", "").split(",") if p.strip()]
@@ -314,8 +400,219 @@ FIREBASE_SERVICE_ACCOUNT = os.getenv("FIREBASE_SERVICE_ACCOUNT", "").strip()
 
 if not FIREBASE_PROJECT_ID:
     raise RuntimeError("FIREBASE_PROJECT_ID is required")
-if not MQTT_HOST:
-    raise RuntimeError("HIVEMQ_HOST is required")
+if not (MQTT_HOST or MQTT_BROKER_PROFILES_RAW):
+    raise RuntimeError("HIVEMQ_HOST is required (o configure MQTT_BROKER_PROFILES)")
+
+
+@dataclass
+class BrokerProfile:
+    key: str
+    host: str
+    port: int
+    username: str
+    password: str
+    tls: bool
+    tls_insecure: bool
+    ca_cert_path: Optional[str]
+    client_id: Optional[str]
+    keepalive: int
+
+    def client_identifier(self, base_client_id: str) -> str:
+        if self.client_id:
+            return self.client_id
+        if self.key == DEFAULT_BROKER_KEY:
+            return base_client_id
+        return f"{base_client_id}-{self.key}"
+
+
+class BrokerManager:
+    def __init__(self, base_profile: Dict[str, Any], raw_profiles: str, topic_base: str,
+                 public_prefixes: List[str], default_client_id: str):
+        self.base_profile = dict(base_profile)
+        self.raw_profiles = raw_profiles
+        self.topic_base = topic_base
+        self.public_prefixes = list(public_prefixes)
+        self.default_client_id = default_client_id
+        self.profiles: Dict[str, BrokerProfile] = {}
+        self.clients: Dict[str, mqtt.Client] = {}
+        self.connected_events: Dict[str, threading.Event] = {}
+        self._parse_profiles()
+        self._init_clients()
+
+    def _parse_profiles(self) -> None:
+        definitions: Dict[str, Dict[str, Any]] = {}
+        if self.raw_profiles:
+            try:
+                raw_data = json.loads(self.raw_profiles)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"MQTT_BROKER_PROFILES JSON invalido: {exc}") from exc
+            if not isinstance(raw_data, dict):
+                raise RuntimeError("MQTT_BROKER_PROFILES debe ser un objeto JSON {\"brokerKey\": {}}")
+            for raw_key, raw_conf in raw_data.items():
+                try:
+                    key = sanitize_broker_key(raw_key)
+                except ValueError as exc:
+                    raise RuntimeError(f"Clave de broker invalida '{raw_key}': {exc}") from exc
+                if not isinstance(raw_conf, dict):
+                    raise RuntimeError(f"La configuracion del broker '{raw_key}' debe ser un objeto JSON")
+                merged = dict(self.base_profile)
+                merged.update(raw_conf)
+                definitions[key] = merged
+        base_default = dict(self.base_profile)
+        if DEFAULT_BROKER_KEY in definitions:
+            merged_default = dict(base_default)
+            merged_default.update(definitions[DEFAULT_BROKER_KEY])
+            definitions[DEFAULT_BROKER_KEY] = merged_default
+        else:
+            definitions[DEFAULT_BROKER_KEY] = base_default
+        parsed: Dict[str, BrokerProfile] = {}
+        for key, payload in definitions.items():
+            host = coerce_str(payload.get("host"), "")
+            if not host:
+                raise RuntimeError(f"El perfil de broker '{key}' requiere el campo 'host'")
+            port = coerce_int(payload.get("port"), self.base_profile.get("port") or MQTT_PORT or 8883)
+            username = coerce_str(payload.get("username"), self.base_profile.get("username", ""))
+            password = coerce_str(payload.get("password"), self.base_profile.get("password", ""))
+            tls = coerce_bool(payload.get("tls"), coerce_bool(self.base_profile.get("tls"), MQTT_TLS))
+            tls_insecure = coerce_bool(payload.get("tlsInsecure"), coerce_bool(self.base_profile.get("tlsInsecure"), MQTT_TLS_INSECURE))
+            ca_cert_path = coerce_str(payload.get("caCertPath"), self.base_profile.get("caCertPath", ""))
+            client_id = payload.get("clientId")
+            if client_id is not None:
+                client_id = coerce_str(client_id, "")
+                if not client_id:
+                    client_id = None
+            keepalive = coerce_int(payload.get("keepalive"), self.base_profile.get("keepalive") or MQTT_KEEPALIVE)
+            keepalive = keepalive if keepalive > 0 else MQTT_KEEPALIVE
+            parsed[key] = BrokerProfile(
+                key=key,
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                tls=tls,
+                tls_insecure=tls_insecure,
+                ca_cert_path=ca_cert_path or None,
+                client_id=client_id,
+                keepalive=keepalive,
+            )
+        if DEFAULT_BROKER_KEY not in parsed:
+            raise RuntimeError("Debe existir al menos el perfil MQTT 'default'")
+        self.profiles = parsed
+        global AVAILABLE_BROKER_KEYS
+        AVAILABLE_BROKER_KEYS = set(parsed.keys())
+
+    def _init_clients(self) -> None:
+        for key, profile in self.profiles.items():
+            self._init_client(profile)
+
+    def _init_client(self, profile: BrokerProfile) -> None:
+        client_id = profile.client_identifier(self.default_client_id)
+        client = mqtt.Client(client_id=client_id, clean_session=True)
+        client.enable_logger()
+        client.user_data_set({"broker_key": profile.key})
+        if profile.tls:
+            if profile.ca_cert_path:
+                client.tls_set(ca_certs=profile.ca_cert_path, certfile=None, keyfile=None, tls_version=ssl.PROTOCOL_TLS)
+            else:
+                client.tls_set(tls_version=ssl.PROTOCOL_TLS)
+            client.tls_insecure_set(profile.tls_insecure)
+        if profile.username:
+            client.username_pw_set(profile.username, profile.password or None)
+        event = threading.Event()
+        self.connected_events[profile.key] = event
+
+        def on_connect(client, userdata, flags, rc, properties=None):
+            if rc == 0:
+                event.set()
+                logger.info("MQTT connected broker=%s host=%s", profile.key, profile.host)
+                base = self.topic_base if self.topic_base.endswith("#") else (self.topic_base.rstrip("/") + "/#")
+                client.subscribe(base, qos=1)
+                for p in self.public_prefixes:
+                    topic = p if p.endswith("#") else (p.rstrip("/") + "/#")
+                    client.subscribe(topic, qos=1)
+            else:
+                logger.error("MQTT connection failed rc=%s broker=%s", rc, profile.key)
+
+        def on_disconnect(client, userdata, rc):
+            if rc != 0:
+                logger.warning("MQTT disconnected broker=%s rc=%s", profile.key, rc)
+            else:
+                logger.info("MQTT disconnected broker=%s", profile.key)
+            event.clear()
+
+        client.on_connect = on_connect
+        client.on_disconnect = on_disconnect
+        client.on_message = self._make_on_message(profile.key)
+        try:
+            client.connect_async(profile.host, profile.port, keepalive=profile.keepalive)
+        except Exception as exc:
+            logger.exception("No se pudo iniciar conexion MQTT broker=%s: %s", profile.key, exc)
+            raise
+        client.loop_start()
+        self.clients[profile.key] = client
+
+    def _make_on_message(self, broker_key: str):
+        def _handler(client, userdata, msg):
+            decoded_payload = try_decode(msg.payload)
+            logger.info("MQTT inbound broker=%s topic=%s qos=%s retain=%s", broker_key, msg.topic, msg.qos, msg.retain)
+            data = {
+                "topic": msg.topic,
+                "payload": decoded_payload,
+                "qos": msg.qos,
+                "retain": msg.retain,
+                "broker": broker_key,
+            }
+            remember_message(data)
+            ConnectionManager.broadcast(msg.topic, data)
+        return _handler
+
+    def resolve_key(self, broker_key: Optional[str]) -> str:
+        if broker_key and broker_key in self.profiles:
+            return broker_key
+        return DEFAULT_BROKER_KEY
+
+    def ensure_connected(self, broker_key: Optional[str], timeout: float = 10.0) -> str:
+        resolved = self.resolve_key(broker_key)
+        event = self.connected_events.get(resolved)
+        if event is None:
+            raise HTTPException(status_code=500, detail=f"MQTT broker '{resolved}' no configurado")
+        if not event.wait(timeout):
+            raise HTTPException(status_code=503, detail=f"MQTT broker '{resolved}' no conectado")
+        return resolved
+
+    def publish(self, broker_key: Optional[str], topic: str, payload: Any, qos: int, retain: bool):
+        resolved = self.ensure_connected(broker_key)
+        client = self.clients.get(resolved)
+        if client is None:
+            raise HTTPException(status_code=500, detail=f"MQTT broker '{resolved}' no inicializado")
+        result = client.publish(topic, payload=payload, qos=qos, retain=retain)
+        return resolved, result
+
+    def available_keys(self) -> List[str]:
+        return list(self.profiles.keys())
+
+
+BASE_BROKER_PROFILE = {
+    "host": MQTT_HOST,
+    "port": MQTT_PORT,
+    "username": MQTT_USERNAME,
+    "password": MQTT_PASSWORD,
+    "tls": MQTT_TLS,
+    "tlsInsecure": MQTT_TLS_INSECURE,
+    "caCertPath": MQTT_CA_CERT_PATH,
+    "keepalive": MQTT_KEEPALIVE,
+}
+
+broker_manager = BrokerManager(
+    base_profile=BASE_BROKER_PROFILE,
+    raw_profiles=MQTT_BROKER_PROFILES_RAW,
+    topic_base=TOPIC_BASE,
+    public_prefixes=PUBLIC_ALLOWED_PREFIXES,
+    default_client_id=MQTT_CLIENT_ID,
+)
+
+# Inicializa el mapa de brokers por empresa a partir del archivo local
+load_companies()
 
 # ---- Firebase Admin init ----
 if not firebase_admin._apps:
@@ -356,66 +653,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---- MQTT Client ---- Rev6.6
-mqtt_client = mqtt.Client(client_id=MQTT_CLIENT_ID, clean_session=True)
-mqtt_client.enable_logger()
-
+# ---- MQTT last message cache ----
 last_message_store: Dict[str, Dict[str, Any]] = {}
 last_message_lock = threading.Lock()
-
-
-if MQTT_TLS:
-    if MQTT_CA_CERT_PATH:
-        mqtt_client.tls_set(ca_certs=MQTT_CA_CERT_PATH, certfile=None, keyfile=None, tls_version=ssl.PROTOCOL_TLS)
-    else:
-        mqtt_client.tls_set(tls_version=ssl.PROTOCOL_TLS)
-    mqtt_client.tls_insecure_set(MQTT_TLS_INSECURE)
-
-if MQTT_USERNAME:
-    mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD if MQTT_PASSWORD else None)
-
-_mqtt_connected = threading.Event()
-
-def on_connect(client, userdata, flags, rc, properties=None):
-    if rc == 0:
-        _mqtt_connected.set()
-        logger.info("MQTT connected")
-        base = TOPIC_BASE if TOPIC_BASE.endswith("#") else (TOPIC_BASE.rstrip("/") + "/#")
-        client.subscribe(base, qos=1)
-        for p in PUBLIC_ALLOWED_PREFIXES:
-            topic = p if p.endswith("#") else (p.rstrip("/") + "/#")
-            client.subscribe(topic, qos=1)
-    else:
-        logger.error("MQTT connection failed rc=%s", rc)
-
-def on_message(client, userdata, msg):
-    decoded_payload = try_decode(msg.payload)
-    logger.info("MQTT inbound topic=%s qos=%s retain=%s", msg.topic, msg.qos, msg.retain)
-    data = {"topic": msg.topic, "payload": decoded_payload, "qos": msg.qos, "retain": msg.retain}
-    remember_message(data)
-    ConnectionManager.broadcast(msg.topic, data)
-
-
 
 
 def remember_message(data: Dict[str, Any]) -> None:
     topic = data.get("topic")
     if not topic:
         return
-    entry = {"topic": topic,
-             "payload": data.get("payload"),
-             "retain": bool(data.get("retain")),
-             "qos": int(data.get("qos", 0))}
+    entry = {
+        "topic": topic,
+        "payload": data.get("payload"),
+        "retain": bool(data.get("retain")),
+        "qos": int(data.get("qos", 0))
+    }
+    broker_key = data.get("broker")
+    if broker_key:
+        entry["broker"] = broker_key
     with last_message_lock:
         last_message_store[topic] = entry
 
 
 
-def snapshot_for_prefixes(prefixes: List[str]) -> List[Dict[str, Any]]:
+def snapshot_for_prefixes(prefixes: List[str], broker_key: Optional[str] = None) -> List[Dict[str, Any]]:
     normalized = [p.rstrip("/") + "/" for p in prefixes]
     with last_message_lock:
-        return [dict(entry) for topic, entry in last_message_store.items()
-                if any((topic.rstrip("/") + "/").startswith(pref) for pref in normalized)]
+        results: List[Dict[str, Any]] = []
+        for topic, entry in last_message_store.items():
+            if broker_key and entry.get("broker") and entry.get("broker") != broker_key:
+                continue
+            if any((topic.rstrip("/") + "/").startswith(pref) for pref in normalized):
+                results.append(dict(entry))
+        return results
 
 def try_decode(b: bytes) -> Any:
     try:
@@ -466,7 +736,6 @@ def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def fetch_config_from_github(company_id: str, local_path: Path) -> Optional[Dict[str, Any]]:
-
     if not GITHUB_SYNC_ENABLED:
         return None
     if not GITHUB_TOKEN or not GITHUB_REPO:
@@ -522,41 +791,6 @@ def fetch_config_from_github(company_id: str, local_path: Path) -> Optional[Dict
         fh.write("\n")
     logger.info("Config %s cargada desde GitHub", remote_path)
     return normalized
-
-
-def render_github_template(template: str, empresa_id: str) -> str:
-    sanitized = sanitize_company_id(empresa_id)
-    try:
-        rendered = template.format(empresa_id=sanitized, empresa=sanitized, company=sanitized)
-    except KeyError as exc:
-        raise ValueError(f"Plantilla GitHub inválida: {exc}") from exc
-    return rendered.strip().lstrip("/")
-
-
-def fetch_github_binary(remote_path: str) -> Tuple[bytes, Dict[str, Any]]:
-    if not remote_path:
-        raise HTTPException(status_code=500, detail="Ruta remota vacía")
-    if not GITHUB_REPO:
-        raise HTTPException(status_code=503, detail="GITHUB_REPO no está configurado")
-    timeout = GITHUB_HTTP_TIMEOUT if GITHUB_HTTP_TIMEOUT > 0 else 20.0
-    url = f"{GITHUB_API_URL or 'https://api.github.com'}/repos/{GITHUB_REPO}/contents/{remote_path.lstrip('/')}"
-    headers: Dict[str, str] = {"Accept": "application/vnd.github.raw"}
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-    if GITHUB_API_VERSION:
-        headers["X-GitHub-Api-Version"] = GITHUB_API_VERSION
-    params = {"ref": GITHUB_BRANCH} if GITHUB_BRANCH else None
-    try:
-        response = requests.get(url, headers=headers, params=params, timeout=timeout)
-    except requests.RequestException as exc:
-        logger.error("No se pudo descargar %s desde GitHub: %s", remote_path, exc)
-        raise HTTPException(status_code=502, detail="No se pudo contactar a GitHub") from exc
-    if response.status_code == 404:
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    if response.status_code != 200:
-        logger.error("GitHub respondió %s al solicitar %s: %s", response.status_code, remote_path, response.text)
-        raise HTTPException(status_code=502, detail="Error al descargar archivo de GitHub")
-    return response.content, response.headers
 
 
 def load_scada_config(company_id: str) -> Dict[str, Any]:
@@ -746,18 +980,14 @@ def validate_config_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     return normalize_config(data)
 
 
-mqtt_client.on_connect = on_connect
-mqtt_client.on_message = on_message
-mqtt_client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
-mqtt_client.loop_start()
-
 # ---- WebSocket connection manager ----
 class WSClient:
-    def __init__(self, ws: WebSocket, uid: str, company_id: str, allowed_prefixes: List[str]):
+    def __init__(self, ws: WebSocket, uid: str, company_id: str, allowed_prefixes: List[str], broker_key: str):
         self.ws = ws
         self.uid = uid
         self.company_id = company_id
         self.allowed_prefixes = [p.rstrip("/") + "/" for p in allowed_prefixes]
+        self.broker_key = broker_key
 
     def can_receive(self, topic: str) -> bool:
         t = topic.rstrip("/") + "/"
@@ -786,6 +1016,9 @@ class ConnectionManager:
             try:
                 if not c.can_receive(topic):
                     continue
+                data_broker = data.get("broker")
+                if data_broker and getattr(c, "broker_key", DEFAULT_BROKER_KEY) != data_broker:
+                    continue
                 if loop is None:
                     logger.warning("WS deliver skipped; no event loop topic=%s", topic)
                     continue
@@ -793,7 +1026,13 @@ class ConnectionManager:
                 try:
                     future.result(timeout=5)
                     delivered += 1
-                    logger.info("WS deliver topic=%s uid=%s empresa=%s", topic, c.uid, getattr(c, "company_id", None))
+                    logger.info(
+                        "WS deliver topic=%s uid=%s empresa=%s broker=%s",
+                        topic,
+                        c.uid,
+                        getattr(c, "company_id", None),
+                        getattr(c, "broker_key", DEFAULT_BROKER_KEY),
+                    )
                 except FutureTimeoutError:
                     logger.error("WS deliver timeout uid=%s topic=%s", c.uid, topic)
                     to_remove.append(c.ws)
@@ -892,65 +1131,8 @@ def allowed_prefixes_for_user(uid: str, company_id: Optional[str]) -> List[str]:
     prefixes.extend(PUBLIC_ALLOWED_PREFIXES)
     return prefixes
 
-def ensure_mqtt_connected():
-    if not _mqtt_connected.wait(timeout=10):
-        raise HTTPException(status_code=503, detail="MQTT broker not connected")
-
-
-
-def require_proxy_token(x_proxy_token: Optional[str] = Header(None, alias="X-Proxy-Token")) -> None:
-    if not PROXY_SHARED_SECRET:
-        return
-    if not x_proxy_token:
-        raise HTTPException(status_code=401, detail="Falta X-Proxy-Token")
-    if not hmac.compare_digest(x_proxy_token, PROXY_SHARED_SECRET):
-        raise HTTPException(status_code=401, detail="X-Proxy-Token inválido")
-
-
-@app.get("/api/proxy/config/{empresa_id}")
-async def proxy_download_config(empresa_id: str, _: None = Depends(require_proxy_token)):
-    try:
-        remote_path = render_github_template(GITHUB_CONFIG_TEMPLATE, empresa_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    content, headers = fetch_github_binary(remote_path)
-    filename = Path(remote_path).name or f"{sanitize_company_id(empresa_id)}.xlsx"
-    buffer = io.BytesIO(content)
-    buffer.seek(0)
-    stream = StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    stream.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    etag = headers.get("ETag") if isinstance(headers, dict) else None
-    if etag:
-        stream.headers["ETag"] = etag
-    last_modified = headers.get("Last-Modified") if isinstance(headers, dict) else None
-    if last_modified:
-        stream.headers["Last-Modified"] = last_modified
-    stream.headers.setdefault("Cache-Control", "private, max-age=60")
-    return stream
-
-
-@app.get("/api/proxy/plan/{empresa_id}")
-async def proxy_plan_status(empresa_id: str, _: None = Depends(require_proxy_token)):
-    try:
-        remote_path = render_github_template(GITHUB_PLAN_TEMPLATE, empresa_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    content, headers = fetch_github_binary(remote_path)
-    try:
-        data = json.loads(content.decode("utf-8"))
-    except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=502, detail="Plan remoto no es texto UTF-8") from exc
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=502, detail="Plan remoto no es JSON válido") from exc
-    response = JSONResponse(content=data)
-    etag = headers.get("ETag") if isinstance(headers, dict) else None
-    if etag:
-        response.headers["ETag"] = etag
-    last_modified = headers.get("Last-Modified") if isinstance(headers, dict) else None
-    if last_modified:
-        response.headers["Last-Modified"] = last_modified
-    response.headers.setdefault("Cache-Control", "private, max-age=60")
-    return response
+def ensure_mqtt_connected(broker_key: Optional[str]):
+    broker_manager.ensure_connected(broker_key)
 
 
 
@@ -1025,6 +1207,7 @@ class TenantBase(BaseModel):
     name: str
     description: Optional[str] = None
     active: Optional[bool] = True
+    mqttBrokerKey: Optional[str] = None
 
 
 class TenantCreate(TenantBase):
@@ -1074,6 +1257,15 @@ def create_tenant_endpoint(payload: TenantCreate, authorization: Optional[str] =
             raise HTTPException(status_code=400, detail=f"cloneFrom invalido: {exc}") from exc
         if not any(entry.get("empresaId") == clone_from for entry in companies):
             raise HTTPException(status_code=404, detail=f"Empresa origen {clone_from} no existe")
+    if payload.mqttBrokerKey:
+        try:
+            broker_key = sanitize_broker_key(payload.mqttBrokerKey)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"mqttBrokerKey invalido: {exc}") from exc
+    else:
+        broker_key = DEFAULT_BROKER_KEY
+    if broker_key not in broker_manager.available_keys():
+        raise HTTPException(status_code=400, detail=f"mqttBrokerKey {broker_key} no esta configurado en el backend")
     if clone_from:
         base_config = load_scada_config(clone_from)
     else:
@@ -1087,6 +1279,7 @@ def create_tenant_endpoint(payload: TenantCreate, authorization: Optional[str] =
         "active": bool(payload.active) if payload.active is not None else True,
         "createdAt": now,
         "updatedAt": now,
+        "mqttBrokerKey": broker_key,
     })
     if not entry:
         raise HTTPException(status_code=400, detail="Datos de empresa invalidos")
@@ -1121,6 +1314,17 @@ def update_tenant_endpoint(empresa_id: str, payload: TenantUpdate, authorization
                 entry["description"] = payload.description.strip()
             if payload.active is not None and target_id != DEFAULT_COMPANY_ID:
                 entry["active"] = bool(payload.active)
+            if payload.mqttBrokerKey is not None:
+                if payload.mqttBrokerKey:
+                    try:
+                        new_broker = sanitize_broker_key(payload.mqttBrokerKey)
+                    except ValueError as exc:
+                        raise HTTPException(status_code=400, detail=f"mqttBrokerKey invalido: {exc}") from exc
+                else:
+                    new_broker = DEFAULT_BROKER_KEY
+                if new_broker not in broker_manager.available_keys():
+                    raise HTTPException(status_code=400, detail=f"mqttBrokerKey {new_broker} no esta configurado")
+                entry["mqttBrokerKey"] = new_broker
             entry["updatedAt"] = current_utc_iso()
             save_companies(companies)
             updated = find_company(load_companies(), target_id) or entry
@@ -1133,19 +1337,20 @@ def publish(p: PublishIn, authorization: Optional[str] = Header(None)):
     decoded = verify_bearer_token(authorization)
     uid = decoded["uid"]
     company_id = extract_company_id(decoded)
+    broker_key = broker_key_for_company(company_id)
     allowed = [x.rstrip("/") + "/" for x in allowed_prefixes_for_user(uid, company_id)]
     if not any(p.topic.startswith(pref) for pref in allowed):
         raise HTTPException(status_code=403, detail=f"Topic not allowed for user {uid} en empresa {company_id}")
-    ensure_mqtt_connected()
+    ensure_mqtt_connected(broker_key)
     payload = p.payload
     if isinstance(payload, (dict, list)):
         payload = json.dumps(payload, separators=(",", ":"))
     elif not isinstance(payload, str):
         payload = str(payload)
-    res = mqtt_client.publish(p.topic, payload=payload, qos=p.qos, retain=p.retain)
+    resolved_key, res = broker_manager.publish(broker_key, p.topic, payload=payload, qos=p.qos, retain=p.retain)
     if res.rc != mqtt.MQTT_ERR_SUCCESS:
         raise HTTPException(status_code=500, detail=f"MQTT publish error rc={res.rc}")
-    return {"ok": True}
+    return {"ok": True, "broker": resolved_key}
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default=None)):
@@ -1166,12 +1371,26 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
 
     uid = decoded["uid"]
     company_id = extract_company_id(decoded)
+    broker_key = broker_key_for_company(company_id)
     prefixes = allowed_prefixes_for_user(uid, company_id)
-    client = WSClient(websocket, uid, company_id, prefixes)
+    try:
+        ensure_mqtt_connected(broker_key)
+    except HTTPException as exc:
+        await websocket.send_json({"type": "error", "error": exc.detail or "MQTT broker not connected"})
+        await websocket.close(code=1013)
+        return
+    client = WSClient(websocket, uid, company_id, prefixes, broker_key)
     ConnectionManager.add(client)
 
-    initial_snapshot = snapshot_for_prefixes(prefixes)
-    await websocket.send_json({"type": "hello", "uid": uid, "empresaId": company_id, "allowed_prefixes": prefixes, "last_values": initial_snapshot})
+    initial_snapshot = snapshot_for_prefixes(prefixes, broker_key)
+    await websocket.send_json({
+        "type": "hello",
+        "uid": uid,
+        "empresaId": company_id,
+        "allowed_prefixes": prefixes,
+        "broker": broker_key,
+        "last_values": initial_snapshot
+    })
 
     try:
         while True:
@@ -1188,18 +1407,18 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
                     await websocket.send_json({"type": "error", "error": "Topic not allowed"})
                     continue
 
-                ensure_mqtt_connected()
+                ensure_mqtt_connected(client.broker_key)
                 pub_payload = payload
                 if isinstance(pub_payload, (dict, list)):
                     pub_payload = json.dumps(pub_payload, separators=(",", ":"))
                 elif not isinstance(pub_payload, str):
                     pub_payload = str(pub_payload)
 
-                res = mqtt_client.publish(topic, payload=pub_payload, qos=qos, retain=retain)
+                resolved_key, res = broker_manager.publish(client.broker_key, topic, payload=pub_payload, qos=qos, retain=retain)
                 if res.rc != mqtt.MQTT_ERR_SUCCESS:
                     await websocket.send_json({"type": "error", "error": f"MQTT publish rc={res.rc}"})
                 else:
-                    await websocket.send_json({"type": "ack", "topic": topic})
+                    await websocket.send_json({"type": "ack", "topic": topic, "broker": resolved_key})
             else:
                 await websocket.send_json({"type": "error", "error": "Unknown message type"})
     except WebSocketDisconnect:
@@ -1210,12 +1429,6 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
             await websocket.close()
         except Exception:
             pass
-
-
-
-
-
-
 
 
 
