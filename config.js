@@ -1058,7 +1058,11 @@ function applyPermissions() {
   } else {
     dom.toggleUserForm?.removeAttribute('disabled');
     dom.refreshUsersBtn?.removeAttribute('disabled');
-    dom.userSubmitBtn?.removeAttribute('disabled');
+    if (state.userFallback) {
+      dom.userSubmitBtn?.setAttribute('disabled', '');
+    } else {
+      dom.userSubmitBtn?.removeAttribute('disabled');
+    }
   }
 }
 
@@ -1515,6 +1519,8 @@ function ensureUserCardVisibility() {
   renderUserList();
   if (!state.usersLoaded && !state.userLoading) {
     loadUsers().catch((error) => console.error("loadUsers", error));
+  } else if (state.userFallback) {
+    setUserStatus("Gestion limitada: no se pudo acceder a Firebase Admin. Solo se muestran los correos configurados.", "warning");
   }
 }
 
