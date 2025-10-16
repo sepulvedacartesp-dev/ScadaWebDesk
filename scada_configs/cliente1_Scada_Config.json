@@ -1,0 +1,39 @@
+{
+  "empresaId": "cliente1",
+  "mainTitle": "SCADA Web Lagia V1",
+  "roles": {
+    "admins": [],
+    "operators": [],
+    "viewers": []
+  },
+  "containers": [
+    {
+      "title": "PLC Siemens S71211C",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "Presion",
+          "topic": "Siemens/PV",
+          "unit": "PSI",
+          "color": "#05d5ff",
+          "min": 0,
+          "max": 200
+        },
+        {
+          "type": "startBtn",
+          "label": "Start FAN",
+          "topic": "Siemens/Partir",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "Siemens/Parar",
+          "color": "#ef476f",
+          "payload": "0"
+        }
+      ]
+    }
+  ]
+}
