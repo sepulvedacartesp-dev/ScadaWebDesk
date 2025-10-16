@@ -1611,10 +1611,10 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
         if getattr(exc, "code", "") == "email-already-exists":
             raise HTTPException(status_code=409, detail="El correo ya esta registrado") from exc
         logger.exception("No se pudo crear usuario %s: %s", email, exc)
-        raise HTTPException(status_code=502, detail="No se pudo crear el usuario") from exc
+        raise HTTPException(status_code=502, detail=f"No se pudo crear el usuario: {exc}") from exc
     except Exception as exc:
         logger.exception("Error inesperado al crear usuario %s: %s", email, exc)
-        raise HTTPException(status_code=502, detail="No se pudo crear el usuario") from exc
+        raise HTTPException(status_code=502, detail=f"No se pudo crear el usuario: {exc}") from exc
     claims = merge_custom_claims({}, company_id, role)
     try:
         firebase_auth.set_custom_user_claims(user_record.uid, claims)
@@ -1624,14 +1624,14 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
             firebase_auth.delete_user(user_record.uid)
         except Exception:
             logger.exception("No se pudo revertir usuario creado %s", email)
-        raise HTTPException(status_code=502, detail="No se pudo asignar claims al usuario") from exc
+        raise HTTPException(status_code=502, detail=f"No se pudo asignar claims al usuario: {exc}") from exc
     except Exception as exc:
         logger.exception("Error inesperado asignando claims para %s: %s", email, exc)
         try:
             firebase_auth.delete_user(user_record.uid)
         except Exception:
             logger.exception("No se pudo revertir usuario creado %s", email)
-        raise HTTPException(status_code=502, detail="No se pudo asignar claims al usuario") from exc
+        raise HTTPException(status_code=502, detail=f"No se pudo asignar claims al usuario: {exc}") from exc
     try:
         apply_role_to_config(company_id, email, role, actor_email)
     except Exception as exc:
