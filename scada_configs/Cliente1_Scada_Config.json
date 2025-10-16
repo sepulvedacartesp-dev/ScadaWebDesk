@@ -1,5 +1,5 @@
 {
-  "empresaId": "Cliente1",
+  "empresaId": "cliente1",
   "mainTitle": "SCADA Web Lagia V1",
   "roles": {
     "admins": [],
@@ -17,7 +17,7 @@
           "unit": "PSI",
           "color": "#05d5ff",
           "min": 0,
-          "max": 100
+          "max": 200
         },
         {
           "type": "startBtn",

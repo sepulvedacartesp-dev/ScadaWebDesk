@@ -50,7 +50,7 @@ def sanitize_company_id(raw: Optional[str]) -> str:
     if raw is None:
         raise ValueError("Empresa no definida")
     sanitized = re.sub(r'[^A-Za-z0-9_-]+', '_', str(raw).strip())
-    sanitized = sanitized.strip('_')
+    sanitized = sanitized.strip('_').lower()
     if not sanitized:
         raise ValueError("Empresa no definida")
     return sanitized

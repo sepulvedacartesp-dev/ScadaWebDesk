@@ -362,7 +362,8 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     if (!state.claimEmpresaId && payload.empresaId) {
       state.claimEmpresaId = payload.empresaId;
     }
-    state.empresaId = (payload.empresaId || config.empresaId || empresaId || state.empresaId || "").toString().trim();
+    const resolvedEmpresaId = (payload.empresaId || config.empresaId || empresaId || state.empresaId || "").toString().trim();
+    state.empresaId = resolvedEmpresaId ? resolvedEmpresaId.toLowerCase() : "";
     const empresaChanged = previousEmpresaId !== state.empresaId;
     state.role = payload.role || determineRole(config, user.email);
     state.canEdit = state.role === "admin";
