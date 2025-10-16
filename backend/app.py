@@ -15,12 +15,13 @@ from dataclasses import dataclass
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
 
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials
+from firebase_admin import exceptions as firebase_exceptions
 from google.auth.exceptions import DefaultCredentialsError
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
@@ -166,6 +167,15 @@ def github_path_for_company(company_id: str, local_path: Path) -> str:
 
 def current_utc_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def firebase_timestamp_to_iso(value: Optional[int]) -> Optional[str]:
+    if value in (None, 0):
+        return None
+    try:
+        return datetime.utcfromtimestamp(int(value) / 1000).replace(microsecond=0).isoformat() + "Z"
+    except Exception:
+        return None
 
 
 def normalize_company_entry(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -368,6 +378,12 @@ GITHUB_COMMIT_MESSAGE = os.getenv("GITHUB_COMMIT_MESSAGE", "Actualiza scada_conf
 GITHUB_AUTHOR_NAME = os.getenv("GITHUB_AUTHOR_NAME", "").strip()
 EMPRESA_CLAIM_KEYS = ("empresaId", "empresa_id", "empresa", "companyId", "company_id", "company", "tenantId", "tenant_id", "tenant")
 GOOGLE_REQUEST = google_requests.Request()
+ROLE_KEY_MAP = {
+    "admin": "admins",
+    "operador": "operators",
+    "visualizacion": "viewers",
+}
+ALLOWED_USER_ROLES = tuple(ROLE_KEY_MAP.keys())
 
 
 class GithubSyncError(Exception):
@@ -397,6 +413,10 @@ TOPIC_BASE = os.getenv("TOPIC_BASE", "scada/customers").strip()
 PUBLIC_ALLOWED_PREFIXES = [p.strip() for p in os.getenv("PUBLIC_ALLOWED_PREFIXES", "").split(",") if p.strip()]
 
 FIREBASE_SERVICE_ACCOUNT = os.getenv("FIREBASE_SERVICE_ACCOUNT", "").strip()
+FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY", "").strip()
+FIREBASE_EMAIL_CONTINUE_URL = os.getenv("FIREBASE_EMAIL_CONTINUE_URL", "").strip()
+FIREBASE_AUTH_TIMEOUT = float(os.getenv("FIREBASE_AUTH_TIMEOUT", "10"))
+IDENTITY_TOOLKIT_URL = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode"
 
 if not FIREBASE_PROJECT_ID:
     raise RuntimeError("FIREBASE_PROJECT_ID is required")
@@ -958,6 +978,187 @@ def ensure_admin(email: Optional[str], company_id: str, cfg: Optional[Dict[str, 
         return
     raise HTTPException(status_code=403, detail="Usuario no autorizado para modificar la configuraciÃ³n")
 
+def sanitize_user_role(value: Optional[str]) -> str:
+    role = (value or "operador").strip().lower()
+    if role not in ALLOWED_USER_ROLES:
+        raise HTTPException(status_code=400, detail=f"Rol invalido: {value}")
+    return role
+
+def normalize_role_lists(cfg: Dict[str, Any]) -> Dict[str, List[str]]:
+    roles = cfg.get("roles")
+    if not isinstance(roles, dict):
+        roles = {}
+    normalized: Dict[str, List[str]] = {}
+    for key in ROLE_KEY_MAP.values():
+        raw_list = roles.get(key, [])
+        if isinstance(raw_list, list):
+            normalized[key] = [str(item).strip() for item in raw_list if str(item).strip()]
+        elif isinstance(raw_list, str):
+            normalized[key] = [segment.strip() for segment in raw_list.split(",") if segment.strip()]
+        else:
+            normalized[key] = []
+    return normalized
+
+def apply_role_to_config(company_id: str, email: str, role: str, actor_email: Optional[str]) -> None:
+    cfg = load_scada_config(company_id)
+    normalized = normalize_config(cfg)
+    roles = normalize_role_lists(normalized)
+    lower_email = email.lower()
+    for key, values in roles.items():
+        roles[key] = [item for item in values if item.lower() != lower_email]
+    target_key = ROLE_KEY_MAP[role]
+    roles[target_key].append(email.strip())
+    roles[target_key] = sorted(dict.fromkeys(roles[target_key]), key=lambda item: item.lower())
+    normalized["roles"] = roles
+    normalized["empresaId"] = company_id
+    save_scada_config(normalized, company_id, actor_email or "system")
+
+def remove_user_from_config(company_id: str, email: Optional[str], actor_email: Optional[str]) -> None:
+    if not email:
+        return
+    cfg = load_scada_config(company_id)
+    normalized = normalize_config(cfg)
+    roles = normalize_role_lists(normalized)
+    lower_email = email.lower()
+    changed = False
+    for key, values in roles.items():
+        filtered = [item for item in values if item.lower() != lower_email]
+        if filtered != values:
+            roles[key] = filtered
+            changed = True
+    if not changed:
+        return
+    normalized["roles"] = roles
+    normalized["empresaId"] = company_id
+    save_scada_config(normalized, company_id, actor_email or "system")
+
+def ensure_company_admin(decoded: Dict[str, Any], target_company_id: str) -> str:
+    try:
+        sanitized = sanitize_company_id(target_company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    if is_master_admin(decoded):
+        return sanitized
+    claimed = extract_company_id(decoded)
+    if claimed != sanitized:
+        raise HTTPException(status_code=403, detail="No puedes operar sobre otra empresa")
+    ensure_admin(decoded.get("email"), sanitized)
+    return sanitized
+
+def company_id_from_claims(claims: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(claims, dict):
+        return None
+    for key in EMPRESA_CLAIM_KEYS:
+        value = claims.get(key)
+        if not value:
+            continue
+        try:
+            return sanitize_company_id(value)
+        except ValueError:
+            continue
+    return None
+
+def merge_custom_claims(existing: Optional[Dict[str, Any]], company_id: str, role: Optional[str]) -> Dict[str, Any]:
+    claims = dict(existing or {})
+    for key in EMPRESA_CLAIM_KEYS:
+        claims[key] = company_id
+    if role:
+        claims["scadaRole"] = role
+        claims["role"] = role
+        claims["tenantRole"] = role
+        claims["empresaRole"] = role
+    return claims
+
+def build_action_code_settings(override_url: Optional[str] = None) -> Optional[firebase_auth.ActionCodeSettings]:
+    url = override_url or FIREBASE_EMAIL_CONTINUE_URL
+    if not url:
+        return None
+    return firebase_auth.ActionCodeSettings(url=url, handle_code_in_app=False)
+
+def send_password_reset_email(email: str, continue_url: Optional[str]) -> bool:
+    if not FIREBASE_WEB_API_KEY:
+        return False
+    payload: Dict[str, Any] = {
+        "requestType": "PASSWORD_RESET",
+        "email": email,
+        "returnOobLink": False,
+    }
+    url = continue_url or FIREBASE_EMAIL_CONTINUE_URL
+    if url:
+        payload["continueUrl"] = url
+    try:
+        response = requests.post(
+            f"{IDENTITY_TOOLKIT_URL}?key={FIREBASE_WEB_API_KEY}",
+            json=payload,
+            timeout=FIREBASE_AUTH_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        logger.warning("No se pudo enviar correo de recuperacion a %s: %s", email, exc)
+        return False
+    if response.status_code != 200:
+        logger.warning("Firebase sendOobCode respondio %s para %s: %s", response.status_code, email, response.text)
+        return False
+    return True
+
+
+
+
+def list_company_users(company_id: str) -> List[Dict[str, Any]]:
+    try:
+        page = firebase_auth.list_users()
+    except firebase_exceptions.FirebaseError as exc:
+        logger.exception("No se pudo listar usuarios: %s", exc)
+        raise HTTPException(status_code=502, detail="No se pudo consultar usuarios") from exc
+    cfg = load_scada_config(company_id)
+    normalized = normalize_config(cfg)
+    roles = normalize_role_lists(normalized)
+    role_lookup: Dict[str, str] = {}
+    for role_name, key in ROLE_KEY_MAP.items():
+        for email in roles.get(key, []):
+            lower = email.lower()
+            if lower:
+                role_lookup[lower] = role_name
+    results: List[Dict[str, Any]] = []
+    while page is not None:
+        for user in page.users:
+            email = user.email or ""
+            custom_claims = user.custom_claims or {}
+            claim_company = company_id_from_claims(custom_claims)
+            tenant_id = getattr(user, "tenant_id", None)
+            if not claim_company and tenant_id:
+                try:
+                    claim_company = sanitize_company_id(tenant_id)
+                except ValueError:
+                    claim_company = None
+            matches_company = False
+            if claim_company == company_id:
+                matches_company = True
+            elif not claim_company and email and email.lower() in role_lookup:
+                matches_company = True
+            if not matches_company:
+                continue
+            role = custom_claims.get("scadaRole") or custom_claims.get("tenantRole") or custom_claims.get("role")
+            if not role and email:
+                role = role_lookup.get(email.lower(), "operador")
+            role = role or "operador"
+            metadata = getattr(user, "user_metadata", None)
+            created_at = firebase_timestamp_to_iso(getattr(metadata, "creation_timestamp", None)) if metadata else None
+            last_login = firebase_timestamp_to_iso(getattr(metadata, "last_sign_in_timestamp", None)) if metadata else None
+            results.append({
+                "uid": user.uid,
+                "email": email,
+                "displayName": user.display_name or "",
+                "empresaId": claim_company or company_id,
+                "role": role,
+                "emailVerified": bool(user.email_verified),
+                "disabled": bool(user.disabled),
+                "createdAt": created_at,
+                "lastLoginAt": last_login,
+                "isMasterAdmin": bool(custom_claims.get("isMasterAdmin") or custom_claims.get("masterAdmin") or custom_claims.get("superAdmin") or custom_claims.get("isSuperUser")),
+            })
+        page = page.get_next_page() if hasattr(page, "get_next_page") else None
+    results.sort(key=lambda item: item.get("email", "").lower())
+    return results
 
 def validate_config_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(data, dict):
@@ -1219,6 +1420,18 @@ class TenantUpdate(TenantBase):
     active: Optional[bool] = None
 
 
+class UserCreate(BaseModel):
+    email: EmailStr
+    empresaId: Optional[str] = None
+    role: Optional[str] = "operador"
+    sendInvite: bool = True
+
+
+class UserResetRequest(BaseModel):
+    sendEmail: bool = True
+    continueUrl: Optional[str] = None
+
+
 @app.get("/tenants")
 def list_tenants_endpoint(authorization: Optional[str] = Header(None)):
     decoded = verify_bearer_token(authorization)
@@ -1330,6 +1543,144 @@ def update_tenant_endpoint(empresa_id: str, payload: TenantUpdate, authorization
             updated = find_company(load_companies(), target_id) or entry
             return {"company": updated}
     raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+
+@app.get("/users")
+def list_users_endpoint(authorization: Optional[str] = Header(None), empresa_id: Optional[str] = Query(None)):
+    decoded = verify_bearer_token(authorization)
+    target = empresa_id or extract_company_id(decoded)
+    company_id = ensure_company_admin(decoded, target)
+    users = list_company_users(company_id)
+    return {"empresaId": company_id, "users": users}
+
+
+@app.post("/users", status_code=201)
+def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Header(None)):
+    decoded = verify_bearer_token(authorization)
+    actor_email = decoded.get("email")
+    target = payload.empresaId or extract_company_id(decoded)
+    if not target:
+        raise HTTPException(status_code=400, detail="empresaId requerido")
+    company_id = ensure_company_admin(decoded, target)
+    role = sanitize_user_role(payload.role)
+    email = payload.email.strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="email requerido")
+    try:
+        user_record = firebase_auth.create_user(email=email)
+    except firebase_exceptions.FirebaseError as exc:
+        if getattr(exc, "code", "") == "email-already-exists":
+            raise HTTPException(status_code=409, detail="El correo ya esta registrado") from exc
+        logger.exception("No se pudo crear usuario %s: %s", email, exc)
+        raise HTTPException(status_code=502, detail="No se pudo crear el usuario") from exc
+    claims = merge_custom_claims({}, company_id, role)
+    try:
+        firebase_auth.set_custom_user_claims(user_record.uid, claims)
+    except firebase_exceptions.FirebaseError as exc:
+        logger.exception("No se pudo asignar claims para %s: %s", email, exc)
+        try:
+            firebase_auth.delete_user(user_record.uid)
+        except Exception:
+            logger.exception("No se pudo revertir usuario creado %s", email)
+        raise HTTPException(status_code=502, detail="No se pudo asignar claims al usuario") from exc
+    try:
+        apply_role_to_config(company_id, email, role, actor_email)
+    except Exception as exc:
+        logger.exception("No se pudo actualizar roles para %s: %s", email, exc)
+        try:
+            firebase_auth.delete_user(user_record.uid)
+        except Exception:
+            logger.exception("No se pudo revertir usuario tras fallo de configuracion %s", email)
+        raise HTTPException(status_code=500, detail="No se pudo actualizar la configuracion de la empresa") from exc
+    metadata = getattr(user_record, "user_metadata", None)
+    created_at = firebase_timestamp_to_iso(getattr(metadata, "creation_timestamp", None)) if metadata else None
+    last_login = firebase_timestamp_to_iso(getattr(metadata, "last_sign_in_timestamp", None)) if metadata else None
+    action_settings = build_action_code_settings()
+    reset_link = None
+    try:
+        reset_link = firebase_auth.generate_password_reset_link(email, action_settings)
+    except firebase_exceptions.FirebaseError as exc:
+        logger.warning("No se pudo generar link de recuperacion para %s: %s", email, exc)
+    invite_sent = False
+    if payload.sendInvite and reset_link:
+        invite_sent = send_password_reset_email(email, None)
+    logger.info("Usuario %s creado en empresa %s por %s role=%s", email, company_id, actor_email, role)
+    return {
+        "user": {
+            "uid": user_record.uid,
+            "email": email,
+            "empresaId": company_id,
+            "role": role,
+            "emailVerified": bool(user_record.email_verified),
+            "disabled": bool(user_record.disabled),
+            "createdAt": created_at,
+            "lastLoginAt": last_login,
+        },
+        "resetLink": reset_link,
+        "inviteSent": invite_sent,
+    }
+
+
+@app.delete("/users/{uid}")
+def delete_user_endpoint(uid: str, authorization: Optional[str] = Header(None), empresa_id: Optional[str] = Query(None)):
+    decoded = verify_bearer_token(authorization)
+    actor_email = decoded.get("email")
+    try:
+        user_record = firebase_auth.get_user(uid)
+    except firebase_exceptions.FirebaseError as exc:
+        if getattr(exc, "code", "") == "user-not-found":
+            raise HTTPException(status_code=404, detail="Usuario no encontrado") from exc
+        logger.exception("No se pudo obtener usuario %s: %s", uid, exc)
+        raise HTTPException(status_code=502, detail="No se pudo consultar el usuario") from exc
+    target_company = empresa_id or company_id_from_claims(user_record.custom_claims or {})
+    if not target_company:
+        raise HTTPException(status_code=400, detail="empresaId requerido")
+    company_id = ensure_company_admin(decoded, target_company)
+    if not is_master_admin(decoded):
+        claims = user_record.custom_claims or {}
+        if claims.get("isMasterAdmin") or claims.get("masterAdmin"):
+            raise HTTPException(status_code=403, detail="No puedes eliminar un administrador maestro")
+    try:
+        firebase_auth.delete_user(uid)
+    except firebase_exceptions.FirebaseError as exc:
+        logger.exception("No se pudo eliminar usuario %s: %s", uid, exc)
+        raise HTTPException(status_code=502, detail="No se pudo eliminar el usuario") from exc
+    try:
+        remove_user_from_config(company_id, user_record.email, actor_email)
+    except Exception as exc:
+        logger.warning("No se pudo limpiar roles para %s: %s", user_record.email, exc)
+    logger.info("Usuario %s eliminado en empresa %s por %s", uid, company_id, actor_email)
+    return {"ok": True, "empresaId": company_id}
+
+
+@app.post("/users/{uid}/reset-link")
+def reset_user_password(uid: str, payload: UserResetRequest, authorization: Optional[str] = Header(None), empresa_id: Optional[str] = Query(None)):
+    decoded = verify_bearer_token(authorization)
+    actor_email = decoded.get("email")
+    try:
+        user_record = firebase_auth.get_user(uid)
+    except firebase_exceptions.FirebaseError as exc:
+        if getattr(exc, "code", "") == "user-not-found":
+            raise HTTPException(status_code=404, detail="Usuario no encontrado") from exc
+        logger.exception("No se pudo obtener usuario %s: %s", uid, exc)
+        raise HTTPException(status_code=502, detail="No se pudo consultar el usuario") from exc
+    if not user_record.email:
+        raise HTTPException(status_code=400, detail="El usuario no tiene email registrado")
+    target_company = empresa_id or company_id_from_claims(user_record.custom_claims or {})
+    if not target_company:
+        raise HTTPException(status_code=400, detail="empresaId requerido")
+    company_id = ensure_company_admin(decoded, target_company)
+    action_settings = build_action_code_settings(payload.continueUrl)
+    try:
+        reset_link = firebase_auth.generate_password_reset_link(user_record.email, action_settings)
+    except firebase_exceptions.FirebaseError as exc:
+        logger.exception("No se pudo generar enlace de reinicio para %s: %s", user_record.email, exc)
+        raise HTTPException(status_code=502, detail="No se pudo generar el enlace de restablecimiento") from exc
+    email_sent = False
+    if payload.sendEmail:
+        email_sent = send_password_reset_email(user_record.email, payload.continueUrl)
+    logger.info("Reset link generado para %s por %s en empresa %s", user_record.email, actor_email, company_id)
+    return {"resetLink": reset_link, "emailSent": email_sent, "empresaId": company_id}
 
 
 @app.post("/publish")

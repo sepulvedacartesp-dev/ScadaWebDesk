@@ -39,6 +39,10 @@ MASTER_ADMIN_ROLE_NAMES=master,root
 `MQTT_BROKER_PROFILES` permite definir un mapa JSON plano `{ "claveBroker": { ... } }`. Cada entrada hereda las credenciales base (`HIVEMQ_*`) y puede sobrescribir `host`, `port`, `username`, `password`, `tls`, `tlsInsecure`, `caCertPath`, `clientId` y `keepalive`. Usa la clave `default` para la configuración por omisión y agrega entradas adicionales (`cliente1`, `cliente2`, etc.) para asignarlas a empresas concretas.
 Si necesitas validar revocacion de tokens, agrega `FIREBASE_SERVICE_ACCOUNT` con el JSON completo del service account.
 
+- `FIREBASE_WEB_API_KEY` (opcional): Web API Key del proyecto Firebase. Permite que el backend dispare correos de invitacion/reset usando `accounts:sendOobCode`.
+- `FIREBASE_EMAIL_CONTINUE_URL` (opcional): URL de redireccion usada en los enlaces de restablecimiento generados (`ActionCodeSettings`).
+- `FIREBASE_AUTH_TIMEOUT` (opcional, por defecto `10` segundos): timeout HTTP para las llamadas al servicio Identity Toolkit.
+
 ## Ejecucion local
 ```bash
 python -m venv .venv
@@ -83,6 +87,11 @@ Configura el servicio exactamente con los siguientes valores:
 - `POST /tenants`: crea una nueva empresa (`empresaId`, `name`, `description`, `cloneFrom`, `mqttBrokerKey`). Genera automaticamente el archivo `scada_configs/<empresaId>_Scada_Config.json`.
 - `PUT /tenants/{empresaId}`: actualiza nombre, descripcion, estado `active` y la asignación `mqttBrokerKey`.
 - `GET /config?empresaId=<id>` y `PUT /config?empresaId=<id>` permiten a los maestros editar la configuracion de cualquier cliente.
+
+- `GET /users?empresaId=<id>`: lista los usuarios asignados a la empresa.
+- `POST /users`: crea un usuario en Firebase, asigna claims (`empresaId`, `scadaRole`) y actualiza la configuracion local (`roles`).
+- `DELETE /users/{uid}`: elimina al usuario de Firebase y lo remueve de la configuracion.
+- `POST /users/{uid}/reset-link`: genera un enlace seguro de restablecimiento y, si hay API key, envia el correo de invitacion/reset.
 
 ## Pruebas y criterios de aceptacion
 1. `GET https://scadawebdesk.onrender.com/health` responde `{ "status": "ok" }`.

@@ -121,11 +121,17 @@ const state = {
   role: "viewer",
   isMaster: false,
   canEdit: false,
+  canManageUsers: false,
   dirty: false,
   tenants: [],
   tenantsLoaded: false,
   tenantLoading: false,
   editingTenantId: null,
+  users: [],
+  usersLoaded: false,
+  userLoading: false,
+  showingUserForm: false,
+  userInviteLink: null,
   config: createEmptyConfig(),
 };
 
@@ -159,6 +165,18 @@ const dom = {
   masterPanel: document.getElementById("master-panel"),
   refreshTenantsBtn: document.getElementById("refresh-tenants"),
   resetTenantFormBtn: document.getElementById("reset-tenant-form"),
+  userCard: document.getElementById("user-card"),
+  toggleUserForm: document.getElementById("toggle-user-form"),
+  refreshUsersBtn: document.getElementById("refresh-users-btn"),
+  userForm: document.getElementById("user-form"),
+  userEmail: document.getElementById("user-email"),
+  userRole: document.getElementById("user-role"),
+  userSendInvite: document.getElementById("user-send-invite"),
+  userFormStatus: document.getElementById("user-form-status"),
+  userSubmitBtn: document.getElementById("user-submit-btn"),
+  cancelUserForm: document.getElementById("cancel-user-form"),
+  userStatus: document.getElementById("user-status"),
+  userList: document.getElementById("user-list"),
   tenantList: document.getElementById("tenant-list"),
   tenantForm: document.getElementById("tenant-form"),
   tenantFormTitle: document.getElementById("tenant-form-title"),
@@ -236,6 +254,11 @@ function attachStaticHandlers() {
   dom.resetTenantFormBtn?.addEventListener("click", () => resetTenantForm("create"));
   dom.tenantForm?.addEventListener("submit", submitTenantForm);
   dom.tenantList?.addEventListener("click", handleTenantListClick);
+  dom.toggleUserForm?.addEventListener("click", () => toggleUserForm());
+  dom.cancelUserForm?.addEventListener("click", () => toggleUserForm(false));
+  dom.userForm?.addEventListener("submit", submitUserForm);
+  dom.userList?.addEventListener("click", handleUserListClick);
+  dom.refreshUsersBtn?.addEventListener("click", () => loadUsers(true));
 }
 
 async function onAuthStateChanged(user) {
@@ -250,6 +273,13 @@ async function onAuthStateChanged(user) {
     state.tenantsLoaded = false;
     state.tenantLoading = false;
     state.editingTenantId = null;
+    state.canManageUsers = false;
+    state.users = [];
+    state.usersLoaded = false;
+    state.userLoading = false;
+    state.showingUserForm = false;
+    state.userInviteLink = null;
+    ensureUserCardVisibility();
     renderMasterPanel();
     await refreshToken(user);
     await loadConfig();
@@ -271,6 +301,12 @@ async function onAuthStateChanged(user) {
     state.tenantsLoaded = false;
     state.tenantLoading = false;
     state.editingTenantId = null;
+    state.canManageUsers = false;
+    state.users = [];
+    state.usersLoaded = false;
+    state.userLoading = false;
+    state.showingUserForm = false;
+    state.userInviteLink = null;
     containerUiState = new WeakMap();
     objectUiState = new WeakMap();
     setDirty(false);
@@ -278,6 +314,7 @@ async function onAuthStateChanged(user) {
     applyPermissions();
     renderAll();
     renderMasterPanel();
+    ensureUserCardVisibility();
     setTenantStatus("");
     setStatus("Autenticate para cargar la configuracion.", "info");
   }
@@ -296,6 +333,7 @@ async function loadConfig(force = false, targetEmpresaId = null) {
   const user = firebase.auth().currentUser;
   if (!user) return;
   try {
+    const previousEmpresaId = state.empresaId;
     if (!state.token || force) {
       await refreshToken(user);
     }
@@ -325,8 +363,17 @@ async function loadConfig(force = false, targetEmpresaId = null) {
       state.claimEmpresaId = payload.empresaId;
     }
     state.empresaId = (payload.empresaId || config.empresaId || empresaId || state.empresaId || "").toString().trim();
+    const empresaChanged = previousEmpresaId !== state.empresaId;
     state.role = payload.role || determineRole(config, user.email);
     state.canEdit = state.role === "admin";
+    state.canManageUsers = state.isMaster || state.role === "admin";
+    if (empresaChanged) {
+      state.users = [];
+      state.usersLoaded = false;
+      state.userLoading = false;
+      state.showingUserForm = false;
+      state.userInviteLink = null;
+    }
     state.config = config;
     state.config.empresaId = state.empresaId;
     containerUiState = new WeakMap();
@@ -335,6 +382,10 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     updateRoleBadge();
     applyPermissions();
     renderAll();
+    ensureUserCardVisibility();
+    if (state.canManageUsers && (empresaChanged || !state.usersLoaded)) {
+      loadUsers(true).catch((error) => console.error("loadUsers", error));
+    }
     if (state.isMaster) {
       renderMasterPanel();
     }
@@ -375,6 +426,7 @@ function renderAll() {
   renderGeneralSection();
   renderRolesSection();
   renderContainers();
+  renderUserList();
 }
 
 function renderGeneralSection() {
@@ -993,12 +1045,22 @@ function applyPermissions() {
     dom.resetTenantFormBtn?.removeAttribute('disabled');
     dom.tenantSubmit?.removeAttribute('disabled');
   }
+  if (!state.canManageUsers) {
+    dom.toggleUserForm?.setAttribute('disabled', '');
+    dom.refreshUsersBtn?.setAttribute('disabled', '');
+    dom.userSubmitBtn?.setAttribute('disabled', '');
+    toggleUserForm(false);
+  } else {
+    dom.toggleUserForm?.removeAttribute('disabled');
+    dom.refreshUsersBtn?.removeAttribute('disabled');
+    dom.userSubmitBtn?.removeAttribute('disabled');
+  }
 }
 
 function updateRoleBadge() {
   if (!dom.roleBadge) return;
   const baseRole = state.isMaster ? 'MASTER' : (state.role || 'VIEWER').toUpperCase();
-  dom.roleBadge.textContent = state.empresaId ? `${baseRole} · ${state.empresaId}` : baseRole;
+  dom.roleBadge.textContent = state.empresaId ? `${baseRole} - ${state.empresaId}` : baseRole;
 }
 
 function parseNumber(value) {
@@ -1167,6 +1229,275 @@ async function loadTenants(force = false) {
     setTenantStatus("No se pudo cargar la lista: " + ((error && error.message) || error), "error");
   } finally {
     state.tenantLoading = false;
+  }
+}
+
+function formatUserRole(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin":
+      return "Administrador";
+    case "visualizacion":
+      return "Solo lectura";
+    case "operador":
+    default:
+      return "Operador";
+  }
+}
+
+function formatTimestamp(value) {
+  if (!value) return "Nunca";
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+  } catch (error) {
+    return value;
+  }
+}
+
+function setUserStatus(message = "", tone = "info") {
+  if (!dom.userStatus) return;
+  dom.userStatus.textContent = message || "";
+  dom.userStatus.dataset.tone = tone || "info";
+}
+
+function setUserFormStatus(message = "", tone = "info") {
+  if (!dom.userFormStatus) return;
+  dom.userFormStatus.textContent = message || "";
+  dom.userFormStatus.dataset.tone = tone || "info";
+}
+
+function resetUserForm() {
+  if (!dom.userForm) return;
+  dom.userForm.reset();
+  if (dom.userSendInvite) {
+    dom.userSendInvite.checked = true;
+  }
+  setUserFormStatus("");
+}
+
+function toggleUserForm(force) {
+  if (!dom.userForm || !dom.toggleUserForm) return;
+  const shouldShow = typeof force === "boolean" ? force : !state.showingUserForm;
+  state.showingUserForm = shouldShow;
+  dom.userForm.hidden = !shouldShow;
+  dom.toggleUserForm.textContent = shouldShow ? "Cerrar formulario" : "Agregar usuario";
+  if (!shouldShow) {
+    resetUserForm();
+  } else if (dom.userEmail) {
+    dom.userEmail.focus();
+  }
+}
+
+function renderUserList() {
+  if (!dom.userList) return;
+  if (!state.canManageUsers) {
+    dom.userList.innerHTML = "";
+    return;
+  }
+  const users = Array.isArray(state.users) ? state.users : [];
+  if (!users.length) {
+    dom.userList.innerHTML = '<li class="user-item user-item--empty"><div class="user-item__header"><h4 class="user-item__title">Sin usuarios registrados</h4></div><div class="user-item__meta">Crea un usuario nuevo para enviar invitaciones de acceso.</div></li>';
+    return;
+  }
+  const currentUid = (firebase.auth().currentUser && firebase.auth().currentUser.uid) || null;
+  dom.userList.innerHTML = users
+    .map((user) => {
+      const email = escapeHtml(user.email || "");
+      const role = escapeHtml(formatUserRole(user.role));
+      const lastLogin = user.lastLoginAt ? `Ultimo ingreso: ${escapeHtml(formatTimestamp(user.lastLoginAt))}` : "Sin ingresos";
+      const createdAt = user.createdAt ? `Alta: ${escapeHtml(formatTimestamp(user.createdAt))}` : "";
+      const statusBits = [];
+      if (user.emailVerified) statusBits.push("Verificado");
+      if (user.isMasterAdmin) statusBits.push("Master");
+      if (user.disabled) statusBits.push("Deshabilitado");
+      const status = statusBits.length ? statusBits.join(" | ") : "Activo";
+      const isSelf = currentUid && user.uid === currentUid;
+      const inviteLabel = user.lastLoginAt ? "Reenviar enlace" : "Enviar invitacion";
+      return `
+      <li class="user-item" data-uid="${escapeHtml(user.uid)}">
+        <div class="user-item__header">
+          <h4 class="user-item__title">${email}</h4>
+          <span class="user-item__badge">${role}</span>
+        </div>
+        <div class="user-item__meta">${escapeHtml(status)}</div>
+        <div class="user-item__meta">${escapeHtml(lastLogin)}</div>
+        ${createdAt ? `<div class="user-item__meta">${escapeHtml(createdAt)}</div>` : ""}
+        <div class="user-item__actions">
+          <button type="button" class="btn btn-link" data-action="invite" data-uid="${escapeHtml(user.uid)}" data-email="${email}">${inviteLabel}</button>
+          <button type="button" class="btn btn-link btn-danger-light" data-action="delete" data-uid="${escapeHtml(user.uid)}" data-email="${email}" ${isSelf ? "disabled" : ""}>Eliminar</button>
+        </div>
+      </li>`;
+    })
+    .join("");
+}
+
+async function loadUsers(force = false) {
+  if (!state.canManageUsers || !state.empresaId) return;
+  if (!force && (state.usersLoaded || state.userLoading)) return;
+  if (state.userLoading) return;
+  state.userLoading = true;
+  setUserStatus("Cargando usuarios...", "info");
+  dom.refreshUsersBtn?.setAttribute("disabled", "");
+  try {
+    const query = `?empresaId=${encodeURIComponent(state.empresaId)}`;
+    const response = await fetch(`${BACKEND_HTTP}/users${query}`, {
+      headers: { Authorization: "Bearer " + state.token },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || orFallback(response.status));
+    }
+    const payload = await response.json();
+    state.users = Array.isArray(payload.users) ? payload.users : [];
+    state.usersLoaded = true;
+    renderUserList();
+    setUserStatus(`Usuarios actualizados (${state.users.length})`, "success");
+  } catch (error) {
+    console.error("loadUsers", error);
+    setUserStatus("No se pudo cargar la lista: " + ((error && error.message) || error), "error");
+  } finally {
+    state.userLoading = false;
+    if (state.canManageUsers) {
+      dom.refreshUsersBtn?.removeAttribute("disabled");
+    }
+  }
+}
+
+async function submitUserForm(event) {
+  event.preventDefault();
+  if (!state.canManageUsers || !state.empresaId) {
+    setUserFormStatus("No tienes permisos para crear usuarios", "error");
+    return;
+  }
+  const email = dom.userEmail?.value.trim();
+  const role = dom.userRole?.value || "operador";
+  const sendInvite = Boolean(dom.userSendInvite?.checked);
+  if (!email) {
+    setUserFormStatus("Ingresa un email valido", "warning");
+    dom.userEmail?.focus();
+    return;
+  }
+  dom.userSubmitBtn?.setAttribute("disabled", "");
+  setUserFormStatus("Creando usuario...", "info");
+  try {
+    const payload = {
+      email,
+      role,
+      sendInvite,
+      empresaId: state.empresaId,
+    };
+    const response = await fetch(`${BACKEND_HTTP}/users`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + state.token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || orFallback(response.status));
+    }
+    const data = await response.json();
+    toggleUserForm(false);
+    await loadUsers(true);
+    if (data.resetLink) {
+      state.userInviteLink = data.resetLink;
+      setUserStatus("Usuario creado. Enlace listo para compartir.", data.inviteSent ? "success" : "info");
+    } else {
+      setUserStatus("Usuario creado correctamente.", "success");
+    }
+  } catch (error) {
+    console.error("submitUserForm", error);
+    setUserFormStatus("No se pudo crear: " + ((error && error.message) || error), "error");
+  } finally {
+    dom.userSubmitBtn?.removeAttribute("disabled");
+  }
+}
+
+async function handleUserListClick(event) {
+  const button = event.target?.closest?.("button[data-action]");
+  if (!button || !state.canManageUsers || !state.empresaId) return;
+  const action = button.dataset.action;
+  const uid = button.dataset.uid;
+  const email = button.dataset.email || "";
+  if (!uid) return;
+  if (action === "delete") {
+    const confirmDelete = window.confirm(`Eliminar el usuario ${email}?`);
+    if (!confirmDelete) return;
+    button.setAttribute("disabled", "");
+    setUserStatus("Eliminando usuario...", "info");
+    try {
+      const query = `?empresaId=${encodeURIComponent(state.empresaId)}`;
+      const response = await fetch(`${BACKEND_HTTP}/users/${encodeURIComponent(uid)}${query}`, {
+        method: "DELETE",
+        headers: { Authorization: "Bearer " + state.token },
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || orFallback(response.status));
+      }
+      state.users = (state.users || []).filter((item) => item.uid !== uid);
+      renderUserList();
+      setUserStatus(`Usuario ${email} eliminado`, "success");
+    } catch (error) {
+      console.error("deleteUser", error);
+      setUserStatus("No se pudo eliminar: " + ((error && error.message) || error), "error");
+    } finally {
+      button.removeAttribute("disabled");
+    }
+    return;
+  }
+  if (action === "invite") {
+    button.setAttribute("disabled", "");
+    setUserStatus("Generando enlace de restablecimiento...", "info");
+    try {
+      const query = `?empresaId=${encodeURIComponent(state.empresaId)}`;
+      const response = await fetch(`${BACKEND_HTTP}/users/${encodeURIComponent(uid)}/reset-link${query}`, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + state.token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sendEmail: true }),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || orFallback(response.status));
+      }
+      const result = await response.json();
+      state.userInviteLink = result.resetLink || null;
+      const suffix = result.emailSent ? "Se envio un correo al usuario." : "Comparte el enlace manualmente.";
+      setUserStatus(`Enlace generado. ${suffix}`, "success");
+    } catch (error) {
+      console.error("resetLink", error);
+      setUserStatus("No se pudo generar el enlace: " + ((error && error.message) || error), "error");
+    } finally {
+      button.removeAttribute("disabled");
+    }
+  }
+}
+
+function ensureUserCardVisibility() {
+  if (!dom.userCard) return;
+  const allowed = state.canManageUsers && Boolean(state.empresaId);
+  dom.userCard.hidden = !allowed;
+  if (!allowed) {
+    state.users = [];
+    state.usersLoaded = false;
+    state.userLoading = false;
+    state.showingUserForm = false;
+    if (dom.userForm) {
+      dom.userForm.hidden = true;
+    }
+    renderUserList();
+    setUserStatus("");
+    return;
+  }
+  renderUserList();
+  if (!state.usersLoaded && !state.userLoading) {
+    loadUsers().catch((error) => console.error("loadUsers", error));
   }
 }
 

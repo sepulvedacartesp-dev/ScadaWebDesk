@@ -659,6 +659,51 @@
           </div>
         </section>
 
+        <section class="config-card" id="user-card" hidden>
+          <div class="container-header">
+            <h2>Usuarios</h2>
+            <span class="badge-inline">Gestion segura</span>
+          </div>
+          <p class="helper-text">
+            Crea o elimina cuentas para esta empresa. Los nuevos usuarios reciben una invitacion para definir su contraseña.
+          </p>
+          <div class="button-row user-toolbar">
+            <button id="toggle-user-form" type="button" class="btn btn-editable">Agregar usuario</button>
+            <button id="refresh-users-btn" type="button" class="btn btn-ghost">Recargar</button>
+          </div>
+          <div id="user-status" class="helper-text"></div>
+          <form id="user-form" class="user-form" hidden>
+            <div class="form-grid user-form-grid">
+              <div class="form-group">
+                <label for="user-email">Email</label>
+                <input id="user-email" type="email" class="text-input" placeholder="usuario@cliente.com" autocomplete="off" required>
+              </div>
+              <div class="form-group">
+                <label for="user-role">Rol</label>
+                <select id="user-role" class="select-input">
+                  <option value="admin">Administrador</option>
+                  <option value="operador" selected>Operador</option>
+                  <option value="visualizacion">Solo lectura</option>
+                </select>
+              </div>
+              <div class="form-group checkbox-inline">
+                <label class="checkbox">
+                  <input type="checkbox" id="user-send-invite" checked>
+                  <span>Enviar invitacion/reset por correo</span>
+                </label>
+              </div>
+            </div>
+            <div class="user-form-actions">
+              <span id="user-form-status" class="helper-text"></span>
+              <div class="button-row">
+                <button type="submit" class="btn btn-editable" id="user-submit-btn">Crear usuario</button>
+                <button type="button" class="btn btn-ghost" id="cancel-user-form">Cancelar</button>
+              </div>
+            </div>
+          </form>
+          <ul id="user-list" class="user-list"></ul>
+        </section>
+
         <section class="config-card">
           <div class="container-header">
             <h2>Contenedores del tablero</h2>
