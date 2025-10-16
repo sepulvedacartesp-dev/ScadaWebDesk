@@ -130,6 +130,7 @@ const state = {
   users: [],
   usersLoaded: false,
   userLoading: false,
+  userFallback: false,
   showingUserForm: false,
   userInviteLink: null,
   config: createEmptyConfig(),
@@ -277,6 +278,7 @@ async function onAuthStateChanged(user) {
     state.users = [];
     state.usersLoaded = false;
     state.userLoading = false;
+    state.userFallback = false;
     state.showingUserForm = false;
     state.userInviteLink = null;
     ensureUserCardVisibility();
@@ -305,6 +307,7 @@ async function onAuthStateChanged(user) {
     state.users = [];
     state.usersLoaded = false;
     state.userLoading = false;
+    state.userFallback = false;
     state.showingUserForm = false;
     state.userInviteLink = null;
     containerUiState = new WeakMap();
@@ -372,6 +375,7 @@ async function loadConfig(force = false, targetEmpresaId = null) {
       state.users = [];
       state.usersLoaded = false;
       state.userLoading = false;
+      state.userFallback = false;
       state.showingUserForm = false;
       state.userInviteLink = null;
     }
@@ -1313,10 +1317,18 @@ function renderUserList() {
       if (user.isMasterAdmin) statusBits.push("Master");
       if (user.disabled) statusBits.push("Deshabilitado");
       const status = statusBits.length ? statusBits.join(" | ") : "Activo";
-      const isSelf = currentUid && user.uid === currentUid;
+      const hasUid = Boolean(user.uid);
+      const uid = hasUid ? escapeHtml(String(user.uid)) : "";
+      const isSelf = hasUid && currentUid && user.uid === currentUid;
       const inviteLabel = user.lastLoginAt ? "Reenviar enlace" : "Enviar invitacion";
+      const actions = hasUid
+        ? `<div class="user-item__actions">
+          <button type="button" class="btn btn-link" data-action="invite" data-uid="${uid}" data-email="${email}">${inviteLabel}</button>
+          <button type="button" class="btn btn-link btn-danger-light" data-action="delete" data-uid="${uid}" data-email="${email}" ${isSelf ? "disabled" : ""}>Eliminar</button>
+        </div>`
+        : '<div class="user-item__note">Gestion disponible solo para usuarios registrados mediante Firebase Admin.</div>';
       return `
-      <li class="user-item" data-uid="${escapeHtml(user.uid)}">
+      <li class="user-item"${hasUid ? ` data-uid="${uid}"` : ""}>
         <div class="user-item__header">
           <h4 class="user-item__title">${email}</h4>
           <span class="user-item__badge">${role}</span>
@@ -1324,10 +1336,7 @@ function renderUserList() {
         <div class="user-item__meta">${escapeHtml(status)}</div>
         <div class="user-item__meta">${escapeHtml(lastLogin)}</div>
         ${createdAt ? `<div class="user-item__meta">${escapeHtml(createdAt)}</div>` : ""}
-        <div class="user-item__actions">
-          <button type="button" class="btn btn-link" data-action="invite" data-uid="${escapeHtml(user.uid)}" data-email="${email}">${inviteLabel}</button>
-          <button type="button" class="btn btn-link btn-danger-light" data-action="delete" data-uid="${escapeHtml(user.uid)}" data-email="${email}" ${isSelf ? "disabled" : ""}>Eliminar</button>
-        </div>
+        ${actions}
       </li>`;
     })
     .join("");
@@ -1352,8 +1361,14 @@ async function loadUsers(force = false) {
     const payload = await response.json();
     state.users = Array.isArray(payload.users) ? payload.users : [];
     state.usersLoaded = true;
+    state.userFallback = Boolean(payload.fallback) || state.users.some((item) => !item?.uid);
     renderUserList();
-    setUserStatus(`Usuarios actualizados (${state.users.length})`, "success");
+    if (state.userFallback) {
+      const message = payload.message || "No se pudo obtener el detalle completo desde Firebase. Se muestran los correos definidos en la configuracion.";
+      setUserStatus(message, "warning");
+    } else {
+      setUserStatus(`Usuarios actualizados (${state.users.length})`, "success");
+    }
   } catch (error) {
     console.error("loadUsers", error);
     setUserStatus("No se pudo cargar la lista: " + ((error && error.message) || error), "error");
@@ -1488,6 +1503,7 @@ function ensureUserCardVisibility() {
     state.users = [];
     state.usersLoaded = false;
     state.userLoading = false;
+    state.userFallback = false;
     state.showingUserForm = false;
     if (dom.userForm) {
       dom.userForm.hidden = true;

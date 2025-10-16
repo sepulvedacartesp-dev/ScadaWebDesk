@@ -786,6 +786,12 @@ body {
   flex-wrap: wrap;
 }
 
+.user-item__note {
+  font-size: 0.85rem;
+  color: var(--warning);
+  padding: 0.25rem 0;
+}
+
 .user-item--empty {
   border-style: dashed;
   background: rgba(11, 23, 38, 0.45);

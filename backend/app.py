@@ -1102,16 +1102,51 @@ def send_password_reset_email(email: str, continue_url: Optional[str]) -> bool:
 
 
 
+def users_from_roles_snapshot(company_id: str, roles: Dict[str, List[str]]) -> List[Dict[str, Any]]:
+    snapshot: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    for role_name, key in ROLE_KEY_MAP.items():
+        for email in roles.get(key, []):
+            stripped = str(email).strip()
+            if not stripped:
+                continue
+            lower = stripped.lower()
+            if lower in seen:
+                continue
+            seen.add(lower)
+            snapshot.append({
+                "uid": None,
+                "email": stripped,
+                "displayName": "",
+                "empresaId": company_id,
+                "role": role_name,
+                "emailVerified": False,
+                "disabled": False,
+                "createdAt": None,
+                "lastLoginAt": None,
+                "isMasterAdmin": False,
+                "source": "roles",
+            })
+    snapshot.sort(key=lambda item: item["email"].lower())
+    return snapshot
+
+
+
+
+
 
 def list_company_users(company_id: str) -> List[Dict[str, Any]]:
-    try:
-        page = firebase_auth.list_users()
-    except firebase_exceptions.FirebaseError as exc:
-        logger.exception("No se pudo listar usuarios: %s", exc)
-        raise HTTPException(status_code=502, detail="No se pudo consultar usuarios") from exc
     cfg = load_scada_config(company_id)
     normalized = normalize_config(cfg)
     roles = normalize_role_lists(normalized)
+    try:
+        page = firebase_auth.list_users()
+    except firebase_exceptions.FirebaseError as exc:
+        logger.warning("No se pudo listar usuarios desde Firebase: %s", exc)
+        return users_from_roles_snapshot(company_id, roles)
+    except Exception as exc:
+        logger.exception("Fallo inesperado al listar usuarios para %s: %s", company_id, exc)
+        return users_from_roles_snapshot(company_id, roles)
     role_lookup: Dict[str, str] = {}
     for role_name, key in ROLE_KEY_MAP.items():
         for email in roles.get(key, []):
@@ -1551,7 +1586,11 @@ def list_users_endpoint(authorization: Optional[str] = Header(None), empresa_id:
     target = empresa_id or extract_company_id(decoded)
     company_id = ensure_company_admin(decoded, target)
     users = list_company_users(company_id)
-    return {"empresaId": company_id, "users": users}
+    fallback = any(not user.get("uid") for user in users)
+    payload: Dict[str, Any] = {"empresaId": company_id, "users": users, "fallback": fallback}
+    if fallback:
+        payload["message"] = "No se pudo obtener el detalle completo desde Firebase. Se muestran los correos configurados."
+    return payload
 
 
 @app.post("/users", status_code=201)
