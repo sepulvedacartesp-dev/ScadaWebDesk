@@ -1,0 +1,46 @@
+{
+  "empresaId": "zero_corp",
+  "mainTitle": "Zero Corp - Sistema de control",
+  "roles": {
+    "admins": ["lagia.sur@gmail.com"],
+    "operators": [],
+    "viewers": []
+  },
+  "containers": [
+    {
+      "title": "Abox - Planta 1",
+      "objects": [
+        {
+          "type": "level",
+          "label": "Nivel",
+          "topic": "Micro/NivelTK",
+          "unit": "%",
+          "color": "#00b4d8",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Bomba",
+          "topic": "Micro/PumpSts",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "Micro/PumpCmdStart",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "Micro/PumpCmdStop",
+          "color": "#ef476f",
+          "payload": "0"
+        }
+      ]
+    }
+  ]
+}

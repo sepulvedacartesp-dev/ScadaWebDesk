@@ -2,10 +2,8 @@
   "empresaId": "cliente1",
   "mainTitle": "SCADA Web Lagia V2",
   "roles": {
-    "admins": [],
-    "operators": [
-      "alt.f4-do41i4d7@yopmail.com"
-    ],
+    "admins": ["alt.f4-do41i4d7@yopmail.com"],
+    "operators": [],
     "viewers": []
   },
   "containers": [
