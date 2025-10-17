@@ -77,6 +77,13 @@
           "topic": "Siemens/Parar",
           "color": "#ef476f",
           "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Nivel",
+          "topic": "Siemens/Sts",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
         }
       ]
     }
