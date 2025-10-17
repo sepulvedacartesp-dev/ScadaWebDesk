@@ -2,8 +2,8 @@
   "empresaId": "zero_corp",
   "mainTitle": "Zero Corp - Sistema de control",
   "roles": {
-    "admins": ["alt.f4-do41i4d7@yopmail.com"],
-    "operators": [],
+    "admins": ["lagia.sur@gmail.com"],
+    "operators": ["alt.f4-do41i4d7@yopmail.com"],
     "viewers": []
   },
   "containers": [

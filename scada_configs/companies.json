@@ -12,20 +12,20 @@
     {
       "empresaId": "cliente1",
       "name": "Cliente 1",
-      "description": "Empresa de ejemplo con broker dedicado",
+      "description": "Eliminada - dada de baja",
       "active": true,
       "createdAt": "2025-01-01T00:00:00Z",
       "updatedAt": "2025-01-01T00:00:00Z",
       "mqttBrokerKey": "cliente1"
     },
     {
-      "empresaId": "Zero_corp",
+      "empresaId": "zero_corp",
       "name": "Zero_corp",
       "description": "Empresa Zero corp ",
       "active": true,
       "createdAt": "2025-01-01T00:00:00Z",
       "updatedAt": "2025-01-01T00:00:00Z",
-      "mqttBrokerKey": "Zero_corp"
+      "mqttBrokerKey": "zero_corp"
     }
   ],
   "updatedAt": "2025-01-01T00:00:00Z"
