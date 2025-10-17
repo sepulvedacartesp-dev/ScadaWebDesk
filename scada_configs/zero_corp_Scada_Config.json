@@ -16,19 +16,18 @@
       "objects": [
         {
           "type": "level",
-          "label": "Nivel",
+          "label": "Temperatura",
           "topic": "Micro/NivelTK",
-          "unit": "%",
-          "color": "#00b4d8",
+          "unit": "°C",
+          "color": "#fafafa",
           "min": 0,
           "max": 100
         },
         {
-          "type": "pumpStatus",
-          "label": "Bomba",
-          "topic": "Micro/PumpSts",
-          "onColor": "#00ff9d",
-          "offColor": "#6c757d"
+          "type": "number",
+          "label": "Temperatura",
+          "topic": "Micro/NivelTK",
+          "unit": "°C"
         },
         {
           "type": "startBtn",
@@ -43,6 +42,13 @@
           "topic": "Micro/PumpCmdStop",
           "color": "#ef476f",
           "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Ventilador",
+          "topic": "Micro/PumpSts",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
         }
       ]
     },
