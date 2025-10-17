@@ -80,7 +80,7 @@
         },
         {
           "type": "pumpStatus",
-          "label": "Nivel",
+          "label": "Ventilador",
           "topic": "Siemens/Sts",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
