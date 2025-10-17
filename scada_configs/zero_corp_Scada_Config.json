@@ -2,8 +2,12 @@
   "empresaId": "zero_corp",
   "mainTitle": "Zero Corp - Sistema de control",
   "roles": {
-    "admins": ["lagia.sur@gmail.com"],
-    "operators": ["alt.f4-do41i4d7@yopmail.com"],
+    "admins": [
+      "lagia.sur@gmail.com"
+    ],
+    "operators": [
+      "alt.f4-do41i4d7@yopmail.com"
+    ],
     "viewers": []
   },
   "containers": [
@@ -39,6 +43,34 @@
           "topic": "Micro/PumpCmdStop",
           "color": "#ef476f",
           "payload": "0"
+        }
+      ]
+    },
+    {
+      "title": "A-Box - Planta 2",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "Temperatura",
+          "topic": "Siemens/PV",
+          "unit": "°C",
+          "color": "#ff0000",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir Ventilador",
+          "topic": "Siemens/Partir",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar Ventilador",
+          "topic": "Siemens/Parar",
+          "color": "#ef476f",
+          "payload": "1"
         }
       ]
     }
