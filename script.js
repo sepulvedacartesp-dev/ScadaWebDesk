@@ -1,5 +1,6 @@
 ﻿const BACKEND_HTTP = "https://scadawebdesk.onrender.com";
 const BACKEND_WS = "wss://scadawebdesk.onrender.com/ws";
+const DEFAULT_MAIN_TITLE = "SCADA Web Desk";
 
 let ws = null;
 let uid = null;
@@ -22,6 +23,10 @@ const connectChip = document.getElementById("connect-status");
 const configLink = document.getElementById("config-link");
 const currentUserLabel = document.getElementById("current-user");
 const currentCompanyLabel = document.getElementById("current-company");
+const brandGroup = document.getElementById("brand-group");
+const brandLogoImg = document.getElementById("company-logo");
+const brandLogoFallback = document.querySelector(".brand-logo");
+const mainTitleNode = document.getElementById("main-title");
 const scadaContainer = document.getElementById("scada-container");
 const viewMatrixBtn = document.getElementById("view-matrix");
 const viewSidebarBtn = document.getElementById("view-sidebar");
@@ -35,11 +40,84 @@ const widgetBindings = [];
 const containerNodes = [];
 const sidebarButtons = [];
 let selectedContainerIndex = 0;
+let currentLogoEmpresa = null;
+let currentLogoVersion = 0;
 
 function setStatus(text) {
   if (statusLabel) {
     statusLabel.textContent = text;
   }
+}
+
+function computeBrandInitials(value) {
+  if (!value) return "SW";
+  const tokens = String(value)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!tokens.length) return "SW";
+  const initials = tokens
+    .slice(0, 2)
+    .map((word) => (word && word[0] ? word[0].toUpperCase() : ""))
+    .join("");
+  return initials || "SW";
+}
+
+function setBrandFallback(title) {
+  if (!brandLogoFallback) return;
+  const initials = computeBrandInitials(title);
+  brandLogoFallback.textContent = initials;
+  brandLogoFallback.hidden = false;
+}
+
+function clearBrandLogo(title) {
+  const resolvedTitle = title || (mainTitleNode ? mainTitleNode.textContent : DEFAULT_MAIN_TITLE) || DEFAULT_MAIN_TITLE;
+  if (brandLogoImg) {
+    brandLogoImg.hidden = true;
+    brandLogoImg.removeAttribute("src");
+    brandLogoImg.alt = `Logo de ${resolvedTitle}`;
+  }
+  if (brandGroup) {
+    brandGroup.classList.remove("brand-group--with-logo");
+  }
+  setBrandFallback(resolvedTitle);
+  currentLogoEmpresa = null;
+  currentLogoVersion = 0;
+}
+
+function updateBrandLogo(empresaId, { forceRefresh = false, title } = {}) {
+  const resolvedTitle = title || (mainTitleNode ? mainTitleNode.textContent : DEFAULT_MAIN_TITLE) || DEFAULT_MAIN_TITLE;
+  setBrandFallback(resolvedTitle);
+  if (!brandLogoImg || !brandGroup) return;
+  if (!empresaId) {
+    clearBrandLogo(resolvedTitle);
+    return;
+  }
+  if (forceRefresh || currentLogoEmpresa !== empresaId) {
+    currentLogoEmpresa = empresaId;
+    currentLogoVersion = Date.now();
+  }
+  const url = `${BACKEND_HTTP}/logos/${encodeURIComponent(empresaId)}.jpg?v=${currentLogoVersion}`;
+  brandLogoImg.onload = () => {
+    brandLogoImg.hidden = false;
+    brandLogoImg.alt = `Logo de ${resolvedTitle}`;
+    brandGroup.classList.add("brand-group--with-logo");
+    if (brandLogoFallback) {
+      brandLogoFallback.hidden = true;
+    }
+    brandLogoImg.onload = null;
+    brandLogoImg.onerror = null;
+  };
+  brandLogoImg.onerror = () => {
+    brandLogoImg.hidden = true;
+    brandLogoImg.removeAttribute("src");
+    brandGroup.classList.remove("brand-group--with-logo");
+    setBrandFallback(resolvedTitle);
+    brandLogoImg.onload = null;
+    brandLogoImg.onerror = null;
+  };
+  brandLogoImg.alt = `Logo de ${resolvedTitle}`;
+  brandLogoImg.src = url;
 }
 
 
@@ -762,17 +840,19 @@ async function hydrateDashboard(user, { forceRefresh = false } = {}) {
   }
   try {
     const { config, role, empresaId } = await fetchScadaConfig(user, forceRefresh);
-    const titleNode = document.getElementById("main-title");
-    if (titleNode) {
-      titleNode.textContent = config.mainTitle || "SCADA Web";
+    const resolvedTitle = (config.mainTitle || DEFAULT_MAIN_TITLE).trim() || DEFAULT_MAIN_TITLE;
+    if (mainTitleNode) {
+      mainTitleNode.textContent = resolvedTitle;
     }
+    document.title = resolvedTitle;
     currentRole = role || "operador";
     clearDashboard();
     renderDashboard();
     const resolvedEmpresa = empresaId || currentCompanyId;
+    updateBrandLogo(resolvedEmpresa, { forceRefresh, title: resolvedTitle });
     setCurrentUser(user.email, resolvedEmpresa);
-    if (empresaId) {
-      setStatus(`Tablero cargado (${empresaId})`);
+    if (resolvedEmpresa) {
+      setStatus(`Tablero cargado (${resolvedEmpresa})`);
     } else {
       setStatus("Tablero cargado");
     }
@@ -792,6 +872,11 @@ function resetSessionState() {
   if (sidebarMenu) {
     sidebarMenu.hidden = true;
   }
+  if (mainTitleNode) {
+    mainTitleNode.textContent = DEFAULT_MAIN_TITLE;
+  }
+  document.title = DEFAULT_MAIN_TITLE;
+  clearBrandLogo(DEFAULT_MAIN_TITLE);
   updateConnectionChip(false);
   setCurrentUser();
   updateRoleUI();

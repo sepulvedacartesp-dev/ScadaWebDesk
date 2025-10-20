@@ -1,5 +1,7 @@
 ﻿const BACKEND_HTTP = "https://scadawebdesk.onrender.com";
 
+const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024;
+
 const OBJECT_TYPES = [
   {
     value: "level",
@@ -122,6 +124,8 @@ const state = {
   isMaster: false,
   canEdit: false,
   canManageUsers: false,
+  logoVersion: 0,
+  logoUploading: false,
   dirty: false,
   tenants: [],
   tenantsLoaded: false,
@@ -149,6 +153,12 @@ const dom = {
   emailInput: document.getElementById("email"),
   passwordInput: document.getElementById("password"),
   mainTitle: document.getElementById("mainTitle"),
+  companyLogoFrame: document.getElementById("company-logo-frame"),
+  companyLogoPreview: document.getElementById("company-logo-preview"),
+  companyLogoPlaceholder: document.getElementById("company-logo-placeholder"),
+  companyLogoInput: document.getElementById("company-logo-input"),
+  uploadLogoBtn: document.getElementById("upload-logo-btn"),
+  companyLogoStatus: document.getElementById("company-logo-status"),
   rolesAdmins: document.getElementById("roles-admins"),
   rolesOperators: document.getElementById("roles-operators"),
   rolesViewers: document.getElementById("roles-viewers"),
@@ -191,6 +201,8 @@ const dom = {
   tenantSubmit: document.getElementById("tenant-submit-btn"),
 };
 
+const logoButtonDefaultText = dom.uploadLogoBtn?.dataset.label || dom.uploadLogoBtn?.textContent || "Subir logo";
+
 let containerUiState = new WeakMap();
 let objectUiState = new WeakMap();
 
@@ -214,6 +226,8 @@ function attachStaticHandlers() {
     state.config.mainTitle = event.target.value;
     setDirty(true);
   });
+  dom.uploadLogoBtn?.addEventListener("click", openLogoPicker);
+  dom.companyLogoInput?.addEventListener("change", handleLogoSelected);
   dom.rolesAdmins?.addEventListener("input", () => updateRolesFromInputs());
   dom.rolesOperators?.addEventListener("input", () => updateRolesFromInputs());
   dom.rolesViewers?.addEventListener("input", () => updateRolesFromInputs());
@@ -260,6 +274,166 @@ function attachStaticHandlers() {
   dom.userForm?.addEventListener("submit", submitUserForm);
   dom.userList?.addEventListener("click", handleUserListClick);
   dom.refreshUsersBtn?.addEventListener("click", () => loadUsers(true));
+}
+
+function setLogoStatus(message, tone = "info") {
+  if (!dom.companyLogoStatus) return;
+  const el = dom.companyLogoStatus;
+  el.textContent = message || "";
+  el.classList.remove("logo-status--error", "logo-status--success", "logo-status--info");
+  if (!message) {
+    return;
+  }
+  const key = tone === "success" ? "logo-status--success" : tone === "error" ? "logo-status--error" : "logo-status--info";
+  el.classList.add(key);
+}
+
+function updateLogoControls() {
+  const button = dom.uploadLogoBtn;
+  if (!button) return;
+  const canEdit = Boolean(state.canEdit);
+  const hasEmpresa = Boolean(state.empresaId);
+  if (!canEdit || !hasEmpresa || state.logoUploading) {
+    button.setAttribute("disabled", "");
+  } else {
+    button.removeAttribute("disabled");
+  }
+  button.textContent = state.logoUploading ? "Subiendo..." : logoButtonDefaultText;
+}
+
+function setLogoUploading(flag) {
+  state.logoUploading = Boolean(flag);
+  updateLogoControls();
+}
+
+function openLogoPicker() {
+  if (!dom.companyLogoInput) return;
+  if (!state.canEdit) {
+    setLogoStatus("No tienes permisos para actualizar el logo.", "error");
+    return;
+  }
+  if (!state.empresaId) {
+    setLogoStatus("Selecciona una empresa antes de subir el logo.", "error");
+    return;
+  }
+  dom.companyLogoInput.click();
+}
+
+async function handleLogoSelected(event) {
+  const input = event?.target;
+  if (!input || !input.files || !input.files.length) return;
+  const file = input.files[0];
+  input.value = "";
+  if (!state.canEdit) {
+    setLogoStatus("No tienes permisos para actualizar el logo.", "error");
+    return;
+  }
+  if (!state.empresaId) {
+    setLogoStatus("Selecciona una empresa antes de subir el logo.", "error");
+    return;
+  }
+  if (!/^image\/jpe?g$/i.test(file.type)) {
+    setLogoStatus("Solo se permiten imagenes JPEG (.jpg).", "error");
+    return;
+  }
+  if (file.size > MAX_LOGO_SIZE_BYTES) {
+    const maxMb = Math.round((MAX_LOGO_SIZE_BYTES / (1024 * 1024)) * 10) / 10;
+    setLogoStatus(`El archivo supera el limite de ${maxMb} MB.`, "error");
+    return;
+  }
+  const user = firebase.auth().currentUser;
+  if (!user) {
+    setLogoStatus("Debes iniciar sesion para subir el logo.", "error");
+    return;
+  }
+  try {
+    if (!state.token) {
+      await refreshToken(user);
+    }
+  } catch (error) {
+    console.error("refreshToken (logo)", error);
+    setLogoStatus("No se pudo validar la sesion.", "error");
+    return;
+  }
+  const formData = new FormData();
+  formData.append("logo", file, `${state.empresaId}.jpg`);
+  formData.append("empresaId", state.empresaId);
+  setLogoUploading(true);
+  setLogoStatus("Subiendo logo...", "info");
+  try {
+    const response = await fetch(BACKEND_HTTP + "/logos", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + state.token,
+      },
+      body: formData,
+    });
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const payload = await response.json();
+        detail = payload?.detail || "";
+      } catch (parseError) {
+        detail = await response.text().catch(() => "");
+      }
+      const message = detail || `Error ${response.status}`;
+      throw new Error(message);
+    }
+    await response.json().catch(() => ({}));
+    state.logoVersion = Date.now();
+    setLogoStatus("Logo actualizado correctamente.", "success");
+    refreshCompanyLogo({ bustCache: true });
+  } catch (error) {
+    console.error("handleLogoSelected", error);
+    setLogoStatus(error && error.message ? error.message : "No se pudo subir el logo.", "error");
+  } finally {
+    setLogoUploading(false);
+  }
+}
+
+function refreshCompanyLogo({ bustCache = false } = {}) {
+  updateLogoControls();
+  const preview = dom.companyLogoPreview;
+  const placeholder = dom.companyLogoPlaceholder;
+  const frame = dom.companyLogoFrame;
+  if (!preview || !placeholder) {
+    return;
+  }
+  if (!state.empresaId) {
+    preview.hidden = true;
+    preview.removeAttribute("src");
+    placeholder.hidden = false;
+    placeholder.textContent = "Selecciona una empresa para cargar su logo.";
+    frame?.classList.remove("has-logo");
+    return;
+  }
+  if (bustCache || !state.logoVersion) {
+    state.logoVersion = Date.now();
+  }
+  const version = state.logoVersion;
+  const url = `${BACKEND_HTTP}/logos/${encodeURIComponent(state.empresaId)}.jpg?v=${version}`;
+  placeholder.hidden = false;
+  placeholder.textContent = "Buscando logo...";
+  frame?.classList.remove("has-logo");
+  preview.hidden = true;
+  preview.onload = () => {
+    placeholder.hidden = true;
+    preview.hidden = false;
+    frame?.classList.add("has-logo");
+    preview.onload = null;
+    preview.onerror = null;
+  };
+  preview.onerror = () => {
+    preview.hidden = true;
+    preview.removeAttribute("src");
+    placeholder.hidden = false;
+    placeholder.textContent = "No hay logo cargado.";
+    frame?.classList.remove("has-logo");
+    preview.onload = null;
+    preview.onerror = null;
+  };
+  preview.alt = `Logo de ${state.config.mainTitle || state.empresaId}`;
+  preview.src = url;
 }
 
 async function onAuthStateChanged(user) {
@@ -310,12 +484,16 @@ async function onAuthStateChanged(user) {
     state.userFallback = false;
     state.showingUserForm = false;
     state.userInviteLink = null;
+    state.logoVersion = 0;
+    state.logoUploading = false;
+    setLogoStatus("");
     containerUiState = new WeakMap();
     objectUiState = new WeakMap();
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
     renderAll();
+    refreshCompanyLogo({ bustCache: true });
     renderMasterPanel();
     ensureUserCardVisibility();
     setTenantStatus("");
@@ -372,6 +550,9 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     state.canEdit = state.role === "admin";
     state.canManageUsers = state.isMaster || state.role === "admin";
     if (empresaChanged) {
+      state.logoVersion = 0;
+      state.logoUploading = false;
+      setLogoStatus("");
       state.users = [];
       state.usersLoaded = false;
       state.userLoading = false;
@@ -387,6 +568,7 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     updateRoleBadge();
     applyPermissions();
     renderAll();
+    refreshCompanyLogo({ bustCache: empresaChanged });
     ensureUserCardVisibility();
     if (state.canManageUsers && (empresaChanged || !state.usersLoaded)) {
       loadUsers(true).catch((error) => console.error("loadUsers", error));
@@ -1064,6 +1246,7 @@ function applyPermissions() {
       dom.userSubmitBtn?.removeAttribute('disabled');
     }
   }
+  updateLogoControls();
 }
 
 function updateRoleBadge() {

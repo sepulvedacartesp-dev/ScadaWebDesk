@@ -77,9 +77,20 @@ body {
   gap: 1rem;
 }
 
+.brand-logo-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  border: 1px solid rgba(112, 138, 255, 0.24);
+  background: rgba(12, 22, 36, 0.65);
+  object-fit: contain;
+  padding: 0.4rem;
+  box-shadow: 0 12px 28px rgba(0, 180, 216, 0.22);
+}
+
 .brand-logo {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 16px;
   background: linear-gradient(135deg, var(--accent-alt), var(--accent));
   display: inline-flex;
@@ -89,6 +100,10 @@ body {
   letter-spacing: 0.08em;
   color: #fff;
   box-shadow: 0 12px 28px rgba(0, 180, 216, 0.25);
+}
+
+.brand-group--with-logo .brand-logo {
+  display: none;
 }
 
 .brand-copy {

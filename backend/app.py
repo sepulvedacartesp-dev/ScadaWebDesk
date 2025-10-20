@@ -6,6 +6,7 @@ import threading
 import asyncio
 import logging
 import re
+import imghdr
 import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import List, Optional, Dict, Any, Set
@@ -13,8 +14,9 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
 
@@ -108,6 +110,11 @@ else:
 
 CONFIG_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
+LOGO_STORAGE_DIR = (BASE_DIR / '..' / 'logoclientes').resolve()
+LOGO_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_LOGO_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/pjpeg"}
+MAX_LOGO_SIZE_BYTES = int(os.getenv("MAX_LOGO_SIZE_BYTES", "2097152"))
+
 COMPANIES_PATH = CONFIG_STORAGE_DIR / 'companies.json'
 COMPANIES_LOCK = threading.Lock()
 
@@ -135,6 +142,10 @@ def config_path_for_company(company_id: str) -> Path:
     except FileNotFoundError:
         CONFIG_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     return target
+
+def logo_path_for_company(company_id: str) -> Path:
+    sanitized = sanitize_company_id(company_id)
+    return LOGO_STORAGE_DIR / f"{sanitized}.jpg"
 
 def github_path_for_company(company_id: str, local_path: Path) -> str:
     sanitized = sanitize_company_id(company_id)
@@ -1421,6 +1432,61 @@ def update_config_endpoint(config: Dict[str, Any] = Body(...), authorization: Op
     role = "admin" if is_master else role_for_email(normalized, email)
     logger.info("Config updated by %s en empresa %s", email, company_id)
     return {"ok": True, "config": normalized, "role": role, "empresaId": company_id, "isMaster": is_master}
+
+
+@app.post("/logos")
+async def upload_logo_endpoint(
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Form(None),
+    logo: UploadFile = File(...),
+):
+    decoded = verify_bearer_token(authorization)
+    email = decoded.get("email")
+    is_master = is_master_admin(decoded)
+    if empresa_id:
+        if not is_master:
+            raise HTTPException(status_code=403, detail="Solo administradores maestros pueden actualizar logos de otras empresas")
+        try:
+            company_id = sanitize_company_id(empresa_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    else:
+        company_id = extract_company_id(decoded)
+    if not is_master:
+        ensure_admin(email, company_id)
+    contents = await logo.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="El archivo esta vacio")
+    if len(contents) > MAX_LOGO_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail=f"El logo supera el limite de {MAX_LOGO_SIZE_BYTES // 1024} KB")
+    content_type = (logo.content_type or "").lower()
+    if content_type not in ALLOWED_LOGO_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Solo se permiten imagenes JPEG (.jpg)")
+    detected = imghdr.what(None, h=contents)
+    if detected not in {"jpeg"}:
+        raise HTTPException(status_code=400, detail="El archivo debe ser un JPEG valido")
+    path = logo_path_for_company(company_id)
+    try:
+        with path.open("wb") as fh:
+            fh.write(contents)
+    except Exception as exc:
+        logger.exception("No se pudo guardar logo para %s: %s", company_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo guardar el logo") from exc
+    logger.info("Logo actualizado por %s para empresa %s (%d bytes)", email, company_id, len(contents))
+    return {"ok": True, "empresaId": company_id, "updatedAt": current_utc_iso()}
+
+
+@app.get("/logos/{empresa_id}.jpg")
+def get_logo_endpoint(empresa_id: str):
+    try:
+        company_id = sanitize_company_id(empresa_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    path = logo_path_for_company(company_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Logo no encontrado")
+    headers = {"Cache-Control": "public, max-age=3600"}
+    return FileResponse(path, media_type="image/jpeg", filename=f"{company_id}.jpg", headers=headers)
 
 
 # ---- API ----
