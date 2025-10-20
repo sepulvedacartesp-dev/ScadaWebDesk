@@ -1,4 +1,5 @@
 ﻿import os
+import io
 import json
 import base64
 import ssl
@@ -6,7 +7,6 @@ import threading
 import asyncio
 import logging
 import re
-import imghdr
 import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import List, Optional, Dict, Any, Set
@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
+from PIL import Image, UnidentifiedImageError
 
 import firebase_admin
 from firebase_admin import auth as firebase_auth
@@ -1462,8 +1463,16 @@ async def upload_logo_endpoint(
     content_type = (logo.content_type or "").lower()
     if content_type not in ALLOWED_LOGO_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Solo se permiten imagenes JPEG (.jpg)")
-    detected = imghdr.what(None, h=contents)
-    if detected not in {"jpeg"}:
+    try:
+        with Image.open(io.BytesIO(contents)) as img:
+            img.verify()
+            format_name = (img.format or "").upper()
+    except UnidentifiedImageError:
+        raise HTTPException(status_code=400, detail="El archivo debe ser un JPEG valido")
+    except Exception as exc:
+        logger.warning("Error validando logo para %s: %s", company_id, exc)
+        raise HTTPException(status_code=400, detail="No se pudo validar el logo cargado") from exc
+    if format_name not in {"JPEG", "JPG"}:
         raise HTTPException(status_code=400, detail="El archivo debe ser un JPEG valido")
     path = logo_path_for_company(company_id)
     try:
