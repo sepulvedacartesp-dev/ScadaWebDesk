@@ -495,7 +495,7 @@ function ensureChart() {
 
       interaction: {
 
-        mode: "nearest",
+        mode: "index",
 
         intersect: false,
 
@@ -545,7 +545,7 @@ function ensureChart() {
 
         tooltip: {
 
-          mode: "nearest",
+          mode: "index",
 
           intersect: false,
 
