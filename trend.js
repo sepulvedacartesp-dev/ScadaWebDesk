@@ -72,6 +72,11 @@ const trendCanvas = document.getElementById("trend-canvas");
 
 const trendFeedback = document.getElementById("trend-feedback");
 
+const hoverReadout = document.getElementById("hover-readout");
+
+const defaultHoverMessage = "Mueve el cursor sobre la grafica para ver valores exactos.";
+let lastHoverMessage = "";
+
 
 
 const DEFAULT_MAIN_TITLE = "SurNex SCADA";
@@ -133,6 +138,22 @@ function showFeedback(message, tone = "info") {
 }
 
 
+
+function updateHoverReadout(message) {
+
+  if (!hoverReadout) return;
+
+  const next = message || defaultHoverMessage;
+
+  if (next !== lastHoverMessage) {
+
+    hoverReadout.textContent = next;
+
+    lastHoverMessage = next;
+
+  }
+
+}
 
 function computeInitials(title) {
 
@@ -280,6 +301,90 @@ function formatNumber(value) {
 
 }
 
+const hoverIndicatorPlugin = {
+
+  id: "hoverIndicator",
+
+  afterDraw(chart) {
+
+    const tooltip = chart.tooltip;
+
+    const active = tooltip && (typeof tooltip.getActiveElements === "function" ? tooltip.getActiveElements() : tooltip.dataPoints);
+
+    if (!tooltip || !active || !active.length) {
+
+      updateHoverReadout();
+
+      return;
+
+    }
+
+    const element = active[0].element || active[0];
+
+    const x = element && typeof element.x === "number" ? element.x : null;
+
+    if (x !== null) {
+
+      const { top, bottom } = chart.chartArea;
+
+      const ctx = chart.ctx;
+
+      ctx.save();
+
+      ctx.strokeStyle = "#ffffff66";
+
+      ctx.lineWidth = 1;
+
+      ctx.setLineDash([4, 4]);
+
+      ctx.beginPath();
+
+      ctx.moveTo(x, top);
+
+      ctx.lineTo(x, bottom);
+
+      ctx.stroke();
+
+      ctx.restore();
+
+    }
+
+    const points = tooltip.dataPoints || active;
+
+    if (!points || !points.length) {
+
+      updateHoverReadout();
+
+      return;
+
+    }
+
+    const timestamp = points[0].parsed?.x ?? points[0].raw?.x ?? null;
+
+    const date = timestamp ? new Date(timestamp) : null;
+
+    const timeLabel = date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : "Sin marca temporal";
+
+    const detail = points
+
+      .map((pt) => {
+
+        const label = pt.dataset?.label || "Serie";
+
+        const value = pt.raw?.y ?? pt.parsed?.y ?? null;
+
+        return `${label}: ${formatNumber(value)}`;
+
+      })
+
+      .join(" | ");
+
+    updateHoverReadout(`${timeLabel} | ${detail}`);
+
+  },
+
+};
+
 
 
 function updateMetrics(seriesCollection) {
@@ -380,11 +485,23 @@ function ensureChart() {
 
     data: { datasets: [] },
 
+    plugins: [hoverIndicatorPlugin],
+
     options: {
 
       responsive: true,
 
       maintainAspectRatio: false,
+
+      interaction: {
+
+        mode: "nearest",
+
+        intersect: false,
+
+        axis: "x",
+
+      },
 
       parsing: false,
 
@@ -428,11 +545,15 @@ function ensureChart() {
 
         tooltip: {
 
+          mode: "nearest",
+
+          intersect: false,
+
           callbacks: {
 
             label(context) {
 
-              const value = context.parsed.y;
+              const value = context.raw?.y ?? context.parsed.y;
 
               return `${context.dataset.label}: ${formatNumber(value)}`;
 
@@ -447,6 +568,8 @@ function ensureChart() {
     },
 
   });
+
+  updateHoverReadout(defaultHoverMessage);
 
   return chartInstance;
 
@@ -560,7 +683,7 @@ function renderSeries(seriesCollection) {
 
   chart.update();
 
-
+  updateHoverReadout(defaultHoverMessage);
 
   lastSeriesCollection = seriesCollection;
 
@@ -720,6 +843,8 @@ async function loadTags() {
 
       showFeedback("No hay tendencias configuradas para la empresa seleccionada.", "warning");
 
+      updateHoverReadout(defaultHoverMessage);
+
       return;
 
     }
@@ -773,6 +898,8 @@ async function loadTags() {
     setApiStatus("Error al consultar", false);
 
     showFeedback("No fue posible obtener la lista de tags. Intenta nuevamente.", "error");
+
+    updateHoverReadout(defaultHoverMessage);
 
   }
 
