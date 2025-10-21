@@ -17,7 +17,7 @@
         {
           "type": "level",
           "label": "Temperatura",
-          "topic": "Micro/NivelTK",
+          "topic": "Planta1/PV",
           "unit": "°C",
           "color": "#fafafa",
           "min": 0,
@@ -26,27 +26,27 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "Micro/NivelTK",
+          "topic": "Planta1/PV",
           "unit": "°C"
         },
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "Micro/PumpCmdStart",
+          "topic": "Planta1/Partir",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "Micro/PumpCmdStop",
+          "topic": "Planta1/Parar",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "Micro/PumpSts",
+          "topic": "Planta1/Sts",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         }
@@ -58,7 +58,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "Siemens/PV",
+          "topic": "Planta2/PV",
           "unit": "°C",
           "color": "#ff0000",
           "min": 0,
@@ -67,21 +67,21 @@
         {
           "type": "startBtn",
           "label": "Partir Ventilador",
-          "topic": "Siemens/Partir",
+          "topic": "Planta2/Partir",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar Ventilador",
-          "topic": "Siemens/Parar",
+          "topic": "Planta2/Parar",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "Siemens/Sts",
+          "topic": "Planta2/Sts",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         }
