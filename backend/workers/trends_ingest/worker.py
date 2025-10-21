@@ -99,18 +99,61 @@ def load_broker_profiles() -> Dict[str, Dict[str, Any]]:
 
 
 def parse_payload(raw_payload: bytes, topic: str) -> Dict[str, Any]:
-    data = json.loads(raw_payload.decode("utf-8"))
-    empresa_id = data.get("empresaId") or DEFAULT_EMPRESA_ID
-    tag = data.get("tag")
-    value = float(data.get("value"))
-    timestamp_iso = data.get("timestamp")
-    if not timestamp_iso:
-        timestamp_iso = datetime.now(timezone.utc).isoformat()
+    text = raw_payload.decode("utf-8").strip()
+
+    empresa_id = DEFAULT_EMPRESA_ID
+    tag = topic
+    parts = topic.split("/")
+    if len(parts) >= 4 and parts[0] == "scada" and parts[1] == "customers":
+        empresa_id = parts[2] or DEFAULT_EMPRESA_ID
+        if len(parts) >= 5 and parts[3] == "trend":
+            tag = "/".join(parts[4:]) or topic
+        else:
+            tag = "/".join(parts[3:]) or topic
+
+    # Intenta parsear como JSON primero
+    parsed: Any
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = text
+
+    timestamp = datetime.now(timezone.utc)
+    value: float
+
+    if isinstance(parsed, dict):
+        if parsed.get("empresaId"):
+            empresa_id = str(parsed["empresaId"])
+        if parsed.get("tag"):
+            tag = str(parsed["tag"])
+        raw_value = parsed.get("value")
+        if raw_value is None:
+            raise ValueError("Payload JSON sin campo 'value'")
+        timestamp_str = parsed.get("timestamp")
+        if timestamp_str:
+            timestamp = datetime.fromisoformat(str(timestamp_str).replace("Z", "+00:00"))
+    else:
+        raw_value = parsed
+
+    if isinstance(raw_value, bool):
+        value = 1.0 if raw_value else 0.0
+    elif isinstance(raw_value, (int, float)):
+        value = float(raw_value)
+    else:
+        if isinstance(raw_value, str):
+            lowered = raw_value.lower()
+            if lowered in {"true", "false"}:
+                value = 1.0 if lowered == "true" else 0.0
+            else:
+                value = float(raw_value)
+        else:
+            raise ValueError(f"No se puede convertir el payload a numero: {raw_value}")
+
     return {
-        "empresa_id": empresa_id,
+        "empresa_id": empresa_id or DEFAULT_EMPRESA_ID,
         "tag": tag,
         "value": value,
-        "timestamp": datetime.fromisoformat(timestamp_iso.replace("Z", "+00:00")),
+        "timestamp": timestamp,
     }
 
 
