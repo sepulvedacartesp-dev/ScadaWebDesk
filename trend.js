@@ -332,13 +332,16 @@ function computeRange(rangeValue) {
     to = toISOStringLocal(toInput.value) || new Date().toISOString();
     return { from, to };
   }
-  const mapping = {
-    "24h": 24,
-    "48h": 48,
-    "7d": 24 * 7,
+  const durations = {
+    "15m": 15 * 60 * 1000,
+    "30m": 30 * 60 * 1000,
+    "1h": 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+    "48h": 48 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
   };
-  const hours = mapping[rangeValue] ?? 24;
-  from = new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString();
+  const duration = durations[rangeValue] ?? durations["24h"];
+  from = new Date(now.getTime() - duration).toISOString();
   return { from, to: to.toISOString() };
 }
 
