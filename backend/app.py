@@ -1617,7 +1617,7 @@ async def list_trend_tags(
 
 @app.get("/api/tendencias")
 async def read_trend_series(
-    tag: str = Query(..., min_length=1),
+    tags: List[str] = Query(..., alias="tag"),
     authorization: Optional[str] = Header(None),
     empresa_id: Optional[str] = Query(None),
     from_ts: Optional[str] = Query(None, alias="from"),
@@ -1625,10 +1625,24 @@ async def read_trend_series(
     resolution: str = Query("raw"),
     limit: Optional[int] = Query(None, ge=1, le=10000),
 ):
-    if not tag:
+    if not tags:
         raise HTTPException(status_code=400, detail="tag es requerido")
-    normalized_tag = tag.strip()
-    if not normalized_tag:
+
+    normalized_tags: List[str] = []
+    seen: Set[str] = set()
+    for raw in tags:
+        if raw is None:
+            continue
+        candidate = raw.strip()
+        if not candidate:
+            continue
+        lowered = candidate.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        normalized_tags.append(candidate)
+
+    if not normalized_tags:
         raise HTTPException(status_code=400, detail="tag es requerido")
 
     decoded = verify_bearer_token(authorization)
@@ -1662,100 +1676,115 @@ async def read_trend_series(
             raise HTTPException(status_code=400, detail=f"limit invalido: {exc}") from exc
 
     pool = require_trend_pool()
+    series_collection: List[Dict[str, Any]] = []
+    total_points = 0
+
     async with pool.acquire() as conn:
-        stats_row = await conn.fetchrow(
-            """
-            SELECT
-                COUNT(*) OVER () AS count,
-                MIN(valor) OVER () AS min_value,
-                MAX(valor) OVER () AS max_value,
-                AVG(valor) OVER () AS avg_value,
-                FIRST_VALUE(valor) OVER (ORDER BY timestamp DESC) AS latest_value,
-                FIRST_VALUE(timestamp) OVER (ORDER BY timestamp DESC) AS latest_timestamp
-            FROM trends
-            WHERE empresa_id = $1
-              AND tag = $2
-              AND timestamp BETWEEN $3 AND $4
-            ORDER BY timestamp DESC
-            LIMIT 1
-            """,
-            company_id,
-            normalized_tag,
-            start_dt,
-            end_dt,
-        )
-
-        if stats_row is None or not stats_row["count"]:
-            meta = {
-                "tag": normalized_tag,
-                "empresaId": company_id,
-                "resolution": resolution_key,
-                "from": isoformat_utc(start_dt),
-                "to": isoformat_utc(end_dt),
-                "count": 0,
-                "limit": fetch_limit,
-            }
-            return {"series": [], "stats": None, "meta": meta}
-
-        if interval_seconds is None:
-            data_query = """
-                SELECT timestamp, valor
+        for normalized_tag in normalized_tags:
+            stats_row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) OVER () AS count,
+                    MIN(valor) OVER () AS min_value,
+                    MAX(valor) OVER () AS max_value,
+                    AVG(valor) OVER () AS avg_value,
+                    FIRST_VALUE(valor) OVER (ORDER BY timestamp DESC) AS latest_value,
+                    FIRST_VALUE(timestamp) OVER (ORDER BY timestamp DESC) AS latest_timestamp
                 FROM trends
                 WHERE empresa_id = $1
                   AND tag = $2
                   AND timestamp BETWEEN $3 AND $4
-                ORDER BY timestamp ASC
-                LIMIT $5
-            """
-            rows = await conn.fetch(data_query, company_id, normalized_tag, start_dt, end_dt, fetch_limit)
-            series = [
-                {"timestamp": isoformat_utc(row["timestamp"]), "value": float(row["valor"])}  # type: ignore[arg-type]
-                for row in rows
-            ]
-        else:
-            data_query = """
-                SELECT to_timestamp(floor(extract(epoch FROM timestamp)/$5)*$5) AS bucket,
-                       AVG(valor) AS value
-                FROM trends
-                WHERE empresa_id = $1
-                  AND tag = $2
-                  AND timestamp BETWEEN $3 AND $4
-                GROUP BY bucket
-                ORDER BY bucket ASC
-                LIMIT $6
-            """
-            rows = await conn.fetch(
-                data_query,
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
                 company_id,
                 normalized_tag,
                 start_dt,
                 end_dt,
-                interval_seconds,
-                fetch_limit,
             )
-            series = [
-                {"timestamp": isoformat_utc(row["bucket"]), "value": float(row["value"])}  # type: ignore[arg-type]
-                for row in rows
-            ]
 
-    stats = {
-        "latest": float(stats_row["latest_value"]) if stats_row["latest_value"] is not None else None,
-        "min": float(stats_row["min_value"]) if stats_row["min_value"] is not None else None,
-        "max": float(stats_row["max_value"]) if stats_row["max_value"] is not None else None,
-        "avg": float(stats_row["avg_value"]) if stats_row["avg_value"] is not None else None,
-        "latestTimestamp": isoformat_utc(stats_row["latest_timestamp"]),
-        "count": int(stats_row["count"]),
-    }
+            if stats_row is None or not stats_row["count"]:
+                series_collection.append(
+                    {
+                        "tag": normalized_tag,
+                        "points": [],
+                        "stats": None,
+                        "count": 0,
+                    }
+                )
+                continue
+
+            if interval_seconds is None:
+                data_query = """
+                    SELECT timestamp, valor
+                    FROM trends
+                    WHERE empresa_id = $1
+                      AND tag = $2
+                      AND timestamp BETWEEN $3 AND $4
+                    ORDER BY timestamp ASC
+                    LIMIT $5
+                """
+                rows = await conn.fetch(data_query, company_id, normalized_tag, start_dt, end_dt, fetch_limit)
+                points = [
+                    {"timestamp": isoformat_utc(row["timestamp"]), "value": float(row["valor"])}  # type: ignore[arg-type]
+                    for row in rows
+                ]
+            else:
+                data_query = """
+                    SELECT to_timestamp(floor(extract(epoch FROM timestamp)/$5)*$5) AS bucket,
+                           AVG(valor) AS value
+                    FROM trends
+                    WHERE empresa_id = $1
+                      AND tag = $2
+                      AND timestamp BETWEEN $3 AND $4
+                    GROUP BY bucket
+                    ORDER BY bucket ASC
+                    LIMIT $6
+                """
+                rows = await conn.fetch(
+                    data_query,
+                    company_id,
+                    normalized_tag,
+                    start_dt,
+                    end_dt,
+                    interval_seconds,
+                    fetch_limit,
+                )
+                points = [
+                    {"timestamp": isoformat_utc(row["bucket"]), "value": float(row["value"])}  # type: ignore[arg-type]
+                    for row in rows
+                ]
+
+            total_points += len(points)
+            stats = {
+                "latest": float(stats_row["latest_value"]) if stats_row["latest_value"] is not None else None,
+                "min": float(stats_row["min_value"]) if stats_row["min_value"] is not None else None,
+                "max": float(stats_row["max_value"]) if stats_row["max_value"] is not None else None,
+                "avg": float(stats_row["avg_value"]) if stats_row["avg_value"] is not None else None,
+                "latestTimestamp": isoformat_utc(stats_row["latest_timestamp"]),
+                "count": int(stats_row["count"]),
+            }
+            series_collection.append(
+                {
+                    "tag": normalized_tag,
+                    "points": points,
+                    "stats": stats,
+                    "count": len(points),
+                }
+            )
+
     meta = {
-        "tag": normalized_tag,
+        "tags": normalized_tags,
         "empresaId": company_id,
         "resolution": resolution_key,
         "from": isoformat_utc(start_dt),
         "to": isoformat_utc(end_dt),
         "limit": fetch_limit,
-        "datasetSize": len(series),
+        "datasetSize": sum(entry["count"] for entry in series_collection),
+        "totalPoints": total_points,
+        "requested": len(normalized_tags),
     }
-    return {"series": series, "stats": stats, "meta": meta}
+    return {"series": series_collection, "meta": meta}
 
 
 # ---- API ----

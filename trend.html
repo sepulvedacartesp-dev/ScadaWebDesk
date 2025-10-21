@@ -64,7 +64,7 @@
       <form id="trend-form" class="trend-form">
         <div class="form-block">
           <label for="trend-tag">Variable (tag)</label>
-          <select id="trend-tag" name="tag" required disabled>
+          <select id="trend-tag" name="tag" required disabled multiple size="6">
             <option value="">Selecciona una opción</option>
           </select>
         </div>
@@ -111,23 +111,8 @@
         <h2 class="section-title">Métricas del rango</h2>
         <p class="helper-text">Valores calculados con los datos recuperados.</p>
       </header>
-      <div class="metric-grid">
-        <article class="metric-card">
-          <span class="metric-label">Último valor</span>
-          <strong id="metric-latest">--</strong>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">Mínimo</span>
-          <strong id="metric-min">--</strong>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">Máximo</span>
-          <strong id="metric-max">--</strong>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">Promedio</span>
-          <strong id="metric-avg">--</strong>
-        </article>
+      <div class="metric-grid" id="metric-grid">
+        <p class="helper-text" id="metric-placeholder">Selecciona al menos una variable para ver métricas.</p>
       </div>
     </section>
 
