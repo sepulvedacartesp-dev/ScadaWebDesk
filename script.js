@@ -150,7 +150,7 @@ function disconnectWs(reason) {
     console.info(`WS cerrado (${reason})`);
   }
   if (trendLink) {
-    trendLink.hidden = !visible;
+    trendLink.hidden = true;
   }
 }
 
