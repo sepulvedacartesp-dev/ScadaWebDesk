@@ -21,6 +21,7 @@ const closeLoginBtn = document.getElementById("close-login");
 const loginDialog = document.getElementById("login-dialog");
 const connectChip = document.getElementById("connect-status");
 const configLink = document.getElementById("config-link");
+const trendLink = document.getElementById("trend-link");
 const currentUserLabel = document.getElementById("current-user");
 const currentCompanyLabel = document.getElementById("current-company");
 const brandGroup = document.getElementById("brand-group");
@@ -147,6 +148,9 @@ function disconnectWs(reason) {
   updateConnectionChip(false);
   if (reason) {
     console.info(`WS cerrado (${reason})`);
+  }
+  if (trendLink) {
+    trendLink.hidden = !visible;
   }
 }
 
@@ -299,6 +303,9 @@ function updateRoleUI() {
 function setCurrentUser(email, empresaId) {
   if (currentUserLabel) {
     currentUserLabel.textContent = email || 'Anonimo';
+  }
+  if (trendLink) {
+    trendLink.hidden = !email;
   }
   if (currentCompanyLabel) {
     if (empresaId) {
@@ -882,6 +889,9 @@ function resetSessionState() {
   updateRoleUI();
   if (configLink) {
     configLink.hidden = true;
+  }
+  if (trendLink) {
+    trendLink.hidden = true;
   }
 }
 
