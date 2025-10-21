@@ -53,23 +53,46 @@ function setStatus(message) {
   }
 }
 
+function setApiStatus(message, connected) {
+  if (!apiStatusChip) return;
+  apiStatusChip.textContent = message;
+  apiStatusChip.classList.toggle("chip-connected", !!connected);
+  apiStatusChip.classList.toggle("chip-disconnected", !connected);
+}
+
+function showFeedback(message, tone = "info") {
+  if (!trendFeedback) return;
+  trendFeedback.textContent = message || "";
+  trendFeedback.dataset.tone = tone;
+}
+
 function computeInitials(title) {
   if (!title) return "SW";
-  const parts = String(title)
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const parts = String(title).trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "SW";
   return parts
     .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase() ?? "")
+    .map((word) => (word && word[0] ? word[0].toUpperCase() : ""))
     .join("") || "SW";
 }
 
-function updateBrandLogo(empresaId, title = DEFAULT_MAIN_TITLE) {
-  if (!brandLogoImg || !brandGroup || !brandLogoFallback) return;
+function hydrateMainTitle() {
+  const stored = sessionStorage.getItem("scada-main-title") || localStorage.getItem("scada-main-title");
+  const domTitle = mainTitleNode?.textContent?.trim();
+  const resolved = (stored && stored.trim()) || domTitle || DEFAULT_MAIN_TITLE;
+  if (mainTitleNode) {
+    mainTitleNode.textContent = resolved;
+  }
+  document.title = resolved;
+  sessionStorage.setItem("scada-main-title", resolved);
+  return resolved;
+}
 
-  const initials = computeInitials(title);
+function updateBrandLogo(empresaId, title) {
+  if (!brandGroup || !brandLogoImg || !brandLogoFallback) return;
+  const resolvedTitle = title || mainTitleNode?.textContent || DEFAULT_MAIN_TITLE;
+  const initials = computeInitials(resolvedTitle);
+
   brandLogoFallback.textContent = initials;
   brandLogoFallback.hidden = false;
 
@@ -96,30 +119,25 @@ function updateBrandLogo(empresaId, title = DEFAULT_MAIN_TITLE) {
     brandLogoImg.onload = null;
     brandLogoImg.onerror = null;
   };
-  brandLogoImg.alt = `Logo de ${title}`;
+  brandLogoImg.alt = `Logo de ${resolvedTitle}`;
   brandLogoImg.src = logoUrl;
-}
-
-function setApiStatus(message, connected) {
-  if (!apiStatusChip) return;
-  apiStatusChip.textContent = message;
-  apiStatusChip.classList.toggle("chip-connected", !!connected);
-  apiStatusChip.classList.toggle("chip-disconnected", !connected);
-}
-
-function showFeedback(message, tone = "info") {
-  if (!trendFeedback) return;
-  trendFeedback.textContent = message || "";
-  trendFeedback.dataset.tone = tone;
 }
 
 function resetMetrics() {
   if (!metricGrid) return;
   metricGrid.innerHTML = "";
   if (metricPlaceholder) {
-    metricPlaceholder.textContent = "Selecciona variables y ejecuta la consulta para ver mA??A??tricas.";
+    metricPlaceholder.textContent = "Selecciona variables y ejecuta la consulta para ver mÃ©tricas.";
     metricGrid.appendChild(metricPlaceholder);
   }
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+  const abs = Math.abs(Number(value));
+  if (abs >= 1000 || abs === 0) return Number(value).toFixed(2);
+  if (abs >= 1) return Number(value).toFixed(3);
+  return Number(value).toPrecision(3);
 }
 
 function updateMetrics(seriesCollection) {
@@ -147,7 +165,7 @@ function updateMetrics(seriesCollection) {
       card.appendChild(empty);
     } else {
       const latest = document.createElement("strong");
-      latest.textContent = `Ultimo: ${formatNumber(entry.stats.latest)}`;
+      latest.textContent = `Ãšltimo: ${formatNumber(entry.stats.latest)}`;
       card.appendChild(latest);
 
       const extremes = document.createElement("p");
@@ -166,21 +184,11 @@ function updateMetrics(seriesCollection) {
   metricGrid.appendChild(fragment);
 }
 
-function formatNumber(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
-  const abs = Math.abs(Number(value));
-  if (abs >= 1000 || abs === 0) return Number(value).toFixed(2);
-  if (abs >= 1) return Number(value).toFixed(3);
-  return Number(value).toPrecision(3);
-}
-
 function ensureChart() {
   if (chartInstance) return chartInstance;
   chartInstance = new Chart(trendCanvas, {
     type: "line",
-    data: {
-      datasets: [],
-    },
+    data: { datasets: [] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -190,6 +198,7 @@ function ensureChart() {
           type: "time",
           time: {
             tooltipFormat: "yyyy-MM-dd HH:mm",
+            unit: "hour",
           },
         },
         y: {
@@ -215,6 +224,37 @@ function ensureChart() {
     },
   });
   return chartInstance;
+}
+
+function updateTimeScale(fromIso, toIso) {
+  const chart = ensureChart();
+  let min = fromIso ? new Date(fromIso) : null;
+  let max = toIso ? new Date(toIso) : null;
+  if (min && Number.isNaN(min.getTime())) min = null;
+  if (max && Number.isNaN(max.getTime())) max = null;
+
+  if (min && max) {
+    const diffHours = Math.max((max - min) / 36e5, 0.01);
+    let unit = "day";
+    if (diffHours <= 1) {
+      unit = "minute";
+    } else if (diffHours <= 12) {
+      unit = "hour";
+    } else if (diffHours <= 24 * 7) {
+      unit = "day";
+    } else if (diffHours <= 24 * 30) {
+      unit = "week";
+    } else {
+      unit = "month";
+    }
+    chart.options.scales.x.time.unit = unit;
+    chart.options.scales.x.min = min;
+    chart.options.scales.x.max = max;
+  } else {
+    chart.options.scales.x.time.unit = "day";
+    delete chart.options.scales.x.min;
+    delete chart.options.scales.x.max;
+  }
 }
 
 function renderSeries(seriesCollection) {
@@ -254,7 +294,7 @@ function toISOStringLocal(value) {
 
 async function withAuth(init = {}) {
   const user = firebase.auth().currentUser;
-  if (!user) throw new Error("SesiA??A??n no disponible");
+  if (!user) throw new Error("SesiÃ³n no disponible");
   const token = await user.getIdToken();
   state.token = token;
   const headers = new Headers(init.headers || {});
@@ -296,8 +336,10 @@ function computeRange(rangeValue) {
     "7d": 7 * 24 * 60 * 60 * 1000,
   };
   const duration = durations[rangeValue] ?? durations["24h"];
-  const from = new Date(now.getTime() - duration).toISOString();
-  return { from, to: now.toISOString() };
+  return {
+    from: new Date(now.getTime() - duration).toISOString(),
+    to: now.toISOString(),
+  };
 }
 
 async function loadTags() {
@@ -310,15 +352,8 @@ async function loadTags() {
     const tags = Array.isArray(payload?.tags) ? payload.tags : [];
     state.empresaId = payload?.empresaId || null;
 
-    if (currentCompanyLabel) {
-      if (state.empresaId) {
-        currentCompanyLabel.hidden = false;
-        currentCompanyLabel.textContent = `Empresa: ${state.empresaId}`;
-      } else {
-        currentCompanyLabel.hidden = true;
-      }
-    }
-    updateBrandLogo(state.empresaId, mainTitleNode?.textContent || DEFAULT_MAIN_TITLE);
+    const title = hydrateMainTitle();
+    updateBrandLogo(state.empresaId, title);
 
     tagSelect.innerHTML = "";
     if (!tags.length) {
@@ -377,6 +412,7 @@ async function loadTrendData(event) {
   if (from) params.set("from", from);
   if (to) params.set("to", to);
 
+  updateTimeScale(from, to);
   showFeedback("Cargando datos de tendencia...", "info");
   setApiStatus("Consultando...", true);
   resetMetrics();
@@ -404,7 +440,7 @@ async function loadTrendData(event) {
   } catch (error) {
     console.error("No se pudo obtener la tendencia", error);
     setApiStatus("Error al cargar", false);
-    showFeedback("OcurriA??A?? un error al obtener los datos. Vuelve a intentar.", "error");
+    showFeedback("Ocurrió un error al obtener los datos. Vuelve a intentar.", "error");
   }
 }
 
@@ -420,7 +456,9 @@ function exportCsv() {
 
   const csvContent = rows
     .map((cols) => cols.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
-    .join("\r\n");
+    .join("
+
+");
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -448,8 +486,8 @@ function setFormEnabled(enabled) {
     if (!control) return;
     control.disabled = !enabled;
   });
-  if (!enabled) {
-    tagSelect.innerHTML = '<option value="">Selecciona una opciA??A??n</option>';
+  if (!enabled && tagSelect) {
+    tagSelect.innerHTML = '<option value="">Selecciona una opción</option>';
   }
 }
 
@@ -470,15 +508,15 @@ function attachEventHandlers() {
     const email = emailInput.value.trim();
     const password = passwordInput.value;
     if (!email || !password) return;
-    setStatus("Iniciando sesiA??A??n...");
+    setStatus("Iniciando sesión...");
     try {
       await firebase.auth().signInWithEmailAndPassword(email, password);
       loginDialog?.close();
       emailInput.value = "";
       passwordInput.value = "";
     } catch (error) {
-      console.error("No se pudo iniciar sesiA??A??n", error);
-      setStatus("Error al iniciar sesiA??A??n");
+      console.error("No se pudo iniciar sesión", error);
+      setStatus("Error al iniciar sesión");
     }
   });
 
@@ -486,7 +524,7 @@ function attachEventHandlers() {
     try {
       await firebase.auth().signOut();
     } catch (error) {
-      console.error("Error al cerrar sesiA??A??n", error);
+      console.error("Error al cerrar sesión", error);
     }
   });
 
@@ -497,24 +535,27 @@ function attachEventHandlers() {
   firebase.auth().onAuthStateChanged((user) => {
     state.user = user;
     if (user) {
-      setStatus(`SesiA??A??n activa: ${user.email}`);
+      const resolvedTitle = hydrateMainTitle();
+      updateBrandLogo(state.empresaId, resolvedTitle);
+      setStatus(`Sesión activa: ${user.email}`);
       currentUserLabel.textContent = user.email || "Usuario autenticado";
       logoutBtn.disabled = false;
       openLoginBtn.disabled = true;
       loadTags();
     } else {
-      setStatus("Sin sesiA??A??n");
-      currentUserLabel.textContent = "AnA??A??nimo";
+      setStatus("Sin sesión");
+      currentUserLabel.textContent = "Anónimo";
       currentCompanyLabel.hidden = true;
       logoutBtn.disabled = true;
       openLoginBtn.disabled = false;
-      setApiStatus("Sin conexiA??A??n", false);
+      setApiStatus("Sin conexión", false);
       setFormEnabled(false);
       renderSeries([]);
       updateMetrics([]);
       resetMetrics();
-      showFeedback("Inicia sesiA??A??n para consultar datos histA??A??ricos.", "info");
+      showFeedback("Inicia sesión para consultar datos históricos.", "info");
       updateBrandLogo(null, DEFAULT_MAIN_TITLE);
+      document.title = DEFAULT_MAIN_TITLE;
     }
   });
 
@@ -529,10 +570,14 @@ function attachEventHandlers() {
   });
 }
 
-// InicializaciA??A??n
-setFormEnabled(false);
-resetMetrics();
-renderSeries([]);
-showFeedback("Inicia sesiA??A??n para comenzar.", "info");
-toggleCustomRange();
-attachEventHandlers();
+function initialize() {
+  hydrateMainTitle();
+  toggleCustomRange();
+  setFormEnabled(false);
+  resetMetrics();
+  renderSeries([]);
+  showFeedback("Inicia sesión para comenzar.", "info");
+  attachEventHandlers();
+}
+
+initialize();
