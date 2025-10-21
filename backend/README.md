@@ -35,6 +35,10 @@ PUBLIC_ALLOWED_PREFIXES=public/broadcast
 DEFAULT_EMPRESA_ID=default
 MASTER_ADMIN_EMAILS=maestro@tuempresa.com
 MASTER_ADMIN_ROLE_NAMES=master,root
+DATABASE_URL=postgresql://user:password@host:5432/trends
+TRENDS_FETCH_LIMIT=5000
+DEFAULT_TRENDS_RANGE_HOURS=24
+DIAS_RETENCION_HISTORICO=30
 ```
 `MQTT_BROKER_PROFILES` permite definir un mapa JSON plano `{ "claveBroker": { ... } }`. Cada entrada hereda las credenciales base (`HIVEMQ_*`) y puede sobrescribir `host`, `port`, `username`, `password`, `tls`, `tlsInsecure`, `caCertPath`, `clientId` y `keepalive`. Usa la clave `default` para la configuración por omisión y agrega entradas adicionales (`cliente1`, `cliente2`, etc.) para asignarlas a empresas concretas.
 Si necesitas validar revocacion de tokens, agrega `FIREBASE_SERVICE_ACCOUNT` con el JSON completo del service account.
@@ -72,6 +76,17 @@ Configura el servicio exactamente con los siguientes valores:
   - `DEFAULT_EMPRESA_ID=default`
   - `MASTER_ADMIN_EMAILS=maestro@tuempresa.com`
   - `MASTER_ADMIN_ROLE_NAMES=master,root`
+  - `DATABASE_URL=postgresql://user:password@hostname:5432/trends`
+  - `TRENDS_FETCH_LIMIT=5000`
+  - `DEFAULT_TRENDS_RANGE_HOURS=24`
+  - `DIAS_RETENCION_HISTORICO=30`
+
+### Servicio de tendencias historicas
+- `GET /api/tendencias/tags`: lista los tags disponibles para la empresa autenticada (acepta `empresaId` cuando el usuario es maestro).
+- `GET /api/tendencias`: entrega la serie de tiempo y estadisticas claves (`latest`, `min`, `max`, `avg`) filtrando por `tag`, rango (`from`, `to`) y resolucion (`raw`, `5m`, `15m`, `1h`, `1d`).
+- `GET /trend`: sirve la pagina `trend.html` con la interfaz de visualizacion.
+
+Configura en Render una base PostgreSQL accesible via `DATABASE_URL` y un cron job/worker que ejecute la sentencia de retencion respetando `DIAS_RETENCION_HISTORICO`.
 
 ## Integracion del Frontend
 1. Incluye los SDK compat de Firebase en `index.html`.

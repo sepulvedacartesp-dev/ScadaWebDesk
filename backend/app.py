@@ -11,7 +11,7 @@ import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import List, Optional, Dict, Any, Set
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Body, UploadFile, File, Form
@@ -30,6 +30,7 @@ from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
 import paho.mqtt.client as mqtt
+import asyncpg
 
 load_dotenv()
 
@@ -119,6 +120,8 @@ MAX_LOGO_SIZE_BYTES = int(os.getenv("MAX_LOGO_SIZE_BYTES", "2097152"))
 COMPANIES_PATH = CONFIG_STORAGE_DIR / 'companies.json'
 COMPANIES_LOCK = threading.Lock()
 
+TREND_HTML_PATH = (BASE_DIR / '..' / 'trend.html').resolve()
+
 def config_path_for_company(company_id: str) -> Path:
     sanitized = sanitize_company_id(company_id)
     target = CONFIG_STORAGE_DIR / f"{sanitized}{CONFIG_FILENAME_SUFFIX}"
@@ -188,6 +191,38 @@ def firebase_timestamp_to_iso(value: Optional[int]) -> Optional[str]:
         return datetime.utcfromtimestamp(int(value) / 1000).replace(microsecond=0).isoformat() + "Z"
     except Exception:
         return None
+
+
+def parse_iso8601(value: Optional[str]) -> Optional[datetime]:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    if not cleaned:
+        return None
+    if cleaned.endswith("Z"):
+        cleaned = cleaned[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(cleaned)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Fecha inválida: {value}") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed
+
+
+def isoformat_utc(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    target = value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return target.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def require_trend_pool() -> asyncpg.pool.Pool:
+    if trend_db_pool is None:
+        raise HTTPException(status_code=503, detail="Servicio de tendencias no disponible")
+    return trend_db_pool
 
 
 def normalize_company_entry(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -406,6 +441,7 @@ class GithubSyncError(Exception):
 FIREBASE_APP_NAME = "bridge-app"
 firebase_app = None
 event_loop: Optional[asyncio.AbstractEventLoop] = None
+trend_db_pool: Optional[asyncpg.pool.Pool] = None
 # ---- Config ----
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
@@ -429,6 +465,19 @@ FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY", "").strip()
 FIREBASE_EMAIL_CONTINUE_URL = os.getenv("FIREBASE_EMAIL_CONTINUE_URL", "").strip()
 FIREBASE_AUTH_TIMEOUT = float(os.getenv("FIREBASE_AUTH_TIMEOUT", "10"))
 IDENTITY_TOOLKIT_URL = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode"
+
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+TRENDS_FETCH_LIMIT = coerce_int(os.getenv("TRENDS_FETCH_LIMIT", "5000"), 5000)
+DEFAULT_TRENDS_RANGE_HOURS = coerce_int(os.getenv("DEFAULT_TRENDS_RANGE_HOURS", "24"), 24)
+DIAS_RETENCION_HISTORICO = coerce_int(os.getenv("DIAS_RETENCION_HISTORICO", "30"), 30)
+
+TRENDS_RESOLUTION_SECONDS: Dict[str, Optional[int]] = {
+    "raw": None,
+    "5m": 5 * 60,
+    "15m": 15 * 60,
+    "1h": 60 * 60,
+    "1d": 24 * 60 * 60,
+}
 
 if not FIREBASE_PROJECT_ID:
     raise RuntimeError("FIREBASE_PROJECT_ID is required")
@@ -675,6 +724,34 @@ async def capture_event_loop():
     global event_loop
     event_loop = asyncio.get_running_loop()
     logger.info("Event loop captured")
+
+
+@app.on_event("startup")
+async def init_trend_database_pool():
+    global trend_db_pool
+    if not DATABASE_URL:
+        logger.warning("DATABASE_URL no definido. Endpoints de tendencias permanecerán deshabilitados.")
+        trend_db_pool = None
+        return
+    try:
+        trend_db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5, timeout=10)
+        logger.info("Pool de base de datos para tendencias inicializado.")
+    except Exception as exc:
+        trend_db_pool = None
+        logger.error("No se pudo inicializar el pool de tendencias: %s", exc)
+
+
+@app.on_event("shutdown")
+async def shutdown_trend_database_pool():
+    global trend_db_pool
+    pool = trend_db_pool
+    if pool is None:
+        return
+    try:
+        await pool.close()
+        logger.info("Pool de base de datos para tendencias cerrado.")
+    finally:
+        trend_db_pool = None
 
 # CORS
 app.add_middleware(
@@ -1496,6 +1573,189 @@ def get_logo_endpoint(empresa_id: str):
         raise HTTPException(status_code=404, detail="Logo no encontrado")
     headers = {"Cache-Control": "public, max-age=3600"}
     return FileResponse(path, media_type="image/jpeg", filename=f"{company_id}.jpg", headers=headers)
+
+
+@app.get("/trend")
+def get_trend_page():
+    if not TREND_HTML_PATH.exists():
+        raise HTTPException(status_code=404, detail="trend.html no disponible")
+    return FileResponse(TREND_HTML_PATH, media_type="text/html")
+
+
+@app.get("/api/tendencias/tags")
+async def list_trend_tags(
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    decoded = verify_bearer_token(authorization)
+    is_master = is_master_admin(decoded)
+    if empresa_id:
+        if not is_master:
+            raise HTTPException(status_code=403, detail="Solo administradores maestros pueden consultar otras empresas")
+        try:
+            company_id = sanitize_company_id(empresa_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    else:
+        company_id = extract_company_id(decoded)
+
+    pool = require_trend_pool()
+    effective_limit = max(1, min(int(limit), 1000))
+    query = """
+        SELECT DISTINCT tag
+        FROM trends
+        WHERE empresa_id = $1
+        ORDER BY tag ASC
+        LIMIT $2
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, company_id, effective_limit)
+    tags = [row["tag"] for row in rows if row["tag"]]
+    return {"empresaId": company_id, "tags": tags, "count": len(tags)}
+
+
+@app.get("/api/tendencias")
+async def read_trend_series(
+    tag: str = Query(..., min_length=1),
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+    from_ts: Optional[str] = Query(None, alias="from"),
+    to_ts: Optional[str] = Query(None, alias="to"),
+    resolution: str = Query("raw"),
+    limit: Optional[int] = Query(None, ge=1, le=10000),
+):
+    if not tag:
+        raise HTTPException(status_code=400, detail="tag es requerido")
+    normalized_tag = tag.strip()
+    if not normalized_tag:
+        raise HTTPException(status_code=400, detail="tag es requerido")
+
+    decoded = verify_bearer_token(authorization)
+    is_master = is_master_admin(decoded)
+    if empresa_id:
+        if not is_master:
+            raise HTTPException(status_code=403, detail="Solo administradores maestros pueden consultar otras empresas")
+        try:
+            company_id = sanitize_company_id(empresa_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    else:
+        company_id = extract_company_id(decoded)
+
+    resolution_key = (resolution or "raw").strip().lower()
+    if resolution_key not in TRENDS_RESOLUTION_SECONDS:
+        raise HTTPException(status_code=400, detail=f"Resolucion no soportada: {resolution}")
+    interval_seconds = TRENDS_RESOLUTION_SECONDS[resolution_key]
+
+    now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+    end_dt = parse_iso8601(to_ts) or now_utc
+    start_dt = parse_iso8601(from_ts) or (end_dt - timedelta(hours=DEFAULT_TRENDS_RANGE_HOURS))
+    if start_dt >= end_dt:
+        raise HTTPException(status_code=400, detail="El rango de fechas es invalido")
+
+    fetch_limit = TRENDS_FETCH_LIMIT
+    if limit is not None:
+        try:
+            fetch_limit = max(1, min(int(limit), TRENDS_FETCH_LIMIT))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"limit invalido: {exc}") from exc
+
+    pool = require_trend_pool()
+    async with pool.acquire() as conn:
+        stats_row = await conn.fetchrow(
+            """
+            SELECT
+                COUNT(*) OVER () AS count,
+                MIN(valor) OVER () AS min_value,
+                MAX(valor) OVER () AS max_value,
+                AVG(valor) OVER () AS avg_value,
+                FIRST_VALUE(valor) OVER (ORDER BY timestamp DESC) AS latest_value,
+                FIRST_VALUE(timestamp) OVER (ORDER BY timestamp DESC) AS latest_timestamp
+            FROM trends
+            WHERE empresa_id = $1
+              AND tag = $2
+              AND timestamp BETWEEN $3 AND $4
+            ORDER BY timestamp DESC
+            LIMIT 1
+            """,
+            company_id,
+            normalized_tag,
+            start_dt,
+            end_dt,
+        )
+
+        if stats_row is None or not stats_row["count"]:
+            meta = {
+                "tag": normalized_tag,
+                "empresaId": company_id,
+                "resolution": resolution_key,
+                "from": isoformat_utc(start_dt),
+                "to": isoformat_utc(end_dt),
+                "count": 0,
+                "limit": fetch_limit,
+            }
+            return {"series": [], "stats": None, "meta": meta}
+
+        if interval_seconds is None:
+            data_query = """
+                SELECT timestamp, valor
+                FROM trends
+                WHERE empresa_id = $1
+                  AND tag = $2
+                  AND timestamp BETWEEN $3 AND $4
+                ORDER BY timestamp ASC
+                LIMIT $5
+            """
+            rows = await conn.fetch(data_query, company_id, normalized_tag, start_dt, end_dt, fetch_limit)
+            series = [
+                {"timestamp": isoformat_utc(row["timestamp"]), "value": float(row["valor"])}  # type: ignore[arg-type]
+                for row in rows
+            ]
+        else:
+            data_query = """
+                SELECT to_timestamp(floor(extract(epoch FROM timestamp)/$5)*$5) AS bucket,
+                       AVG(valor) AS value
+                FROM trends
+                WHERE empresa_id = $1
+                  AND tag = $2
+                  AND timestamp BETWEEN $3 AND $4
+                GROUP BY bucket
+                ORDER BY bucket ASC
+                LIMIT $6
+            """
+            rows = await conn.fetch(
+                data_query,
+                company_id,
+                normalized_tag,
+                start_dt,
+                end_dt,
+                interval_seconds,
+                fetch_limit,
+            )
+            series = [
+                {"timestamp": isoformat_utc(row["bucket"]), "value": float(row["value"])}  # type: ignore[arg-type]
+                for row in rows
+            ]
+
+    stats = {
+        "latest": float(stats_row["latest_value"]) if stats_row["latest_value"] is not None else None,
+        "min": float(stats_row["min_value"]) if stats_row["min_value"] is not None else None,
+        "max": float(stats_row["max_value"]) if stats_row["max_value"] is not None else None,
+        "avg": float(stats_row["avg_value"]) if stats_row["avg_value"] is not None else None,
+        "latestTimestamp": isoformat_utc(stats_row["latest_timestamp"]),
+        "count": int(stats_row["count"]),
+    }
+    meta = {
+        "tag": normalized_tag,
+        "empresaId": company_id,
+        "resolution": resolution_key,
+        "from": isoformat_utc(start_dt),
+        "to": isoformat_utc(end_dt),
+        "limit": fetch_limit,
+        "datasetSize": len(series),
+    }
+    return {"series": series, "stats": stats, "meta": meta}
 
 
 # ---- API ----

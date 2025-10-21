@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SCADA Web Desk · Tendencias</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAwac3okkBuOm0gB5aqRuHILefbryj9lAw",
+      authDomain: "scadaweb-64eba.firebaseapp.com",
+      projectId: "scadaweb-64eba",
+    };
+    firebase.initializeApp(firebaseConfig);
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-J0WtAFSyKPZ9lkSN7aIc32NrVnVm6C7xFbTRufhz5KZ9JG9OVyAeVXqpy5TXt4Cb" crossorigin="anonymous"></script>
+</head>
+<body class="layout-shell trend-page">
+  <header class="app-header app-header--compact">
+    <div class="brand-group" id="brand-group">
+      <img id="company-logo" class="brand-logo-img" alt="Logo de la empresa" hidden>
+      <span class="brand-logo" aria-hidden="true">SW</span>
+      <div class="brand-copy">
+        <p class="brand-label">SurNex</p>
+        <h1 id="main-title">SurNex SCADA</h1>
+        <p class="brand-subtitle">Visualiza histórico y descubre patrones de operación.</p>
+      </div>
+    </div>
+    <div class="session-panel">
+      <span id="status" class="session-status">Sin sesión</span>
+      <button id="logout-btn" type="button" class="btn btn-logout" disabled>Cerrar sesión</button>
+      <button id="open-login" type="button" class="btn btn-login">Ingresar</button>
+    </div>
+  </header>
+
+  <main class="main-layout trend-layout">
+    <section class="intro-banner card-surface">
+      <div class="intro-copy">
+        <h2 class="section-title">Tendencias históricas</h2>
+        <p class="helper-text">Selecciona la variable, define el rango temporal y analiza métricas clave en segundos.</p>
+      </div>
+      <div class="intro-metrics">
+        <article class="metric-card">
+          <span class="metric-label">Estado API</span>
+          <span id="api-status" class="chip chip-disconnected">Sin conexión</span>
+          <p class="helper-text">Ingresa para habilitar la consulta a tendencias.</p>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Usuario activo</span>
+          <strong id="current-user">Anónimo</strong>
+          <span id="current-company" class="helper-text" hidden>Empresa: --</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="card-surface trend-controls">
+      <header class="section-header">
+        <h2 class="section-title">Filtros de consulta</h2>
+        <p class="helper-text">Todos los datos se muestran en UTC para asegurar consistencia.</p>
+      </header>
+      <form id="trend-form" class="trend-form">
+        <div class="form-block">
+          <label for="trend-tag">Variable (tag)</label>
+          <select id="trend-tag" name="tag" required disabled>
+            <option value="">Selecciona una opción</option>
+          </select>
+        </div>
+        <div class="form-block">
+          <label for="trend-range">Rango</label>
+          <select id="trend-range" name="range" disabled>
+            <option value="24h">Últimas 24 horas</option>
+            <option value="48h">Últimas 48 horas</option>
+            <option value="7d">Últimos 7 días</option>
+            <option value="custom">Personalizado</option>
+          </select>
+        </div>
+        <div class="form-block form-block--inline" id="custom-range" hidden>
+          <div>
+            <label for="trend-from">Desde</label>
+            <input type="datetime-local" id="trend-from" name="from">
+          </div>
+          <div>
+            <label for="trend-to">Hasta</label>
+            <input type="datetime-local" id="trend-to" name="to">
+          </div>
+        </div>
+        <div class="form-block">
+          <label for="trend-resolution">Resolución</label>
+          <select id="trend-resolution" name="resolution" disabled>
+            <option value="raw">Sin agrupar (bruto)</option>
+            <option value="5m">5 minutos</option>
+            <option value="15m">15 minutos</option>
+            <option value="1h">1 hora</option>
+            <option value="1d">1 día</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="run-query" disabled>Actualizar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card-surface trend-metrics" aria-live="polite">
+      <header class="section-header">
+        <h2 class="section-title">Métricas del rango</h2>
+        <p class="helper-text">Valores calculados con los datos recuperados.</p>
+      </header>
+      <div class="metric-grid">
+        <article class="metric-card">
+          <span class="metric-label">Último valor</span>
+          <strong id="metric-latest">--</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Mínimo</span>
+          <strong id="metric-min">--</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Máximo</span>
+          <strong id="metric-max">--</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Promedio</span>
+          <strong id="metric-avg">--</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="card-surface trend-chart">
+      <header class="section-header">
+        <h2 class="section-title">Visualización</h2>
+        <div class="section-actions">
+          <button type="button" class="btn btn-secondary" id="download-csv" disabled>Descargar CSV</button>
+        </div>
+      </header>
+      <div class="chart-wrapper">
+        <canvas id="trend-canvas" aria-label="Gráfico de tendencias" role="img"></canvas>
+      </div>
+      <p id="trend-feedback" class="helper-text"></p>
+    </section>
+  </main>
+
+  <dialog id="login-dialog" class="login-dialog">
+    <form id="login-form" method="dialog" class="login-form">
+      <h2>Iniciar sesión</h2>
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autocomplete="username">
+      <label for="password">Contraseña</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+      <div class="login-actions">
+        <button type="submit" class="btn btn-login">Entrar</button>
+        <button type="button" class="btn btn-cancel" id="close-login">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="trend.js" defer></script>
+</body>
+</html>
