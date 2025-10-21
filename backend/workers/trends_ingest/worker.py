@@ -169,6 +169,13 @@ async def insert_point(pool: asyncpg.pool.Pool, point: Dict[str, Any]) -> None:
             point["timestamp"],
             point["value"],
         )
+    logger.info(
+        "Insertado punto empresa=%s tag=%s timestamp=%s valor=%s",
+        point["empresa_id"],
+        point["tag"],
+        point["timestamp"],
+        point["value"],
+    )
 
 
 async def main() -> None:
@@ -180,8 +187,16 @@ async def main() -> None:
     clients: List[mqtt.Client] = []
 
     def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
+        logger.info("Mensaje recibido broker=%s topic=%s payload=%s", userdata.get("broker") if isinstance(userdata, dict) else "?", msg.topic, msg.payload)
         try:
             point = parse_payload(msg.payload, msg.topic)
+            logger.info(
+                "Payload parseado empresa=%s tag=%s valor=%s timestamp=%s",
+                point["empresa_id"],
+                point["tag"],
+                point["value"],
+                point["timestamp"],
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error("No se pudo parsear payload (%s): %s", msg.topic, exc)
             return
