@@ -1,6 +1,7 @@
 ﻿const BACKEND_HTTP = "https://scadawebdesk.onrender.com";
 const BACKEND_WS = "wss://scadawebdesk.onrender.com/ws";
 const DEFAULT_MAIN_TITLE = "SCADA Web Desk";
+const MAIN_TITLE_STORAGE_KEY = "scada-main-title";
 
 let ws = null;
 let uid = null;
@@ -43,6 +44,34 @@ const sidebarButtons = [];
 let selectedContainerIndex = 0;
 let currentLogoEmpresa = null;
 let currentLogoVersion = 0;
+
+function persistMainTitle(value) {
+  const nextTitle = (value || "").trim() || DEFAULT_MAIN_TITLE;
+  try {
+    sessionStorage.setItem(MAIN_TITLE_STORAGE_KEY, nextTitle);
+  } catch (_) {
+    /* ignore storage errors */
+  }
+  try {
+    localStorage.setItem(MAIN_TITLE_STORAGE_KEY, nextTitle);
+  } catch (_) {
+    /* ignore storage errors */
+  }
+  return nextTitle;
+}
+
+function clearStoredMainTitle() {
+  try {
+    sessionStorage.removeItem(MAIN_TITLE_STORAGE_KEY);
+  } catch (_) {
+    /* ignore storage errors */
+  }
+  try {
+    localStorage.removeItem(MAIN_TITLE_STORAGE_KEY);
+  } catch (_) {
+    /* ignore storage errors */
+  }
+}
 
 function setStatus(text) {
   if (statusLabel) {
@@ -847,7 +876,7 @@ async function hydrateDashboard(user, { forceRefresh = false } = {}) {
   }
   try {
     const { config, role, empresaId } = await fetchScadaConfig(user, forceRefresh);
-    const resolvedTitle = (config.mainTitle || DEFAULT_MAIN_TITLE).trim() || DEFAULT_MAIN_TITLE;
+    const resolvedTitle = persistMainTitle(config.mainTitle || DEFAULT_MAIN_TITLE);
     if (mainTitleNode) {
       mainTitleNode.textContent = resolvedTitle;
     }
@@ -883,6 +912,7 @@ function resetSessionState() {
     mainTitleNode.textContent = DEFAULT_MAIN_TITLE;
   }
   document.title = DEFAULT_MAIN_TITLE;
+  clearStoredMainTitle();
   clearBrandLogo(DEFAULT_MAIN_TITLE);
   updateConnectionChip(false);
   setCurrentUser();
