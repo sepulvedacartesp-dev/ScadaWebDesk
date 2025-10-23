@@ -88,13 +88,13 @@
         {
           "type": "motorSpeed",
           "label": "Set Tiempo Suma",
-          "topic": "trend/Planta2/SPTime",
+          "topic": "Planta2/SPTime",
           "unit": "seg"
         },
         {
           "type": "text",
           "label": "Tiempo de Suma",
-          "topic": "trend/Planta2/SPTime"
+          "topic": "Planta2/SPTimefdbk"
         }
       ]
     }
