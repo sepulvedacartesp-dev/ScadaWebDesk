@@ -84,6 +84,17 @@
           "topic": "Planta2/Sts",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
+        },
+        {
+          "type": "motorSpeed",
+          "label": "Set Tiempo Suma",
+          "topic": "trend/Planta2/SPTime",
+          "unit": "seg"
+        },
+        {
+          "type": "text",
+          "label": "Tiempo de Suma",
+          "topic": "trend/Planta2/SPTime"
         }
       ]
     }
