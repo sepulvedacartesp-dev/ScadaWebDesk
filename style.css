@@ -495,6 +495,21 @@ body {
   gap: 0.75rem;
 }
 
+.publisher-current {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.publisher-current[data-state="active"] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.publisher-current[data-state="disabled"] {
+  opacity: 0.6;
+}
+
 .publisher-label {
   font-weight: 600;
   font-size: 1rem;

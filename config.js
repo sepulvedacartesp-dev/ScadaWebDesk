@@ -46,10 +46,11 @@ const OBJECT_TYPES = [
     value: "valuePublisher",
     label: "Publicador numerico",
     hint: "Permite ingresar y enviar valores numericos a un topic MQTT.",
-    defaults: { type: "valuePublisher", label: "Publicar valor", topic: "", unit: "" },
+    defaults: { type: "valuePublisher", label: "Publicar valor", topic: "", unit: "", feedbackTopic: "" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Setpoint caldera", section: "primary" },
       { key: "topic", label: "Topic MQTT destino", type: "text", placeholder: "Linea1/Setpoint", section: "primary" },
+      { key: "feedbackTopic", label: "Topic MQTT lectura", type: "text", placeholder: "Linea1/SetpointActual", section: "primary" },
       { key: "unit", label: "Unidad", type: "text", placeholder: "degC, bar, %", section: "primary" },
     ],
   },

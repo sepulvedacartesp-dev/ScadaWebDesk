@@ -543,10 +543,11 @@ function updateSidebarVisibility() {
 }
 
 function buildWidget(definition, containerIndex, objectIndex) {
-  const { type, topic, label, unit, min, max, color, onColor, offColor, payload } = definition;
+  const { type, topic, label, unit, min, max, color, onColor, offColor, payload, feedbackTopic } = definition;
   const widgetId = `c${containerIndex}-o${objectIndex}`;
   const relTopic = topic || "";
   const normalizedTopic = normalizeRelativePath(relTopic);
+  const normalizedFeedbackTopic = feedbackTopic ? normalizeRelativePath(feedbackTopic) : null;
   const binding = {
     topic: normalizedTopic,
     update: () => {}
@@ -579,8 +580,14 @@ function buildWidget(definition, containerIndex, objectIndex) {
       return { element: widget.element, binding };
     }
     case "valuepublisher": {
-      const widget = createValuePublisher(`${widgetId}-publisher`, label || "Publicar valor", unit || "", normalizedTopic);
-      return { element: widget.element, controls: widget.controls };
+      const widget = createValuePublisher(
+        `${widgetId}-publisher`,
+        label || "Publicar valor",
+        unit || "",
+        normalizedTopic,
+        normalizedFeedbackTopic
+      );
+      return { element: widget.element, controls: widget.controls, binding: widget.binding };
     }
     case "motorspeed": {
       const widget = createMotorSpeed(`${widgetId}-speed`, label || "Velocidad", unit || "rpm");
@@ -807,9 +814,12 @@ function createTextIndicator(id, label) {
   };
 }
 
-function createValuePublisher(id, label, unit, topic) {
+function createValuePublisher(id, label, unit, topic, readTopic) {
   const wrapper = document.createElement("div");
   wrapper.className = "value-publisher";
+
+  const normalizedUnit = typeof unit === "string" ? unit : "";
+  const unitSuffix = normalizedUnit ? ` ${normalizedUnit}` : "";
 
   const header = document.createElement("div");
   header.className = "publisher-header";
@@ -821,9 +831,22 @@ function createValuePublisher(id, label, unit, topic) {
 
   const unitSpan = document.createElement("span");
   unitSpan.className = "publisher-unit";
-  unitSpan.textContent = unit || "";
-  unitSpan.hidden = !unit;
+  unitSpan.textContent = normalizedUnit;
+  unitSpan.hidden = !normalizedUnit;
   header.appendChild(unitSpan);
+
+  wrapper.appendChild(header);
+
+  const currentValue = document.createElement("p");
+  currentValue.className = "publisher-current";
+  if (readTopic) {
+    currentValue.textContent = `Valor actual --${unitSuffix}`;
+    currentValue.dataset.state = "idle";
+  } else {
+    currentValue.textContent = "Lectura no configurada";
+    currentValue.dataset.state = "disabled";
+  }
+  wrapper.appendChild(currentValue);
 
   const inputGroup = document.createElement("div");
   inputGroup.className = "publisher-input-group";
@@ -843,7 +866,6 @@ function createValuePublisher(id, label, unit, topic) {
   button.textContent = "Enviar";
   inputGroup.appendChild(button);
 
-  wrapper.appendChild(header);
   wrapper.appendChild(inputGroup);
 
   const feedback = document.createElement("p");
@@ -888,6 +910,28 @@ function createValuePublisher(id, label, unit, topic) {
     return { ok: true, value: numeric };
   };
 
+  const formatFeedbackValue = (raw) => {
+    if (raw === undefined || raw === null || raw === "") {
+      return "--";
+    }
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+      return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2);
+    }
+    return String(raw);
+  };
+
+  const applyCurrentValue = (value) => {
+    if (!readTopic) return;
+    const formatted = formatFeedbackValue(value);
+    currentValue.textContent = `Valor actual ${formatted}${unitSuffix}`;
+    if (formatted === "--") {
+      currentValue.dataset.state = "idle";
+    } else {
+      currentValue.dataset.state = "active";
+    }
+  };
+
   const sendValue = () => {
     if (!topic) {
       setFeedback("Configura un topic para publicar.", "error");
@@ -904,7 +948,6 @@ function createValuePublisher(id, label, unit, topic) {
     }
     const payload = Number.isInteger(parsed.value) ? Math.trunc(parsed.value) : parsed.value;
     publishRelative(topic, payload);
-    const unitSuffix = unit ? ` ${unit}` : "";
     setFeedback(`Valor enviado: ${payload}${unitSuffix}`, "success");
   };
 
@@ -926,7 +969,8 @@ function createValuePublisher(id, label, unit, topic) {
 
   return {
     element: wrapper,
-    controls: [input, button]
+    controls: [input, button],
+    binding: readTopic ? { topic: readTopic, update: applyCurrentValue } : null
   };
 }
 
