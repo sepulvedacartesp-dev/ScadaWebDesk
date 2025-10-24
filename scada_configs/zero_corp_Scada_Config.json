@@ -89,12 +89,13 @@
           "type": "valuePublisher",
           "label": "Set Tiempo Suma",
           "topic": "Planta2/SPTime",
+          "feedbackTopic": "Planta2/SPTimefdbk",
           "unit": "seg"
         },
         {
           "type": "text",
-          "label": "Tiempo de Suma",
-          "topic": "Planta2/SPTimefdbk"
+          "label": "°C x seg",
+          "topic": "Planta2/SPV1"
         }
       ]
     },
