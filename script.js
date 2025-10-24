@@ -1,6 +1,6 @@
 ﻿const BACKEND_HTTP = "https://scadawebdesk.onrender.com";
 const BACKEND_WS = "wss://scadawebdesk.onrender.com/ws";
-const DEFAULT_MAIN_TITLE = "SCADA Web Desk";
+const DEFAULT_MAIN_TITLE = "SurNex SCADA Web";
 const MAIN_TITLE_STORAGE_KEY = "scada-main-title";
 
 let ws = null;
@@ -319,12 +319,18 @@ function updateRoleUI() {
     configLink.hidden = !isAdmin;
   }
   controlElements.forEach((btn) => {
+    const isLocked = btn?.dataset?.locked === "true";
     if (isViewer) {
       btn.setAttribute("disabled", "");
       btn.classList.add("control-disabled");
     } else {
-      btn.removeAttribute("disabled");
-      btn.classList.remove("control-disabled");
+      if (isLocked) {
+        btn.setAttribute("disabled", "");
+        btn.classList.add("control-disabled");
+      } else {
+        btn.removeAttribute("disabled");
+        btn.classList.remove("control-disabled");
+      }
     }
   });
 }
@@ -435,6 +441,13 @@ function renderDashboard() {
         }
         if (widget.control) {
           controlElements.add(widget.control);
+        }
+        if (Array.isArray(widget.controls)) {
+          widget.controls.forEach((el) => {
+            if (el) {
+              controlElements.add(el);
+            }
+          });
         }
       }
     });
@@ -564,6 +577,10 @@ function buildWidget(definition, containerIndex, objectIndex) {
       const widget = createTextIndicator(`${widgetId}-text`, label || "Texto");
       binding.update = widget.update;
       return { element: widget.element, binding };
+    }
+    case "valuepublisher": {
+      const widget = createValuePublisher(`${widgetId}-publisher`, label || "Publicar valor", unit || "", normalizedTopic);
+      return { element: widget.element, controls: widget.controls };
     }
     case "motorspeed": {
       const widget = createMotorSpeed(`${widgetId}-speed`, label || "Velocidad", unit || "rpm");
@@ -787,6 +804,129 @@ function createTextIndicator(id, label) {
     update: (value) => {
       document.getElementById(id).textContent = value ?? "";
     }
+  };
+}
+
+function createValuePublisher(id, label, unit, topic) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "value-publisher";
+
+  const header = document.createElement("div");
+  header.className = "publisher-header";
+
+  const labelSpan = document.createElement("span");
+  labelSpan.className = "publisher-label";
+  labelSpan.textContent = label || "Publicar valor";
+  header.appendChild(labelSpan);
+
+  const unitSpan = document.createElement("span");
+  unitSpan.className = "publisher-unit";
+  unitSpan.textContent = unit || "";
+  unitSpan.hidden = !unit;
+  header.appendChild(unitSpan);
+
+  const inputGroup = document.createElement("div");
+  inputGroup.className = "publisher-input-group";
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "any";
+  input.inputMode = "decimal";
+  input.id = `${id}-input`;
+  input.placeholder = "0";
+  input.className = "publisher-input";
+  inputGroup.appendChild(input);
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn publisher-send";
+  button.textContent = "Enviar";
+  inputGroup.appendChild(button);
+
+  wrapper.appendChild(header);
+  wrapper.appendChild(inputGroup);
+
+  const feedback = document.createElement("p");
+  feedback.className = "publisher-feedback";
+  feedback.textContent = "";
+  wrapper.appendChild(feedback);
+
+  let feedbackTimer = null;
+  const clearFeedbackTimer = () => {
+    if (feedbackTimer) {
+      clearTimeout(feedbackTimer);
+      feedbackTimer = null;
+    }
+  };
+
+  const setFeedback = (message, tone) => {
+    clearFeedbackTimer();
+    feedback.textContent = message || "";
+    if (tone) {
+      feedback.dataset.tone = tone;
+    } else {
+      delete feedback.dataset.tone;
+    }
+    if (message && tone) {
+      feedbackTimer = setTimeout(() => {
+        feedback.textContent = "";
+        delete feedback.dataset.tone;
+        feedbackTimer = null;
+      }, 3500);
+    }
+  };
+
+  const parseInput = () => {
+    const raw = input.value.replace(",", ".").trim();
+    if (!raw) {
+      return { ok: false, error: "Ingresa un valor." };
+    }
+    const numeric = Number(raw);
+    if (!Number.isFinite(numeric)) {
+      return { ok: false, error: "Valor no valido." };
+    }
+    return { ok: true, value: numeric };
+  };
+
+  const sendValue = () => {
+    if (!topic) {
+      setFeedback("Configura un topic para publicar.", "error");
+      return;
+    }
+    if (currentRole === "viewer" || currentRole === "visualizacion") {
+      setFeedback("Rol sin permisos de control.", "error");
+      return;
+    }
+    const parsed = parseInput();
+    if (!parsed.ok) {
+      setFeedback(parsed.error, "error");
+      return;
+    }
+    const payload = Number.isInteger(parsed.value) ? Math.trunc(parsed.value) : parsed.value;
+    publishRelative(topic, payload);
+    const unitSuffix = unit ? ` ${unit}` : "";
+    setFeedback(`Valor enviado: ${payload}${unitSuffix}`, "success");
+  };
+
+  button.addEventListener("click", sendValue);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      sendValue();
+    }
+  });
+
+  if (!topic) {
+    input.disabled = true;
+    input.dataset.locked = "true";
+    button.disabled = true;
+    button.dataset.locked = "true";
+    setFeedback("Topic no configurado para este widget.", "error");
+  }
+
+  return {
+    element: wrapper,
+    controls: [input, button]
   };
 }
 
