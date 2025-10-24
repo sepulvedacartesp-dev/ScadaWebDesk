@@ -17,7 +17,7 @@
         {
           "type": "level",
           "label": "Temperatura",
-          "topic": "Planta1/PV",
+          "topic": "Planta1/Temp_fdbk",
           "unit": "°C",
           "color": "#fafafa",
           "min": 0,
@@ -26,27 +26,27 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "Planta1/PV",
+          "topic": "Planta1/Temp_fdbk",
           "unit": "°C"
         },
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "Planta1/Partir",
+          "topic": "Planta1/PartirAB1",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "Planta1/Parar",
+          "topic": "Planta1/PararAB1",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "Planta1/Sts",
+          "topic": "Planta1/RuningAB1",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         }
@@ -100,13 +100,28 @@
       ]
     },
     {
-      "title": "Ajuste velocidad variación Planta 2",
+      "title": "Ajuste de Parametros",
       "objects": [
         {
           "type": "valuePublisher",
-          "label": "Variacion Temp:",
-          "topic": "Planta2/SPV1",
-          "unit": "°C x seg"
+          "label": "Temperatura Minima",
+          "topic": "Planta1/Set_Min_Temp",
+          "feedbackTopic": "Planta1/Set_Min_Temp_fdbk",
+          "unit": "°C"
+        },
+        {
+          "type": "valuePublisher",
+          "label": "Temperatura Maxima",
+          "topic": "Planta1/Set_Max_Temp",
+          "feedbackTopic": "Planta1/Set_Max_Temp_fdbk",
+          "unit": "°C"
+        },
+        {
+          "type": "valuePublisher",
+          "label": "Simulador de Temperatura",
+          "topic": "Planta1/Temp",
+          "feedbackTopic": "Planta1/Temp_fdbk",
+          "unit": "°C"
         }
       ]
     }
