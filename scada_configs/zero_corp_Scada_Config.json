@@ -86,7 +86,7 @@
           "offColor": "#6c757d"
         },
         {
-          "type": "motorSpeed",
+          "type": "valuePublisher",
           "label": "Set Tiempo Suma",
           "topic": "Planta2/SPTime",
           "unit": "seg"
