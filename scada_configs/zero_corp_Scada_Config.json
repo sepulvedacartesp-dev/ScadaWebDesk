@@ -12,7 +12,7 @@
   },
   "containers": [
     {
-      "title": "Abox - Planta 1",
+      "title": "Planta 1 - ABox 001",
       "objects": [
         {
           "type": "gauge",
@@ -53,7 +53,7 @@
       ]
     },
     {
-      "title": "Abox - Planta 1",
+      "title": "Planta 1 - ABox 002",
       "objects": [
         {
           "type": "gauge",
