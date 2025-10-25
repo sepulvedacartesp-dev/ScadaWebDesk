@@ -765,8 +765,9 @@ function createBooleanSlide(id, { label, topic, readTopic, onText, offText }) {
     } else {
       currentState = nextState;
     }
-    publishRelative(topic, nextState);
-    setFeedback(`Comando enviado: ${nextState ? resolvedOnText : resolvedOffText}`, "success");
+    const payload = nextState ? 1 : 0;
+    publishRelative(topic, payload);
+    setFeedback(`Comando enviado: ${nextState ? resolvedOnText : resolvedOffText} (${payload})`, "success");
   });
 
   updateStateVisuals(currentState);
