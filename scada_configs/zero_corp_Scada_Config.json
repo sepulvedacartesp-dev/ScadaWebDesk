@@ -54,7 +54,7 @@
           "type": "slide",
           "label": "Control Manual/Auto",
           "topic": "Planta1/LocRemAB1",
-          "feedbackTopic": "Planta1/RuningAB1",
+          "feedbackTopic": "Planta1/LocRemfdbkAB1",
           "onText": "Manual",
           "offText": "Automatico"
         }
