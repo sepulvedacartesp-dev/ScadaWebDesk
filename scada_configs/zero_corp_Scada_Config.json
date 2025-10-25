@@ -15,11 +15,11 @@
       "title": "Abox - Planta 1",
       "objects": [
         {
-          "type": "level",
+          "type": "gauge",
           "label": "Temperatura",
           "topic": "Planta1/Temp_fdbk",
           "unit": "°C",
-          "color": "#fafafa",
+          "color": "#00b4d8",
           "min": 0,
           "max": 100
         },
@@ -53,49 +53,43 @@
       ]
     },
     {
-      "title": "A-Box - Planta 2",
+      "title": "Abox - Planta 1",
       "objects": [
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "Planta2/PV",
+          "topic": "Planta1/Temp_fdbk",
           "unit": "°C",
-          "color": "#ff0000",
+          "color": "#00b4d8",
           "min": 0,
           "max": 100
         },
         {
+          "type": "number",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C"
+        },
+        {
           "type": "startBtn",
-          "label": "Partir Ventilador",
-          "topic": "Planta2/Partir",
+          "label": "Partir",
+          "topic": "Planta1/PartirAB2",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
-          "label": "Parar Ventilador",
-          "topic": "Planta2/Parar",
+          "label": "Parar",
+          "topic": "Planta1/PararAB2",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "Planta2/Sts",
+          "topic": "Planta1/RuningAB2",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
-        },
-        {
-          "type": "valuePublisher",
-          "label": "Set Tiempo Suma",
-          "topic": "Planta2/SPTime",
-          "feedbackTopic": "Planta2/SPTimefdbk",
-          "unit": "seg"
-        },
-        {
-          "type": "text",
-          "label": "°C x seg",
-          "topic": "Planta2/SPV1"
         }
       ]
     },
