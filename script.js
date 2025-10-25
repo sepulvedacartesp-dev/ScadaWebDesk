@@ -543,7 +543,7 @@ function updateSidebarVisibility() {
 }
 
 function buildWidget(definition, containerIndex, objectIndex) {
-  const { type, topic, label, unit, min, max, color, onColor, offColor, payload, feedbackTopic } = definition;
+  const { type, topic, label, unit, min, max, color, onColor, offColor, payload, feedbackTopic, onText, offText } = definition;
   const widgetId = `c${containerIndex}-o${objectIndex}`;
   const relTopic = topic || "";
   const normalizedTopic = normalizeRelativePath(relTopic);
@@ -589,6 +589,23 @@ function buildWidget(definition, containerIndex, objectIndex) {
       );
       return { element: widget.element, controls: widget.controls, binding: widget.binding };
     }
+    case "slide": {
+      const widget = createBooleanSlide(`${widgetId}-slide`, {
+        label: label || "Control",
+        topic: normalizedTopic,
+        readTopic: normalizedFeedbackTopic || normalizedTopic,
+        onText,
+        offText
+      });
+      const result = { element: widget.element };
+      if (Array.isArray(widget.controls) && widget.controls.length) {
+        result.controls = widget.controls;
+      }
+      if (widget.binding) {
+        result.binding = widget.binding;
+      }
+      return result;
+    }
     case "motorspeed": {
       const widget = createMotorSpeed(`${widgetId}-speed`, label || "Velocidad", unit || "rpm");
       binding.update = widget.update;
@@ -621,6 +638,156 @@ function createControlButton(kind, label, color, topic, payload) {
     publishRelative(topic, payload ?? kind);
   });
   return button;
+}
+
+function createBooleanSlide(id, { label, topic, readTopic, onText, offText }) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "bool-slide";
+
+  const header = document.createElement("div");
+  header.className = "bool-slide__header";
+
+  const titleEl = document.createElement("span");
+  titleEl.className = "bool-slide__title";
+  titleEl.textContent = label || "Control";
+  header.appendChild(titleEl);
+
+  const stateEl = document.createElement("span");
+  stateEl.className = "bool-slide__state";
+  header.appendChild(stateEl);
+
+  wrapper.appendChild(header);
+
+  const controlEl = document.createElement("div");
+  controlEl.className = "bool-slide__control";
+
+  const inputEl = document.createElement("input");
+  inputEl.type = "checkbox";
+  inputEl.id = id;
+  inputEl.className = "bool-slide__input";
+  controlEl.appendChild(inputEl);
+
+  const sliderLabel = document.createElement("label");
+  sliderLabel.className = "bool-slide__slider";
+  sliderLabel.setAttribute("for", id);
+  sliderLabel.innerHTML = '<span class="bool-slide__track"></span><span class="bool-slide__thumb"></span>';
+  controlEl.appendChild(sliderLabel);
+
+  wrapper.appendChild(controlEl);
+
+  const feedbackEl = document.createElement("p");
+  feedbackEl.className = "bool-slide__feedback";
+  feedbackEl.textContent = "";
+  wrapper.appendChild(feedbackEl);
+
+  const resolvedOnText = typeof onText === "string" && onText.trim() ? onText.trim() : "Encendido";
+  const resolvedOffText = typeof offText === "string" && offText.trim() ? offText.trim() : "Apagado";
+
+  let currentState = false;
+  let requestedState = null;
+  let feedbackTimer = null;
+
+  const coerceBoolean = (value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) return null;
+      if (["1", "true", "on", "encendido", "si", "sí", "habilitado"].includes(normalized)) return true;
+      if (["0", "false", "off", "apagado", "no", "disabled", "deshabilitado"].includes(normalized)) return false;
+    }
+    return null;
+  };
+
+  const updateStateVisuals = (state) => {
+    inputEl.checked = state;
+    stateEl.textContent = state ? resolvedOnText : resolvedOffText;
+    wrapper.dataset.state = state ? "on" : "off";
+  };
+
+  const clearFeedbackTimer = () => {
+    if (feedbackTimer) {
+      clearTimeout(feedbackTimer);
+      feedbackTimer = null;
+    }
+  };
+
+  const setFeedback = (message, tone, duration = 3500) => {
+    clearFeedbackTimer();
+    feedbackEl.textContent = message || "";
+    if (tone) {
+      feedbackEl.dataset.tone = tone;
+    } else {
+      delete feedbackEl.dataset.tone;
+    }
+    if (message && tone && duration > 0) {
+      feedbackTimer = setTimeout(() => {
+        feedbackEl.textContent = "";
+        delete feedbackEl.dataset.tone;
+        feedbackTimer = null;
+      }, duration);
+    }
+  };
+
+  const setPending = (value) => {
+    if (value) {
+      wrapper.dataset.pending = "true";
+    } else {
+      delete wrapper.dataset.pending;
+    }
+  };
+
+  const applyState = (value) => {
+    const normalized = coerceBoolean(value);
+    if (normalized === null) return;
+    currentState = normalized;
+    requestedState = null;
+    setPending(false);
+    updateStateVisuals(normalized);
+  };
+
+  inputEl.addEventListener("change", () => {
+    if (!topic) {
+      setFeedback("Configura un topic para publicar.", "error", 0);
+      updateStateVisuals(currentState);
+      return;
+    }
+    if (currentRole === "viewer" || currentRole === "visualizacion") {
+      setFeedback("Rol sin permisos de control.", "error");
+      updateStateVisuals(currentState);
+      return;
+    }
+    const nextState = inputEl.checked;
+    requestedState = nextState;
+    updateStateVisuals(nextState);
+    if (readTopic) {
+      setPending(true);
+    } else {
+      currentState = nextState;
+    }
+    publishRelative(topic, nextState);
+    setFeedback(`Comando enviado: ${nextState ? resolvedOnText : resolvedOffText}`, "success");
+  });
+
+  updateStateVisuals(currentState);
+
+  if (!topic) {
+    inputEl.disabled = true;
+    inputEl.dataset.locked = "true";
+    inputEl.classList.add("control-disabled");
+    setFeedback("Topic no configurado para publicar.", "error", 0);
+  }
+
+  if (!readTopic) {
+    setPending(false);
+    setFeedback("Lectura no configurada.", "info", 0);
+  }
+
+  return {
+    element: wrapper,
+    controls: [inputEl],
+    binding: readTopic ? { topic: readTopic, update: applyState } : null
+  };
 }
 
 function createLevelIndicator(id, label, unit, color, min, max) {

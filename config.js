@@ -55,6 +55,19 @@ const OBJECT_TYPES = [
     ],
   },
   {
+    value: "slide",
+    label: "Control deslizante ON/OFF",
+    hint: "Permite alternar un estado booleano publicando y leyendo feedback.",
+    defaults: { type: "slide", label: "Control", topic: "", feedbackTopic: "", onText: "Encendido", offText: "Apagado" },
+    fields: [
+      { key: "label", label: "Nombre visible", type: "text", placeholder: "Modo Manual", section: "primary" },
+      { key: "topic", label: "Topic MQTT comando", type: "text", placeholder: "Linea1/CmdModo", section: "primary" },
+      { key: "feedbackTopic", label: "Topic MQTT feedback", type: "text", placeholder: "Linea1/StsModo", section: "primary" },
+      { key: "onText", label: "Texto estado ON", type: "text", placeholder: "Encendido", section: "primary" },
+      { key: "offText", label: "Texto estado OFF", type: "text", placeholder: "Apagado", section: "primary" },
+    ],
+  },
+  {
     value: "text",
     label: "Texto libre",
     hint: "Ideal para estados o mensajes",
