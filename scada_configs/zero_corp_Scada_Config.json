@@ -132,6 +132,12 @@
           "topic": "Planta1/Temp",
           "feedbackTopic": "Planta1/Temp_fdbk",
           "unit": "°C"
+        },
+        {
+          "type": "number",
+          "label": "Temperatura Remota",
+          "topic": "Temp_MCU_001",
+          "unit": "°C"
         }
       ]
     }
