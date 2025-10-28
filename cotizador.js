@@ -419,7 +419,7 @@ function generatePdf(data, quote) {
   doc.setFont("helvetica", "italic");
   doc.setFontSize(10);
   doc.text(
-    "Los precios estan expresados en UF. Ajusta QUOTE_MODEL en cotizador.js para actualizar montos o agregar servicios.",
+    "Los precios estan expresados en UF. Cotizacion valida por 15 dias habiles.",
     marginX,
     cursorY
   );
