@@ -138,6 +138,14 @@
           "label": "Temperatura Remota",
           "topic": "Temp_MCU_001",
           "unit": "°C"
+        },
+        {
+          "type": "slide",
+          "label": "Nivel",
+          "topic": "Planta1/SimuTemp",
+          "feedbackTopic": "Planta1/SimuTempfbdk",
+          "onText": "Valor Simulado",
+          "offText": "Valor Real"
         }
       ]
     }
