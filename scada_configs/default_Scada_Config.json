@@ -1,46 +1,10 @@
 {
   "empresaId": "default",
-  "mainTitle": "SCADA Web TuNetgocio.Site",
+  "mainTitle": "Surnex",
   "roles": {
     "admins": [],
     "operators": [],
     "viewers": []
   },
-  "containers": [
-    {
-      "title": "PLC Micrologix 1100",
-      "objects": [
-        {
-          "type": "level",
-          "label": "Nivel",
-          "topic": "Micro/NivelTK",
-          "unit": "%",
-          "color": "#00b4d8",
-          "min": 0,
-          "max": 100
-        },
-        {
-          "type": "pumpStatus",
-          "label": "Bomba",
-          "topic": "Micro/PumpSts",
-          "onColor": "#00ff9d",
-          "offColor": "#6c757d"
-        },
-        {
-          "type": "startBtn",
-          "label": "Partir",
-          "topic": "Micro/PumpCmdStart",
-          "color": "#00b4d8",
-          "payload": "1"
-        },
-        {
-          "type": "stopBtn",
-          "label": "Parar",
-          "topic": "Micro/PumpCmdStop",
-          "color": "#ef476f",
-          "payload": "0"
-        }
-      ]
-    }
-  ]
+  "containers": []
 }
