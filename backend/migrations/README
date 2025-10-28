@@ -1,0 +1,4 @@
+Revisiones de Alembic para el módulo de Cotizador.
+
+- Ejecuta `alembic upgrade head` para aplicar todas las migraciones.
+- Usa `alembic revision --autogenerate -m "mensaje"` cuando agregues cambios en el esquema (no aplica para la primera migración manual).

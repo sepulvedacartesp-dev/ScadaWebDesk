@@ -59,6 +59,25 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 - WebSocket: `ws://127.0.0.1:8000/ws?token=<ID_TOKEN>`
 - Publicar: `POST http://127.0.0.1:8000/publish` con header `Authorization: Bearer <ID_TOKEN>` y cuerpo JSON `{ "topic": "scada/customers/<empresaId>/demo", "payload": {"ok": true} }`.
 
+## Migraciones y seeds del Cotizador
+- Aplica el esquema actualizado con Alembic:
+  ```bash
+  alembic upgrade head
+  ```
+  Asegurate de que `DATABASE_URL` este configurada en tu entorno antes de ejecutar el comando.
+- Para inicializar el catalogo base y un cliente de demostracion:
+  ```bash
+  python -m backend.scripts.seed_quotes
+  ```
+- Cuando necesites modificar el esquema, crea una nueva revision:
+  ```bash
+  alembic revision -m "descripcion del cambio"
+  # editar el archivo generado en migrations/versions/
+  alembic upgrade head
+  ```
+
+En Render agrega `alembic upgrade head` al paso de build o despliegue para mantener la base sincronizada antes de iniciar `uvicorn`.
+
 ## Despliegue en Render
 Configura el servicio exactamente con los siguientes valores:
 - Root Directory: `backend`
