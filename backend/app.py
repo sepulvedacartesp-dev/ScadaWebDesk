@@ -1478,7 +1478,15 @@ def get_config_endpoint(authorization: Optional[str] = Header(None), empresa_id:
     cfg.setdefault("empresaId", company_id)
     email = decoded.get("email")
     role = "admin" if is_master else role_for_email(cfg, email)
-    return {"config": cfg, "role": role, "empresaId": company_id, "isMaster": is_master}
+    lower_email = email.lower() if isinstance(email, str) else None
+    can_access_cotizador = bool(lower_email and lower_email in ADMIN_EMAILS_LOWER)
+    return {
+        "config": cfg,
+        "role": role,
+        "empresaId": company_id,
+        "isMaster": is_master,
+        "canAccessCotizador": can_access_cotizador,
+    }
 
 
 @app.put("/config")

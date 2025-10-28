@@ -23,6 +23,7 @@ const loginDialog = document.getElementById("login-dialog");
 const connectChip = document.getElementById("connect-status");
 const configLink = document.getElementById("config-link");
 const trendLink = document.getElementById("trend-link");
+const cotizadorLink = document.getElementById("cotizador-link");
 const currentUserLabel = document.getElementById("current-user");
 const currentCompanyLabel = document.getElementById("current-company");
 const brandGroup = document.getElementById("brand-group");
@@ -44,6 +45,7 @@ const sidebarButtons = [];
 let selectedContainerIndex = 0;
 let currentLogoEmpresa = null;
 let currentLogoVersion = 0;
+let canAccessCotizador = false;
 
 function persistMainTitle(value) {
   const nextTitle = (value || "").trim() || DEFAULT_MAIN_TITLE;
@@ -318,6 +320,9 @@ function updateRoleUI() {
   if (configLink) {
     configLink.hidden = !isAdmin;
   }
+  if (cotizadorLink) {
+    cotizadorLink.hidden = !canAccessCotizador;
+  }
   controlElements.forEach((btn) => {
     const isLocked = btn?.dataset?.locked === "true";
     if (isViewer) {
@@ -369,7 +374,7 @@ async function fetchScadaConfig(user, forceRefresh = false) {
     throw new Error("Usuario no autenticado");
   }
   if (!forceRefresh && scadaConfig && currentCompanyId) {
-    return { config: scadaConfig, role: currentRole, empresaId: currentCompanyId };
+    return { config: scadaConfig, role: currentRole, empresaId: currentCompanyId, canAccessCotizador };
   }
   const idToken = await user.getIdToken(forceRefresh);
   const response = await fetch(BACKEND_HTTP + "/config", {
@@ -387,7 +392,8 @@ async function fetchScadaConfig(user, forceRefresh = false) {
   scadaConfig.empresaId = currentCompanyId;
   const email = user.email || "";
   currentRole = payload.role || determineRole(email) || "operador";
-  return { config: scadaConfig, role: currentRole, empresaId: currentCompanyId };
+  canAccessCotizador = Boolean(payload.canAccessCotizador);
+  return { config: scadaConfig, role: currentRole, empresaId: currentCompanyId, canAccessCotizador };
 }
 function clearDashboard() {
   widgetBindings.length = 0;
@@ -1254,6 +1260,7 @@ function resetSessionState() {
   scadaConfig = null;
   currentCompanyId = null;
   currentRole = "viewer";
+  canAccessCotizador = false;
   uid = null;
   clearDashboard();
   scadaContainer.innerHTML = '<p class="empty-state">Inicia sesion para cargar tu tablero SCADA.</p>';
@@ -1274,6 +1281,9 @@ function resetSessionState() {
   }
   if (trendLink) {
     trendLink.hidden = true;
+  }
+  if (cotizadorLink) {
+    cotizadorLink.hidden = true;
   }
 }
 

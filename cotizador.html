@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Herramienta de cotizacion</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .quote-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at top, rgba(58, 134, 255, 0.08), transparent 55%), var(--bg-base, #020617);
+      color: var(--text-primary, #f8fafc);
+    }
+    .quote-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1rem, 4vw, 3rem);
+      gap: 1.5rem;
+    }
+    .quote-header__brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .quote-header__brand .brand-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: rgba(9, 18, 32, 0.78);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: #9fbaff;
+      box-shadow: inset 0 0 0 1px rgba(58, 134, 255, 0.32);
+    }
+    .quote-header__brand h1 {
+      margin: 0;
+      font-size: clamp(1.4rem, 3vw, 1.8rem);
+      letter-spacing: 0.08em;
+    }
+    .quote-header__brand p {
+      margin: 0;
+      color: var(--text-muted, #94a3b8);
+      font-size: 0.95rem;
+    }
+    .quote-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1.1rem;
+      border-radius: 12px;
+      text-decoration: none;
+      color: var(--text-primary, #f8fafc);
+      border: 1px solid rgba(112, 138, 255, 0.2);
+      background: rgba(9, 18, 32, 0.72);
+      transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+    .quote-back:hover {
+      transform: translateX(-2px);
+      background: rgba(58, 134, 255, 0.24);
+      border-color: rgba(112, 138, 255, 0.35);
+    }
+    .quote-layout {
+      width: min(1180px, 100%);
+      margin: 0 auto 4rem;
+      padding: 0 clamp(1rem, 4vw, 3rem) clamp(3rem, 6vw, 4rem);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1.5rem, 4vw, 2.5rem);
+    }
+    .quote-intro {
+      display: grid;
+      gap: clamp(1rem, 3vw, 1.5rem);
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      background: var(--bg-elevated, rgba(9, 18, 32, 0.78));
+      border-radius: 22px;
+      padding: clamp(1.5rem, 3vw, 2.25rem);
+      box-shadow: var(--shadow-soft, 0 20px 40px rgba(2, 10, 30, 0.35));
+      border: 1px solid rgba(112, 138, 255, 0.18);
+    }
+    .quote-grid {
+      display: grid;
+      gap: clamp(1.5rem, 3vw, 2.5rem);
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      align-items: flex-start;
+    }
+    .quote-card {
+      background: var(--bg-elevated, rgba(9, 18, 32, 0.78));
+      border-radius: 22px;
+      padding: clamp(1.5rem, 3vw, 2.25rem);
+      box-shadow: var(--shadow-soft, 0 20px 40px rgba(2, 10, 30, 0.35));
+      border: 1px solid rgba(112, 138, 255, 0.18);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1.25rem, 2vw, 1.75rem);
+    }
+    .quote-card h2 {
+      margin: 0;
+      font-size: 1.3rem;
+      letter-spacing: 0.06em;
+    }
+    .form-grid {
+      display: grid;
+      gap: 1rem 1.25rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .form-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .form-item label {
+      font-size: 0.9rem;
+      letter-spacing: 0.05em;
+      color: var(--text-muted, #94a3b8);
+    }
+    .form-item input,
+    .form-item select {
+      border-radius: 12px;
+      border: 1px solid rgba(112, 138, 255, 0.18);
+      padding: 0.65rem 0.75rem;
+      background: rgba(12, 22, 36, 0.88);
+      color: inherit;
+      font-size: 0.95rem;
+    }
+    .form-item input[type="number"] {
+      -moz-appearance: textfield;
+    }
+    .form-item input[type="number"]::-webkit-outer-spin-button,
+    .form-item input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .form-item__inline {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .form-item__inline input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: rgba(58, 134, 255, 0.9);
+    }
+    .form-note {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--text-muted, #94a3b8);
+      line-height: 1.4;
+    }
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+    }
+    .summary-table thead th {
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      color: var(--text-muted, #94a3b8);
+      padding-bottom: 0.5rem;
+    }
+    .summary-table tbody td {
+      padding: 0.4rem 0 0.4rem 0;
+      border-top: 1px solid rgba(112, 138, 255, 0.12);
+      font-size: 0.95rem;
+    }
+    .summary-table tbody td:last-child,
+    .summary-table thead th:last-child {
+      text-align: right;
+    }
+    .summary-label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .summary-label small {
+      color: var(--text-muted, #94a3b8);
+      font-size: 0.75rem;
+    }
+    .summary-empty {
+      border-radius: 16px;
+      border: 1px dashed rgba(112, 138, 255, 0.32);
+      padding: 1rem 1.25rem;
+      font-size: 0.9rem;
+      color: var(--text-muted, #94a3b8);
+      text-align: center;
+    }
+    .summary-empty[hidden] {
+      display: none;
+    }
+    .totals {
+      display: grid;
+      gap: 0.6rem;
+      margin: 0;
+    }
+    .totals div {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+    }
+    .totals dt {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text-muted, #94a3b8);
+    }
+    .totals dd {
+      margin: 0;
+      font-weight: 600;
+      font-size: 1rem;
+    }
+    .totals div.total {
+      border-top: 1px solid rgba(112, 138, 255, 0.18);
+      padding-top: 0.6rem;
+      margin-top: 0.2rem;
+    }
+    .client-summary {
+      display: grid;
+      gap: 0.45rem;
+      font-size: 0.9rem;
+      color: var(--text-muted, #94a3b8);
+    }
+    .client-summary strong {
+      color: var(--text-primary, #f8fafc);
+      font-weight: 600;
+      font-size: 1rem;
+    }
+    .quote-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .quote-actions .btn {
+      min-width: 180px;
+      justify-content: center;
+    }
+    @media (max-width: 720px) {
+      .quote-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body class="layout-shell quote-page">
+  <header class="quote-header">
+    <div class="quote-header__brand">
+      <span class="brand-logo">SN</span>
+      <div>
+        <h1>Cotizador SurNex</h1>
+        <p>Genera propuestas comerciales basadas en UF</p>
+      </div>
+    </div>
+    <a class="quote-back" href="index.html" aria-label="Volver al dashboard">
+      &#8592; Volver al dashboard
+    </a>
+  </header>
+
+  <main class="quote-layout">
+    <section class="quote-intro">
+      <div>
+        <h2 class="section-title">Disena tu propuesta</h2>
+        <p class="helper-text">Completa los datos del cliente y selecciona los servicios ofrecidos. Los valores se calculan en UF para mantener consistencia con la lista comercial vigente.</p>
+      </div>
+      <div class="client-summary" id="client-summary" aria-live="polite">
+        <div>
+          <span>Empresa:</span>
+          <strong id="summary-company">--</strong>
+        </div>
+        <div>
+          <span>RUT:</span>
+          <strong id="summary-rut">--</strong>
+        </div>
+        <div>
+          <span>Contacto:</span>
+          <strong id="summary-contact">--</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="quote-grid">
+      <form id="quote-form" class="quote-card quote-form" autocomplete="off">
+        <h2>Datos del cliente</h2>
+        <div class="form-grid">
+          <div class="form-item">
+            <label for="company-name">Nombre de la empresa</label>
+            <input id="company-name" name="companyName" type="text" placeholder="Ej: SurNex Energias" required>
+          </div>
+          <div class="form-item">
+            <label for="company-rut">RUT de la empresa</label>
+            <input id="company-rut" name="companyRut" type="text" placeholder="11.111.111-1">
+          </div>
+          <div class="form-item">
+            <label for="contact-name">Nombre de quien cotiza</label>
+            <input id="contact-name" name="contactName" type="text" placeholder="Ej: Juan Perez" required>
+          </div>
+        </div>
+
+        <h2>Servicios a cotizar</h2>
+        <div class="form-grid">
+          <div class="form-item">
+            <label for="containers-count">Contenedores disponibles</label>
+            <input id="containers-count" name="containers" type="number" min="0" step="1" value="0">
+            <p class="form-note">El primer contenedor tiene un valor de 3.16 UF. Cada contenedor adicional tiene un valor de 0.76 UF.</p>
+          </div>
+          <div class="form-item">
+            <label for="nexbox-count">Cantidad de NexBox (8 canales)</label>
+            <input id="nexbox-count" name="nexbox" type="number" min="0" step="1" value="0">
+            <p class="form-note">Cada NexBox suma 1 UF adicional.</p>
+          </div>
+          <div class="form-item">
+            <label for="support-level">Servicio de soporte</label>
+            <select id="support-level" name="support">
+              <option value="basic">Soporte basico (1 requerimiento al mes, sin costo adicional)</option>
+              <option value="plus">Soporte Plus (hasta 4 requerimientos, 2 UF)</option>
+            </select>
+          </div>
+          <div class="form-item">
+            <label for="discount-rate">Descuento (%)</label>
+            <input id="discount-rate" name="discount" type="number" min="0" max="100" step="0.5" value="0">
+            <p class="form-note">Aplica un descuento porcentual sobre el subtotal antes de IVA.</p>
+          </div>
+        </div>
+
+        <div class="form-item form-item__inline">
+          <input id="internet-service" name="internet" type="checkbox">
+          <label for="internet-service">Agregar suministro de internet (1.5 UF)</label>
+        </div>
+      </form>
+
+      <section class="quote-card quote-summary" aria-live="polite">
+        <h2>Resumen de la cotizacion</h2>
+        <p class="form-note">Valores expresados en UF.</p>
+        <div class="summary-empty" id="summary-empty">Agrega contenedores o servicios adicionales para generar montos.</div>
+        <table class="summary-table" aria-describedby="summary-note">
+          <thead>
+            <tr>
+              <th>Servicio</th>
+              <th>Cant.</th>
+              <th>UF c/u</th>
+              <th>Total UF</th>
+            </tr>
+          </thead>
+          <tbody id="summary-body"></tbody>
+        </table>
+        <dl class="totals">
+          <div>
+            <dt>Subtotal</dt>
+            <dd id="subtotal-uf">0.00 UF</dd>
+          </div>
+          <div>
+            <dt>Descuento</dt>
+            <dd id="discount-uf">0.00 UF</dd>
+          </div>
+          <div>
+            <dt>Total neto</dt>
+            <dd id="net-uf">0.00 UF</dd>
+          </div>
+          <div>
+            <dt>IVA (19%)</dt>
+            <dd id="tax-uf">0.00 UF</dd>
+          </div>
+          <div class="total">
+            <dt>Total + IVA</dt>
+            <dd id="grand-total-uf">0.00 UF</dd>
+          </div>
+        </dl>
+        <div class="quote-actions">
+          <button type="button" class="btn btn-login" id="download-pdf" disabled>Descargar PDF</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="cotizador.js" defer></script>
+</body>
+</html>
