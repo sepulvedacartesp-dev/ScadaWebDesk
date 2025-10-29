@@ -263,17 +263,25 @@ async def _build_quote_detail(
         event_rows = await fetch_quote_events(conn, quote_id)
     else:
         event_rows = events_records
-    eventos = [
-        QuoteEventOut(
-            id=str(row["id"]),
-            tipo=QuoteEventType(row["evento"]),
-            descripcion=row["descripcion"],
-            metadata=row["metadata"],
-            created_at=row["created_at"],
-            actor_email=row["actor_email"],
+    eventos = []
+    for row in event_rows:
+        metadata = row["metadata"]
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                # Leave as original string if it cannot be parsed
+                pass
+        eventos.append(
+            QuoteEventOut(
+                id=str(row["id"]),
+                tipo=QuoteEventType(row["evento"]),
+                descripcion=row["descripcion"],
+                metadata=metadata,
+                created_at=row["created_at"],
+                actor_email=row["actor_email"],
+            )
         )
-        for row in event_rows
-    ]
 
     descuento_pct = record["descuento_pct"] if record["descuento_pct"] is not None else Decimal("0")
     descuento_uf = _round_uf(record["subtotal_uf"] * (descuento_pct / Decimal("100")))
