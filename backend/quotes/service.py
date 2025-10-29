@@ -7,7 +7,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import asyncpg
-from asyncpg.types import Json
 
 from . import db as quote_db
 from .enums import FINAL_STATUSES, QuoteEventType, QuoteStatus, STATUS_TRANSITIONS
@@ -183,7 +182,7 @@ async def create_quote(
                             "uf_valor_clp": payload.uf_valor_clp,
                             "vigencia_hasta": vigencia_hasta,
                             "observaciones": payload.observaciones,
-                            "catalog_snapshot": Json(catalog_snapshot),
+                            "catalog_snapshot": json.dumps(catalog_snapshot, ensure_ascii=False),
                         },
                     )
                     break
@@ -361,7 +360,7 @@ async def update_quote(
                     "uf_valor_clp": payload.uf_valor_clp,
                     "vigencia_hasta": vigencia_hasta,
                     "observaciones": payload.observaciones,
-                    "catalog_snapshot": Json(_build_items_snapshot(payload.items, totals_by_item)),
+                    "catalog_snapshot": json.dumps(_build_items_snapshot(payload.items, totals_by_item), ensure_ascii=False),
                 },
             )
             await replace_quote_items(
