@@ -72,6 +72,10 @@ uvicorn app:app --host 0.0.0.0 --port 8000
   ```bash
   python -m backend.scripts.seed_quotes
   ```
+- Si quieres aplicar migraciones solo cuando existan cambios pendientes:
+  ```bash
+  python -m backend.scripts.migrate_if_needed
+  ```
 - Cuando necesites modificar el esquema, crea una nueva revision:
   ```bash
   alembic revision -m "descripcion del cambio"
