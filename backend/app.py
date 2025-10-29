@@ -7,6 +7,7 @@ import threading
 import asyncio
 import logging
 import re
+import uuid
 import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import List, Optional, Dict, Any, Set
@@ -31,6 +32,33 @@ from google.auth.transport import requests as google_requests
 
 import paho.mqtt.client as mqtt
 import asyncpg
+
+from quotes import db as quote_db
+from quotes import service as quote_service
+from quotes.enums import QuoteStatus
+from quotes.exceptions import (
+    CatalogError,
+    ClientExistsError,
+    InvalidStatusTransition,
+    QuoteError,
+    QuoteNotFoundError,
+)
+from quotes.schemas import (
+    CatalogCategoryOut,
+    CatalogItemUpsert,
+    CatalogResponse,
+    CatalogUpsertPayload,
+    ClientCreatePayload,
+    ClientListResponse,
+    ClientSummary,
+    Pagination,
+    QuoteCreatePayload,
+    QuoteDetail,
+    QuoteListResponse,
+    QuoteListFilters,
+    QuoteStatusChange,
+    QuoteUpdatePayload,
+)
 
 load_dotenv()
 
@@ -223,6 +251,35 @@ def require_trend_pool() -> asyncpg.pool.Pool:
     if trend_db_pool is None:
         raise HTTPException(status_code=503, detail="Servicio de tendencias no disponible")
     return trend_db_pool
+
+
+def require_quote_pool() -> asyncpg.pool.Pool:
+    try:
+        return quote_db.get_pool()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Servicio de cotizaciones no disponible") from exc
+
+
+def ensure_quote_admin_access(decoded: Dict[str, Any]) -> str:
+    email = decoded.get("email")
+    if not email:
+        raise HTTPException(status_code=403, detail="El usuario no tiene correo asignado")
+    if is_master_admin(decoded):
+        return email
+    if email.lower() not in ADMIN_EMAILS_LOWER:
+        raise HTTPException(status_code=403, detail="No tienes permisos para administrar cotizaciones")
+    return email
+
+
+def resolve_quote_company(decoded: Dict[str, Any], requested_empresa: Optional[str]) -> str:
+    if requested_empresa:
+        if not is_master_admin(decoded):
+            raise HTTPException(status_code=403, detail="Solo administradores maestros pueden consultar otras empresas")
+        try:
+            return sanitize_company_id(requested_empresa)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+    return extract_company_id(decoded)
 
 
 def normalize_company_entry(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -470,6 +527,9 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 TRENDS_FETCH_LIMIT = coerce_int(os.getenv("TRENDS_FETCH_LIMIT", "5000"), 5000)
 DEFAULT_TRENDS_RANGE_HOURS = coerce_int(os.getenv("DEFAULT_TRENDS_RANGE_HOURS", "24"), 24)
 DIAS_RETENCION_HISTORICO = coerce_int(os.getenv("DIAS_RETENCION_HISTORICO", "30"), 30)
+QUOTE_DB_MIN_POOL_SIZE = max(1, coerce_int(os.getenv("QUOTE_DB_MIN_POOL_SIZE", "1"), 1))
+QUOTE_DB_MAX_POOL_SIZE = max(QUOTE_DB_MIN_POOL_SIZE, coerce_int(os.getenv("QUOTE_DB_MAX_POOL_SIZE", "5"), 5))
+QUOTE_DB_TIMEOUT = max(1, coerce_int(os.getenv("QUOTE_DB_TIMEOUT", "10"), 10))
 
 TRENDS_RESOLUTION_SECONDS: Dict[str, Optional[int]] = {
     "raw": None,
@@ -741,6 +801,26 @@ async def init_trend_database_pool():
         logger.error("No se pudo inicializar el pool de tendencias: %s", exc)
 
 
+@app.on_event("startup")
+async def init_quote_database_pool():
+    if not DATABASE_URL:
+        logger.warning("DATABASE_URL no definido. Endpoints de cotizador permanecer�n deshabilitados.")
+        await quote_db.close_pool()
+        return
+    try:
+        pool = await quote_db.init_pool(
+            DATABASE_URL,
+            min_size=QUOTE_DB_MIN_POOL_SIZE,
+            max_size=QUOTE_DB_MAX_POOL_SIZE,
+            timeout=QUOTE_DB_TIMEOUT,
+        )
+        if pool is not None:
+            logger.info("Pool de base de datos para cotizador inicializado.")
+    except Exception as exc:
+        await quote_db.close_pool()
+        logger.error("No se pudo inicializar el pool de cotizador: %s", exc)
+
+
 @app.on_event("shutdown")
 async def shutdown_trend_database_pool():
     global trend_db_pool
@@ -752,6 +832,12 @@ async def shutdown_trend_database_pool():
         logger.info("Pool de base de datos para tendencias cerrado.")
     finally:
         trend_db_pool = None
+
+
+@app.on_event("shutdown")
+async def shutdown_quote_database_pool():
+    await quote_db.close_pool()
+    logger.info("Pool de base de datos para cotizador cerrado.")
 
 # CORS
 app.add_middleware(
@@ -1581,6 +1667,294 @@ def get_logo_endpoint(empresa_id: str):
         raise HTTPException(status_code=404, detail="Logo no encontrado")
     headers = {"Cache-Control": "public, max-age=3600"}
     return FileResponse(path, media_type="image/jpeg", filename=f"{company_id}.jpg", headers=headers)
+
+
+# ---- Cotizador API ----
+
+@app.post("/api/quotes", response_model=QuoteDetail)
+async def create_quote_endpoint(
+    payload: QuoteCreatePayload,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    email = ensure_quote_admin_access(decoded)
+    company_id = resolve_quote_company(decoded, empresa_id)
+    require_quote_pool()
+    try:
+        return await quote_service.create_quote(
+            payload,
+            empresa_id=company_id,
+            actor_email=email,
+            actor_uid=decoded.get("uid"),
+        )
+    except QuoteError as exc:
+        logger.warning("Error creando cotizacion: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Fallo inesperado al crear cotizacion: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudo crear la cotizacion") from exc
+
+
+@app.get("/api/quotes", response_model=QuoteListResponse)
+async def list_quotes_endpoint(
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+    estados: Optional[List[QuoteStatus]] = Query(None),
+    search: Optional[str] = Query(None),
+    cliente_rut: Optional[str] = Query(None, alias="clienteRut"),
+    prepared_by: Optional[str] = Query(None, alias="preparedBy"),
+    quote_number: Optional[str] = Query(None),
+    created_from: Optional[str] = Query(None, alias="createdFrom"),
+    created_to: Optional[str] = Query(None, alias="createdTo"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    decoded = verify_bearer_token(authorization)
+    ensure_quote_admin_access(decoded)
+    company_id = resolve_quote_company(decoded, empresa_id)
+    require_quote_pool()
+    filters = QuoteListFilters(
+        estados=estados,
+        search=search,
+        cliente_rut=cliente_rut,
+        prepared_by=prepared_by,
+        quote_number=quote_number,
+        created_from=parse_iso8601(created_from),
+        created_to=parse_iso8601(created_to),
+    )
+    pagination = Pagination(page=page, page_size=page_size)
+    try:
+        return await quote_service.list_quotes_service(filters, pagination, empresa_id=company_id)
+    except Exception as exc:
+        logger.exception("Fallo inesperado al listar cotizaciones: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudieron listar las cotizaciones") from exc
+
+
+@app.get("/api/quotes/{quote_id}", response_model=QuoteDetail)
+async def get_quote_endpoint(
+    quote_id: str,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    ensure_quote_admin_access(decoded)
+    company_id = resolve_quote_company(decoded, empresa_id)
+    require_quote_pool()
+    try:
+        quote_uuid = uuid.UUID(quote_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="quoteId invalido")
+    try:
+        return await quote_service.get_quote_detail(quote_uuid, empresa_id=company_id)
+    except QuoteNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Fallo inesperado al obtener cotizacion %s: %s", quote_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo obtener la cotizacion") from exc
+
+
+@app.put("/api/quotes/{quote_id}", response_model=QuoteDetail)
+async def update_quote_endpoint(
+    quote_id: str,
+    payload: QuoteUpdatePayload,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    email = ensure_quote_admin_access(decoded)
+    company_id = resolve_quote_company(decoded, empresa_id)
+    require_quote_pool()
+    try:
+        quote_uuid = uuid.UUID(quote_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="quoteId invalido")
+    try:
+        return await quote_service.update_quote(
+            quote_uuid,
+            payload,
+            empresa_id=company_id,
+            actor_email=email,
+            actor_uid=decoded.get("uid"),
+        )
+    except QuoteNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidStatusTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except QuoteError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Fallo inesperado al actualizar cotizacion %s: %s", quote_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo actualizar la cotizacion") from exc
+
+
+@app.patch("/api/quotes/{quote_id}/status", response_model=QuoteDetail)
+async def change_quote_status_endpoint(
+    quote_id: str,
+    payload: QuoteStatusChange,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    email = ensure_quote_admin_access(decoded)
+    company_id = resolve_quote_company(decoded, empresa_id)
+    require_quote_pool()
+    try:
+        quote_uuid = uuid.UUID(quote_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="quoteId invalido")
+    try:
+        return await quote_service.change_quote_status(
+            quote_uuid,
+            payload.estado,
+            empresa_id=company_id,
+            actor_email=email,
+            actor_uid=decoded.get("uid"),
+            descripcion=payload.descripcion,
+        )
+    except QuoteNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidStatusTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Fallo inesperado al cambiar estado de cotizacion %s: %s", quote_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo actualizar el estado de la cotizacion") from exc
+
+
+@app.post("/api/quotes/{quote_id}/events/pdf")
+async def log_quote_pdf_event(
+    quote_id: str,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    email = ensure_quote_admin_access(decoded)
+    company_id = resolve_quote_company(decoded, empresa_id)
+    require_quote_pool()
+    try:
+        quote_uuid = uuid.UUID(quote_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="quoteId invalido")
+    try:
+        await quote_service.log_pdf_download(
+            quote_uuid,
+            empresa_id=company_id,
+            actor_email=email,
+            actor_uid=decoded.get("uid"),
+        )
+        return {"ok": True}
+    except Exception as exc:
+        logger.exception("Fallo registrando descarga de PDF %s: %s", quote_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo registrar la descarga de PDF") from exc
+
+
+@app.get("/api/quote-catalog", response_model=CatalogResponse)
+async def get_quote_catalog_endpoint(
+    authorization: Optional[str] = Header(None),
+    include_inactive: bool = Query(False),
+):
+    decoded = verify_bearer_token(authorization)
+    ensure_quote_admin_access(decoded)
+    require_quote_pool()
+    effective_include = include_inactive if is_master_admin(decoded) else False
+    try:
+        catalog = await quote_service.get_catalog_service(include_inactive=effective_include)
+        return {"items": catalog}
+    except Exception as exc:
+        logger.exception("Fallo inesperado al obtener catalogo de cotizador: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudo obtener el catalogo de cotizaciones") from exc
+
+
+@app.put("/api/quote-catalog", response_model=CatalogCategoryOut)
+async def upsert_quote_catalog_endpoint(
+    payload: CatalogUpsertPayload,
+    authorization: Optional[str] = Header(None),
+):
+    decoded = verify_bearer_token(authorization)
+    if not is_master_admin(decoded):
+        raise HTTPException(status_code=403, detail="Solo administradores maestros pueden actualizar el catalogo")
+    ensure_quote_admin_access(decoded)
+    require_quote_pool()
+    try:
+        catalog_uuid = uuid.UUID(payload.catalog_id) if payload.catalog_id else None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="catalogId invalido")
+    try:
+        category = await quote_service.upsert_catalog_service(
+            slug=payload.slug,
+            nombre=payload.nombre,
+            descripcion=payload.descripcion,
+            activo=payload.activo,
+            items=payload.items,
+            catalog_id=catalog_uuid,
+        )
+        return category
+    except CatalogError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Fallo inesperado al actualizar catalogo del cotizador: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudo actualizar el catalogo") from exc
+
+
+@app.delete("/api/quote-catalog/items/{item_id}")
+async def delete_quote_catalog_item_endpoint(
+    item_id: str,
+    authorization: Optional[str] = Header(None),
+):
+    decoded = verify_bearer_token(authorization)
+    if not is_master_admin(decoded):
+        raise HTTPException(status_code=403, detail="Solo administradores maestros pueden eliminar items del catalogo")
+    ensure_quote_admin_access(decoded)
+    require_quote_pool()
+    try:
+        item_uuid = uuid.UUID(item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="itemId invalido")
+    try:
+        await quote_service.delete_catalog_item_service(item_uuid)
+        return {"ok": True}
+    except Exception as exc:
+        logger.exception("Fallo inesperado al eliminar item del catalogo %s: %s", item_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo eliminar el item del catalogo") from exc
+
+
+@app.get("/api/clients", response_model=ClientListResponse)
+async def list_clients_endpoint(
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+):
+    decoded = verify_bearer_token(authorization)
+    ensure_quote_admin_access(decoded)
+    company_id = resolve_quote_company(decoded, empresa_id)
+    require_quote_pool()
+    try:
+        clients = await quote_service.list_clients_service(company_id, query=q, limit=limit)
+        return {"empresaId": company_id, "results": clients}
+    except Exception as exc:
+        logger.exception("Fallo inesperado al listar clientes del cotizador: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudieron listar los clientes") from exc
+
+
+@app.post("/api/clients", response_model=ClientSummary)
+async def create_client_endpoint(
+    payload: ClientCreatePayload,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    ensure_quote_admin_access(decoded)
+    company_id = resolve_quote_company(decoded, empresa_id)
+    require_quote_pool()
+    try:
+        client = await quote_service.create_client_service(company_id, payload)
+        return client
+    except ClientExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Fallo inesperado al crear cliente del cotizador: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudo crear el cliente") from exc
 
 
 @app.get("/trend")

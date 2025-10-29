@@ -39,6 +39,9 @@ DATABASE_URL=postgresql://user:password@host:5432/trends
 TRENDS_FETCH_LIMIT=5000
 DEFAULT_TRENDS_RANGE_HOURS=24
 DIAS_RETENCION_HISTORICO=30
+QUOTE_DB_MIN_POOL_SIZE=1
+QUOTE_DB_MAX_POOL_SIZE=5
+QUOTE_DB_TIMEOUT=10
 ```
 `MQTT_BROKER_PROFILES` permite definir un mapa JSON plano `{ "claveBroker": { ... } }`. Cada entrada hereda las credenciales base (`HIVEMQ_*`) y puede sobrescribir `host`, `port`, `username`, `password`, `tls`, `tlsInsecure`, `caCertPath`, `clientId` y `keepalive`. Usa la clave `default` para la configuración por omisión y agrega entradas adicionales (`cliente1`, `cliente2`, etc.) para asignarlas a empresas concretas.
 Si necesitas validar revocacion de tokens, agrega `FIREBASE_SERVICE_ACCOUNT` con el JSON completo del service account.
