@@ -146,11 +146,18 @@ def upgrade() -> None:
         sa.Column("total_uf", sa.Numeric(12, 2), nullable=False),
         sa.Column("nota", sa.Text()),
         sa.Column("orden", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("catalog_id", postgresql.UUID(as_uuid=True)),
         sa.ForeignKeyConstraint(
             ["quote_id"],
             ["quotes.id"],
             name="fk_quote_items_quote",
             ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["catalog_id"],
+            ["quote_catalog.id"],
+            name="fk_quote_items_catalog",
+            ondelete="SET NULL",
         ),
         sa.CheckConstraint("cantidad >= 0", name="chk_quote_items_cantidad"),
         sa.CheckConstraint("precio_unitario_uf >= 0", name="chk_quote_items_precio"),
