@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import uuid
+import json
 from datetime import datetime, timedelta, timezone, date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import asyncpg
+from asyncpg.types import Json
 
 from . import db as quote_db
 from .enums import FINAL_STATUSES, QuoteEventType, QuoteStatus, STATUS_TRANSITIONS
@@ -181,7 +183,7 @@ async def create_quote(
                             "uf_valor_clp": payload.uf_valor_clp,
                             "vigencia_hasta": vigencia_hasta,
                             "observaciones": payload.observaciones,
-                            "catalog_snapshot": catalog_snapshot,
+                            "catalog_snapshot": Json(catalog_snapshot),
                         },
                     )
                     break
@@ -277,6 +279,13 @@ async def _build_quote_detail(
     descuento_pct = record["descuento_pct"] if record["descuento_pct"] is not None else Decimal("0")
     descuento_uf = _round_uf(record["subtotal_uf"] * (descuento_pct / Decimal("100")))
 
+    snapshot_data = record["catalog_snapshot"]
+    if isinstance(snapshot_data, str):
+        try:
+            snapshot_data = json.loads(snapshot_data)
+        except json.JSONDecodeError:
+            pass
+
     return QuoteDetail(
         id=str(record["id"]),
         quote_number=record["quote_number"],
@@ -296,7 +305,7 @@ async def _build_quote_detail(
         prepared_email=record["prepared_email"],
         uf_valor_clp=record["uf_valor_clp"],
         observaciones=record["observaciones"],
-        catalog_snapshot=record["catalog_snapshot"],
+        catalog_snapshot=snapshot_data,
         items=items,
         eventos=eventos,
     )
@@ -352,7 +361,7 @@ async def update_quote(
                     "uf_valor_clp": payload.uf_valor_clp,
                     "vigencia_hasta": vigencia_hasta,
                     "observaciones": payload.observaciones,
-                    "catalog_snapshot": _build_items_snapshot(payload.items, totals_by_item),
+                    "catalog_snapshot": Json(_build_items_snapshot(payload.items, totals_by_item)),
                 },
             )
             await replace_quote_items(
