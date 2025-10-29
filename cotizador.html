@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Herramienta de cotizacion</title>
+  <title>Gestor de cotizaciones</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .quote-page {
@@ -66,195 +66,334 @@
       border-color: rgba(112, 138, 255, 0.35);
     }
     .quote-layout {
-      width: min(1180px, 100%);
-      margin: 0 auto 4rem;
+      width: min(1280px, 100%);
+      margin: 0 auto 3.2rem;
       padding: 0 clamp(1rem, 4vw, 3rem) clamp(3rem, 6vw, 4rem);
-      display: flex;
-      flex-direction: column;
-      gap: clamp(1.5rem, 4vw, 2.5rem);
-    }
-    .quote-intro {
       display: grid;
+      grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
       gap: clamp(1rem, 3vw, 1.5rem);
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    @media (max-width: 1024px) {
+      .quote-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    .quote-pane {
       background: var(--bg-elevated, rgba(9, 18, 32, 0.78));
       border-radius: 22px;
-      padding: clamp(1.5rem, 3vw, 2.25rem);
-      box-shadow: var(--shadow-soft, 0 20px 40px rgba(2, 10, 30, 0.35));
-      border: 1px solid rgba(112, 138, 255, 0.18);
-    }
-    .quote-grid {
-      display: grid;
-      gap: clamp(1.5rem, 3vw, 2.5rem);
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      align-items: flex-start;
-    }
-    .quote-card {
-      background: var(--bg-elevated, rgba(9, 18, 32, 0.78));
-      border-radius: 22px;
-      padding: clamp(1.5rem, 3vw, 2.25rem);
+      padding: clamp(1.2rem, 3vw, 2rem);
       box-shadow: var(--shadow-soft, 0 20px 40px rgba(2, 10, 30, 0.35));
       border: 1px solid rgba(112, 138, 255, 0.18);
       display: flex;
       flex-direction: column;
-      gap: clamp(1.25rem, 2vw, 1.75rem);
+      gap: 1rem;
     }
-    .quote-card h2 {
+    .quote-pane__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .quote-pane__header h2 {
       margin: 0;
-      font-size: 1.3rem;
-      letter-spacing: 0.06em;
+      font-size: 1.2rem;
+      letter-spacing: 0.05em;
     }
-    .form-grid {
+    .quote-pane__header button {
+      border-radius: 12px;
+      border: 1px solid rgba(112, 138, 255, 0.3);
+      padding: 0.6rem 1.1rem;
+      background: rgba(58, 134, 255, 0.18);
+      color: var(--text-primary, #f8fafc);
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+    .quote-pane__header button:hover {
+      transform: translateY(-1px);
+      background: rgba(58, 134, 255, 0.32);
+      border-color: rgba(112, 138, 255, 0.45);
+    }
+    .filters-form {
       display: grid;
-      gap: 1rem 1.25rem;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     }
-    .form-item {
+    .filter-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .filter-field label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted, #94a3b8);
+    }
+    .filter-field input,
+    .filter-field select {
+      border-radius: 12px;
+      border: 1px solid rgba(112, 138, 255, 0.18);
+      padding: 0.6rem 0.75rem;
+      background: rgba(12, 22, 36, 0.88);
+      color: inherit;
+      font-size: 0.9rem;
+    }
+    .filter-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+    .filter-actions button {
+      border-radius: 12px;
+      border: 1px solid rgba(112, 138, 255, 0.25);
+      padding: 0.55rem 1rem;
+      background: rgba(9, 18, 32, 0.9);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+    .filter-actions button[type="button"]:last-child {
+      background: rgba(58, 134, 255, 0.24);
+      border-color: rgba(112, 138, 255, 0.35);
+    }
+    .quote-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(12, 22, 36, 0.88);
+    }
+    .quote-table th,
+    .quote-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      font-size: 0.9rem;
+    }
+    .quote-table th {
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted, #94a3b8);
+      font-size: 0.78rem;
+    }
+    .quote-row {
+      cursor: pointer;
+      transition: background 0.18s ease;
+    }
+    .quote-row:hover {
+      background: rgba(58, 134, 255, 0.12);
+    }
+    .quote-row--selected {
+      background: rgba(58, 134, 255, 0.22);
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(58, 134, 255, 0.18);
+      color: rgba(173, 205, 255, 0.95);
+    }
+    .status-pill[data-status="borrador"] { background: rgba(148, 163, 184, 0.18); color: #cbd5f5; }
+    .status-pill[data-status="enviada"] { background: rgba(58, 134, 255, 0.18); }
+    .status-pill[data-status="aceptada"] { background: rgba(34, 197, 94, 0.18); color: #bbf7d0; }
+    .status-pill[data-status="anulada"] { background: rgba(239, 68, 68, 0.18); color: #fecaca; }
+    .status-pill[data-status="expirada"] { background: rgba(234, 179, 8, 0.2); color: #fde68a; }
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted, #94a3b8);
+    }
+    .pagination button {
+      border-radius: 10px;
+      border: 1px solid rgba(112, 138, 255, 0.25);
+      background: rgba(9, 18, 32, 0.85);
+      color: var(--text-primary);
+      padding: 0.5rem 0.85rem;
+      cursor: pointer;
+    }
+    .empty-state {
+      border-radius: 16px;
+      border: 1px dashed rgba(112, 138, 255, 0.35);
+      padding: 1rem;
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--text-muted, #94a3b8);
+    }
+    .quote-detail {
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+    }
+    .detail-section {
+      background: rgba(12, 22, 36, 0.88);
+      border-radius: 18px;
+      padding: 1rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .detail-section h3 {
+      margin: 0;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: rgba(148, 163, 184, 0.85);
+    }
+    .detail-grid {
+      display: grid;
+      gap: 0.85rem 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .detail-field {
       display: flex;
       flex-direction: column;
       gap: 0.4rem;
     }
-    .form-item label {
-      font-size: 0.9rem;
-      letter-spacing: 0.05em;
+    .detail-field label {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
       color: var(--text-muted, #94a3b8);
     }
-    .form-item input,
-    .form-item select {
+    .detail-field input,
+    .detail-field textarea,
+    .detail-field select,
+    .detail-field button {
       border-radius: 12px;
       border: 1px solid rgba(112, 138, 255, 0.18);
       padding: 0.65rem 0.75rem;
-      background: rgba(12, 22, 36, 0.88);
+      background: rgba(10, 18, 32, 0.92);
       color: inherit;
       font-size: 0.95rem;
     }
-    .form-item input[type="number"] {
-      -moz-appearance: textfield;
+    .detail-field button {
+      cursor: pointer;
+      background: rgba(58, 134, 255, 0.18);
+      border-color: rgba(112, 138, 255, 0.3);
     }
-    .form-item input[type="number"]::-webkit-outer-spin-button,
-    .form-item input[type="number"]::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
+    .detail-field textarea {
+      min-height: 90px;
+      resize: vertical;
     }
-    .form-item__inline {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-    }
-    .form-item__inline input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      accent-color: rgba(58, 134, 255, 0.9);
-    }
-    .form-note {
-      margin: 0;
-      font-size: 0.85rem;
-      color: var(--text-muted, #94a3b8);
-      line-height: 1.4;
-    }
-    .summary-table {
+    .items-table {
       width: 100%;
       border-collapse: collapse;
-      border-spacing: 0;
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(10, 18, 32, 0.92);
     }
-    .summary-table thead th {
-      text-align: left;
-      font-weight: 600;
+    .items-table th,
+    .items-table td {
+      padding: 0.65rem 0.8rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
       font-size: 0.85rem;
+    }
+    .items-table td:first-child {
+      display: grid;
+      gap: 0.35rem;
+    }
+    .items-table th {
+      text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: var(--text-muted, #94a3b8);
-      padding-bottom: 0.5rem;
-    }
-    .summary-table tbody td {
-      padding: 0.4rem 0 0.4rem 0;
-      border-top: 1px solid rgba(112, 138, 255, 0.12);
-      font-size: 0.95rem;
-    }
-    .summary-table tbody td:last-child,
-    .summary-table thead th:last-child {
-      text-align: right;
-    }
-    .summary-label {
-      display: flex;
-      flex-direction: column;
-      gap: 0.2rem;
-    }
-    .summary-label small {
-      color: var(--text-muted, #94a3b8);
+      color: rgba(148, 163, 184, 0.85);
       font-size: 0.75rem;
     }
-    .summary-empty {
-      border-radius: 16px;
-      border: 1px dashed rgba(112, 138, 255, 0.32);
-      padding: 1rem 1.25rem;
-      font-size: 0.9rem;
-      color: var(--text-muted, #94a3b8);
-      text-align: center;
+    .items-table input,
+    .items-table select {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(112, 138, 255, 0.2);
+      background: rgba(13, 21, 36, 0.95);
+      color: inherit;
+      padding: 0.45rem 0.5rem;
     }
-    .summary-empty[hidden] {
-      display: none;
+    .items-actions {
+      display: flex;
+      justify-content: flex-end;
     }
-    .totals {
+    .items-actions button {
+      border-radius: 10px;
+      border: 1px dashed rgba(112, 138, 255, 0.4);
+      padding: 0.5rem 0.9rem;
+      background: rgba(12, 22, 36, 0.88);
+      color: rgba(173, 205, 255, 0.95);
+      cursor: pointer;
+    }
+    .totals-grid {
       display: grid;
-      gap: 0.6rem;
-      margin: 0;
+      gap: 0.4rem;
+      font-size: 0.95rem;
     }
-    .totals div {
+    .totals-grid div {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
-      gap: 1rem;
+      color: rgba(207, 221, 255, 0.92);
     }
-    .totals dt {
-      margin: 0;
-      font-size: 0.9rem;
-      color: var(--text-muted, #94a3b8);
-    }
-    .totals dd {
-      margin: 0;
+    .totals-grid strong {
       font-weight: 600;
-      font-size: 1rem;
     }
-    .totals div.total {
-      border-top: 1px solid rgba(112, 138, 255, 0.18);
-      padding-top: 0.6rem;
-      margin-top: 0.2rem;
-    }
-    .client-summary {
-      display: grid;
-      gap: 0.45rem;
-      font-size: 0.9rem;
-      color: var(--text-muted, #94a3b8);
-    }
-    .client-summary strong {
-      color: var(--text-primary, #f8fafc);
-      font-weight: 600;
-      font-size: 1rem;
-    }
-    .quote-actions {
+    .detail-actions {
       display: flex;
-      gap: 0.75rem;
       flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: flex-end;
     }
-    .quote-actions .btn {
-      min-width: 180px;
-      justify-content: center;
+    .detail-actions button {
+      border-radius: 12px;
+      border: 1px solid rgba(112, 138, 255, 0.25);
+      padding: 0.65rem 1.15rem;
+      background: rgba(58, 134, 255, 0.18);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
     }
-    @media (max-width: 720px) {
-      .quote-header {
-        flex-direction: column;
-        align-items: flex-start;
-      }
+    .detail-actions button[disabled] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .detail-actions .danger {
+      border-color: rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.2);
+    }
+    .timeline {
+      display: grid;
+      gap: 0.6rem;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+    }
+    .timeline-item {
+      display: grid;
+      gap: 0.25rem;
+      background: rgba(12, 22, 36, 0.85);
+      border-radius: 12px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.85rem;
+    }
+    .timeline-item .meta {
+      display: flex;
+      justify-content: space-between;
+      color: rgba(148, 163, 184, 0.8);
+      font-size: 0.75rem;
+    }
+    #detail-placeholder {
+      margin: auto 0;
     }
   </style>
 </head>
-<body class="layout-shell quote-page">
+<body class="quote-page">
   <header class="quote-header">
     <div class="quote-header__brand">
-      <span class="brand-logo">SN</span>
+      <div class="brand-logo">SN</div>
       <div>
-        <h1>Cotizador SurNex</h1>
-        <p>Genera propuestas comerciales basadas en UF</p>
+        <h1>Cotizador comercial</h1>
+        <p>Gestiona tus propuestas con historial y PDF</p>
       </div>
     </div>
     <a class="quote-back" href="index.html" aria-label="Volver al dashboard">
@@ -263,122 +402,173 @@
   </header>
 
   <main class="quote-layout">
-    <section class="quote-intro">
-      <div>
-        <h2 class="section-title">Disena tu propuesta</h2>
-        <p class="helper-text">Completa los datos del cliente y selecciona los servicios ofrecidos. Los valores se calculan en UF para mantener consistencia con la lista comercial vigente.</p>
+    <section class="quote-pane" aria-label="Listado de cotizaciones">
+      <div class="quote-pane__header">
+        <h2>Cotizaciones</h2>
+        <button type="button" id="new-quote-btn">Nueva cotizacion</button>
       </div>
-      <div class="client-summary" id="client-summary" aria-live="polite">
-        <div>
-          <span>Empresa:</span>
-          <strong id="summary-company">--</strong>
+      <form id="filters-form" class="filters-form" autocomplete="off">
+        <div class="filter-field">
+          <label for="filter-search">Buscar</label>
+          <input id="filter-search" name="search" type="search" placeholder="Cliente, folio, contacto">
         </div>
-        <div>
-          <span>RUT:</span>
-          <strong id="summary-rut">--</strong>
+        <div class="filter-field">
+          <label for="filter-status">Estado</label>
+          <select id="filter-status" name="estado">
+            <option value="">Todos</option>
+            <option value="borrador">Borrador</option>
+            <option value="enviada">Enviada</option>
+            <option value="aceptada">Aceptada</option>
+            <option value="anulada">Anulada</option>
+            <option value="expirada">Expirada</option>
+          </select>
         </div>
-        <div>
-          <span>Contacto:</span>
-          <strong id="summary-contact">--</strong>
+        <div class="filter-field">
+          <label for="filter-rut">RUT</label>
+          <input id="filter-rut" name="clienteRut" type="text" placeholder="11.111.111-1">
         </div>
+      </form>
+      <div class="filter-actions">
+        <button type="button" id="clear-filters-btn">Limpiar</button>
+        <button type="button" id="apply-filters-btn">Aplicar</button>
+      </div>
+      <div id="quote-table-container" aria-live="polite">
+        <div class="empty-state" id="quote-empty-state" hidden>No hay cotizaciones registradas.</div>
+        <table class="quote-table" id="quote-table">
+          <thead>
+            <tr>
+              <th>Folio</th>
+              <th>Cliente</th>
+              <th>Estado</th>
+              <th>Total UF</th>
+              <th>Actualizado</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="quote-pagination">
+        <button type="button" id="prev-page-btn">&larr; Anterior</button>
+        <span id="pagination-info">Pagina 1</span>
+        <button type="button" id="next-page-btn">Siguiente &rarr;</button>
       </div>
     </section>
 
-    <section class="quote-grid">
-      <form id="quote-form" class="quote-card quote-form" autocomplete="off">
-        <h2>Datos del cliente</h2>
-        <div class="form-grid">
-          <div class="form-item">
-            <label for="company-name">Nombre de la empresa</label>
-            <input id="company-name" name="companyName" type="text" placeholder="Ej: SurNex Energias" required>
+    <section class="quote-pane" aria-live="polite">
+      <div class="quote-pane__header">
+        <h2 id="detail-title">Detalle</h2>
+        <span class="helper-text" id="detail-subtitle">Selecciona una cotizacion o crea una nueva.</span>
+      </div>
+      <div class="empty-state" id="detail-placeholder">
+        Selecciona una cotizacion del listado o usa "Nueva cotizacion".
+      </div>
+      <div class="quote-detail" id="quote-detail" hidden>
+        <form id="quote-detail-form" autocomplete="off">
+          <input type="hidden" id="quote-id">
+          <div class="detail-section">
+            <h3>Datos del cliente</h3>
+            <div class="detail-grid">
+              <div class="detail-field">
+                <label for="client-name">Nombre empresa</label>
+                <input id="client-name" name="clienteNombre" type="text" required>
+              </div>
+              <div class="detail-field">
+                <label for="client-rut">RUT</label>
+                <input id="client-rut" name="clienteRut" type="text" placeholder="11.111.111-1">
+              </div>
+              <div class="detail-field">
+                <label for="client-contact">Contacto</label>
+                <input id="client-contact" name="clienteContacto" type="text">
+              </div>
+              <div class="detail-field">
+                <label for="client-email">Correo</label>
+                <input id="client-email" name="clienteCorreo" type="email">
+              </div>
+              <div class="detail-field">
+                <label for="client-phone">Telefono</label>
+                <input id="client-phone" name="clienteTelefono" type="text">
+              </div>
+              <div class="detail-field">
+                <label>&nbsp;</label>
+                <button type="button" id="client-search-btn">Buscar cliente</button>
+              </div>
+            </div>
           </div>
-          <div class="form-item">
-            <label for="company-rut">RUT de la empresa</label>
-            <input id="company-rut" name="companyRut" type="text" placeholder="11.111.111-1">
-          </div>
-          <div class="form-item">
-            <label for="contact-name">Nombre de quien cotiza</label>
-            <input id="contact-name" name="contactName" type="text" placeholder="Ej: Juan Perez" required>
-          </div>
-        </div>
 
-        <h2>Servicios a cotizar</h2>
-        <div class="form-grid">
-          <div class="form-item">
-            <label for="containers-count">Contenedores disponibles</label>
-            <input id="containers-count" name="containers" type="number" min="0" step="1" value="0">
-            <p class="form-note">El primer contenedor tiene un valor de 3.16 UF. Cada contenedor adicional tiene un valor de 0.76 UF.</p>
+          <div class="detail-section">
+            <h3>Servicios</h3>
+            <table class="items-table" id="items-table">
+              <thead>
+                <tr>
+                  <th>Servicio</th>
+                  <th>Cant.</th>
+                  <th>UF c/u</th>
+                  <th>Total UF</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <div class="items-actions">
+              <button type="button" id="add-item-btn">Agregar servicio</button>
+            </div>
           </div>
-          <div class="form-item">
-            <label for="nexbox-count">Cantidad de NexBox (8 canales)</label>
-            <input id="nexbox-count" name="nexbox" type="number" min="0" step="1" value="0">
-            <p class="form-note">Cada NexBox suma 1 UF adicional.</p>
-          </div>
-          <div class="form-item">
-            <label for="support-level">Servicio de soporte</label>
-            <select id="support-level" name="support">
-              <option value="basic">Soporte basico (1 requerimiento al mes, sin costo adicional)</option>
-              <option value="plus">Soporte Plus (hasta 4 requerimientos, 2 UF)</option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label for="discount-rate">Descuento (%)</label>
-            <input id="discount-rate" name="discount" type="number" min="0" max="100" step="0.5" value="0">
-            <p class="form-note">Aplica un descuento porcentual sobre el subtotal antes de IVA.</p>
-          </div>
-        </div>
 
-        <div class="form-item form-item__inline">
-          <input id="internet-service" name="internet" type="checkbox">
-          <label for="internet-service">Agregar suministro de internet (1.5 UF)</label>
-        </div>
-      </form>
+          <div class="detail-section">
+            <h3>Montos</h3>
+            <div class="detail-grid">
+              <div class="detail-field">
+                <label for="prepared-by">Preparado por</label>
+                <input id="prepared-by" name="preparedBy" type="text">
+              </div>
+              <div class="detail-field">
+                <label for="prepared-email">Correo responsable</label>
+                <input id="prepared-email" name="preparedEmail" type="email">
+              </div>
+              <div class="detail-field">
+                <label for="discount-percent">Descuento (%)</label>
+                <input id="discount-percent" name="descuentoPct" type="number" min="0" max="100" step="0.5" value="0">
+              </div>
+              <div class="detail-field">
+                <label for="uf-value">Valor UF (CLP)</label>
+                <input id="uf-value" name="ufValorClp" type="number" min="0" step="1">
+              </div>
+              <div class="detail-field">
+                <label for="validity-days">Vigencia (dias)</label>
+                <input id="validity-days" name="vigenciaDias" type="number" min="1" max="180" value="30">
+              </div>
+              <div class="detail-field" style="grid-column: 1 / -1;">
+                <label for="quote-notes">Observaciones</label>
+                <textarea id="quote-notes" name="observaciones" placeholder="Condiciones comerciales, notas adicionales..."></textarea>
+              </div>
+            </div>
+            <div class="totals-grid" id="totals-grid">
+              <div><span>Subtotal</span><strong id="totals-subtotal">0.00 UF</strong></div>
+              <div><span>Descuento</span><strong id="totals-discount">0.00 UF</strong></div>
+              <div><span>Total neto</span><strong id="totals-net">0.00 UF</strong></div>
+              <div><span>IVA (19%)</span><strong id="totals-tax">0.00 UF</strong></div>
+              <div><span>Total + IVA</span><strong id="totals-total">0.00 UF</strong></div>
+            </div>
+          </div>
 
-      <section class="quote-card quote-summary" aria-live="polite">
-        <h2>Resumen de la cotizacion</h2>
-        <p class="form-note">Valores expresados en UF.</p>
-        <div class="summary-empty" id="summary-empty">Agrega contenedores o servicios adicionales para generar montos.</div>
-        <table class="summary-table" aria-describedby="summary-note">
-          <thead>
-            <tr>
-              <th>Servicio</th>
-              <th>Cant.</th>
-              <th>UF c/u</th>
-              <th>Total UF</th>
-            </tr>
-          </thead>
-          <tbody id="summary-body"></tbody>
-        </table>
-        <dl class="totals">
-          <div>
-            <dt>Subtotal</dt>
-            <dd id="subtotal-uf">0.00 UF</dd>
+          <div class="detail-actions">
+            <button type="button" id="save-quote-btn">Guardar</button>
+            <button type="button" id="send-quote-btn">Enviar</button>
+            <button type="button" id="accept-quote-btn">Marcar aceptada</button>
+            <button type="button" class="danger" id="void-quote-btn">Anular</button>
+            <button type="button" id="download-quote-btn">Descargar PDF</button>
           </div>
-          <div>
-            <dt>Descuento</dt>
-            <dd id="discount-uf">0.00 UF</dd>
-          </div>
-          <div>
-            <dt>Total neto</dt>
-            <dd id="net-uf">0.00 UF</dd>
-          </div>
-          <div>
-            <dt>IVA (19%)</dt>
-            <dd id="tax-uf">0.00 UF</dd>
-          </div>
-          <div class="total">
-            <dt>Total + IVA</dt>
-            <dd id="grand-total-uf">0.00 UF</dd>
-          </div>
-        </dl>
-        <div class="quote-actions">
-          <button type="button" class="btn btn-login" id="download-pdf" disabled>Descargar PDF</button>
+        </form>
+
+        <div class="detail-section">
+          <h3>Historial</h3>
+          <div class="timeline" id="timeline"></div>
         </div>
-      </section>
+      </div>
     </section>
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
-  <script src="cotizador.js" defer></script>
+  <script type="module" src="cotizador/main.js"></script>
 </body>
 </html>
