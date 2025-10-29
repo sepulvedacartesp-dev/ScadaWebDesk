@@ -8,6 +8,24 @@ import asyncpg
 from .enums import QuoteStatus
 from .schemas import QuoteListFilters
 
+_QUOTE_ITEMS_HAS_CATALOG_COLUMN: Optional[bool] = None
+
+
+async def _quote_items_supports_catalog(conn: asyncpg.Connection) -> bool:
+    global _QUOTE_ITEMS_HAS_CATALOG_COLUMN
+    if _QUOTE_ITEMS_HAS_CATALOG_COLUMN is not None:
+        return _QUOTE_ITEMS_HAS_CATALOG_COLUMN
+    query = """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'quote_items'
+          AND column_name = 'catalog_id'
+          AND table_schema = ANY (current_schemas(FALSE))
+        LIMIT 1
+    """
+    exists = await conn.fetchval(query)
+    _QUOTE_ITEMS_HAS_CATALOG_COLUMN = bool(exists)
+    return _QUOTE_ITEMS_HAS_CATALOG_COLUMN
 
 def _build_filters(filters: QuoteListFilters, empresa_id: str) -> Tuple[str, List[Any]]:
     clauses = ["empresa_id = $1"]
@@ -71,22 +89,40 @@ async def fetch_quote(
 
 
 async def fetch_quote_items(conn: asyncpg.Connection, quote_id: uuid.UUID) -> List[asyncpg.Record]:
-    sql = """
-        SELECT qi.id,
-               qi.quote_id,
-               qi.descripcion,
-               qi.cantidad,
-               qi.precio_unitario_uf,
-               qi.total_uf,
-               qi.nota,
-               qi.orden,
-               qi.catalog_id,
-               c.slug AS catalog_slug
-        FROM quote_items qi
-        LEFT JOIN quote_catalog c ON c.id = qi.catalog_id
-        WHERE qi.quote_id = $1
-        ORDER BY qi.orden ASC, qi.id ASC
-    """
+    has_catalog = await _quote_items_supports_catalog(conn)
+    if has_catalog:
+        sql = """
+            SELECT qi.id,
+                   qi.quote_id,
+                   qi.descripcion,
+                   qi.cantidad,
+                   qi.precio_unitario_uf,
+                   qi.total_uf,
+                   qi.nota,
+                   qi.orden,
+                   qi.catalog_id,
+                   c.slug AS catalog_slug
+            FROM quote_items qi
+            LEFT JOIN quote_catalog c ON c.id = qi.catalog_id
+            WHERE qi.quote_id = $1
+            ORDER BY qi.orden ASC, qi.id ASC
+        """
+    else:
+        sql = """
+            SELECT qi.id,
+                   qi.quote_id,
+                   qi.descripcion,
+                   qi.cantidad,
+                   qi.precio_unitario_uf,
+                   qi.total_uf,
+                   qi.nota,
+                   qi.orden,
+                   NULL::uuid AS catalog_id,
+                   NULL::text AS catalog_slug
+            FROM quote_items qi
+            WHERE qi.quote_id = $1
+            ORDER BY qi.orden ASC, qi.id ASC
+        """
     return await conn.fetch(sql, quote_id)
 
 
@@ -132,26 +168,27 @@ async def replace_quote_items(
     quote_id: uuid.UUID,
     items: Sequence[Dict[str, Any]],
 ) -> None:
+    has_catalog = await _quote_items_supports_catalog(conn)
     await conn.execute("DELETE FROM quote_items WHERE quote_id = $1", quote_id)
     if not items:
         return
-    await conn.executemany(
+    if has_catalog:
+        sql = """
+            INSERT INTO quote_items (
+                id,
+                quote_id,
+                descripcion,
+                cantidad,
+                precio_unitario_uf,
+                total_uf,
+                nota,
+                orden,
+                catalog_id
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9
+            )
         """
-        INSERT INTO quote_items (
-            id,
-            quote_id,
-            descripcion,
-            cantidad,
-            precio_unitario_uf,
-            total_uf,
-            nota,
-            orden,
-            catalog_id
-        ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9
-        )
-        """,
-        [
+        params = [
             (
                 item.get("id", uuid.uuid4()),
                 quote_id,
@@ -164,8 +201,36 @@ async def replace_quote_items(
                 item.get("catalog_id"),
             )
             for item in items
-        ],
-    )
+        ]
+    else:
+        sql = """
+            INSERT INTO quote_items (
+                id,
+                quote_id,
+                descripcion,
+                cantidad,
+                precio_unitario_uf,
+                total_uf,
+                nota,
+                orden
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8
+            )
+        """
+        params = [
+            (
+                item.get("id", uuid.uuid4()),
+                quote_id,
+                item["descripcion"],
+                item["cantidad"],
+                item["precio_unitario_uf"],
+                item["total_uf"],
+                item.get("nota"),
+                item.get("orden", 0),
+            )
+            for item in items
+        ]
+    await conn.executemany(sql, params)
 
 
 async def insert_quote_event(
