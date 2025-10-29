@@ -32,10 +32,31 @@ async function getFirebaseIdToken(forceRefresh = false) {
   }
   const auth = firebaseApp.auth();
   const user = auth.currentUser;
-  if (!user) {
-    throw new Error("Usuario no autenticado");
+  if (user) {
+    return user.getIdToken(forceRefresh);
   }
-  return user.getIdToken(forceRefresh);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      reject(new Error("Usuario no autenticado"));
+    }, 10000);
+    const unsubscribe = auth.onAuthStateChanged(
+      (next) => {
+        clearTimeout(timer);
+        unsubscribe();
+        if (next) {
+          next.getIdToken(forceRefresh).then(resolve).catch(reject);
+        } else {
+          reject(new Error("Usuario no autenticado"));
+        }
+      },
+      (error) => {
+        clearTimeout(timer);
+        unsubscribe();
+        reject(error);
+      }
+    );
+  });
 }
 
 async function authFetch(path, { method = "GET", headers = {}, body, query } = {}) {
