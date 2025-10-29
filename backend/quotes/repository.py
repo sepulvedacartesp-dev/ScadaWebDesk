@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import json
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import asyncpg
@@ -237,6 +238,10 @@ async def insert_quote_event(
     conn: asyncpg.Connection,
     data: Dict[str, Any],
 ) -> asyncpg.Record:
+    metadata = data.get("metadata")
+    if metadata is not None and not isinstance(metadata, (str, bytes)):
+        data = dict(data)
+        data["metadata"] = json.dumps(metadata, ensure_ascii=False)
     sql = """
         INSERT INTO quote_events (
             id,
