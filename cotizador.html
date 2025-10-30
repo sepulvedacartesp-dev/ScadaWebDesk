@@ -81,15 +81,10 @@
       width: min(1280px, 100%);
       margin: 0 auto 3.2rem;
       padding: 0 clamp(1rem, 4vw, 3rem) clamp(3rem, 6vw, 4rem);
-      display: grid;
-      grid-template-columns: minmax(320px, 360px) minmax(540px, 1fr);
-      gap: clamp(1.5rem, 3.5vw, 2.75rem);
-      align-items: start;
-    }
-    @media (max-width: 1024px) {
-      .quote-layout {
-        grid-template-columns: 1fr;
-      }
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1.5rem, 4vw, 3.25rem);
+      align-items: stretch;
     }
     .quote-pane {
       background: rgba(8, 16, 28, 0.95);
@@ -133,28 +128,66 @@
     }
     .quote-pane__header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 0.75rem;
+      gap: 1rem;
+      border-bottom: 1px solid rgba(112, 138, 255, 0.12);
+      padding-bottom: 0.75rem;
     }
-    .quote-pane__header h2 {
+    .quote-pane__title {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .quote-pane__title h2 {
       margin: 0;
       font-size: 1.2rem;
       letter-spacing: 0.05em;
     }
-    .quote-pane__header button {
+    .quote-pane__actions {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+    }
+    .quote-pane__actions > button {
       border-radius: 12px;
       border: 1px solid rgba(112, 138, 255, 0.3);
-      padding: 0.6rem 1.1rem;
+      padding: 0.55rem 1.05rem;
       background: rgba(58, 134, 255, 0.18);
       color: var(--text-primary, #f8fafc);
       cursor: pointer;
       transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
     }
-    .quote-pane__header button:hover {
+    .quote-pane__actions > button:hover {
       transform: translateY(-1px);
       background: rgba(58, 134, 255, 0.32);
       border-color: rgba(112, 138, 255, 0.45);
+    }
+    .helper-text {
+      font-size: 0.85rem;
+      color: var(--text-muted, #94a3b8);
+    }
+    .pane-toggle {
+      background: rgba(12, 22, 36, 0.82);
+      border-color: rgba(112, 138, 255, 0.2);
+      font-size: 0.85rem;
+      padding: 0.5rem 0.9rem;
+    }
+    .pane-toggle:hover {
+      background: rgba(58, 134, 255, 0.24);
+    }
+    .quote-pane__body {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    [data-pane][data-collapsed="true"] .quote-pane__body {
+      display: none;
+    }
+    [data-pane][data-collapsed="true"] .quote-pane__header {
+      border-bottom-color: rgba(112, 138, 255, 0.08);
+      padding-bottom: 0;
     }
     .filters-form {
       display: grid;
@@ -445,166 +478,180 @@
   </header>
 
   <main class="quote-layout">
-    <section class="quote-pane quote-pane--list" aria-label="Listado de cotizaciones">
+    <section class="quote-pane quote-pane--list" data-pane="list" aria-label="Listado de cotizaciones">
       <div class="quote-pane__header">
-        <h2>Cotizaciones</h2>
-        <button type="button" id="new-quote-btn">Nueva cotizacion</button>
-      </div>
-      <form id="filters-form" class="filters-form" autocomplete="off">
-        <div class="filter-field">
-          <label for="filter-search">Buscar</label>
-          <input id="filter-search" name="search" type="search" placeholder="Cliente, folio, contacto">
+        <div class="quote-pane__title">
+          <h2>Cotizaciones</h2>
         </div>
-        <div class="filter-field">
-          <label for="filter-status">Estado</label>
-          <select id="filter-status" name="estado">
-            <option value="">Todos</option>
-            <option value="borrador">Borrador</option>
-            <option value="enviada">Enviada</option>
-            <option value="aceptada">Aceptada</option>
-            <option value="anulada">Anulada</option>
-            <option value="expirada">Expirada</option>
-          </select>
+        <div class="quote-pane__actions">
+          <button type="button" id="new-quote-btn">Nueva cotizacion</button>
+          <button type="button" class="pane-toggle" data-toggle-pane="list" aria-expanded="true">Contraer</button>
         </div>
-        <div class="filter-field">
-          <label for="filter-rut">RUT</label>
-          <input id="filter-rut" name="clienteRut" type="text" placeholder="11.111.111-1">
+      </div>
+      <div class="quote-pane__body">
+        <form id="filters-form" class="filters-form" autocomplete="off">
+          <div class="filter-field">
+            <label for="filter-search">Buscar</label>
+            <input id="filter-search" name="search" type="search" placeholder="Cliente, folio, contacto">
+          </div>
+          <div class="filter-field">
+            <label for="filter-status">Estado</label>
+            <select id="filter-status" name="estado">
+              <option value="">Todos</option>
+              <option value="borrador">Borrador</option>
+              <option value="enviada">Enviada</option>
+              <option value="aceptada">Aceptada</option>
+              <option value="anulada">Anulada</option>
+              <option value="expirada">Expirada</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="filter-rut">RUT</label>
+            <input id="filter-rut" name="clienteRut" type="text" placeholder="11.111.111-1">
+          </div>
+        </form>
+        <div class="filter-actions">
+          <button type="button" id="clear-filters-btn">Limpiar</button>
+          <button type="button" id="apply-filters-btn">Aplicar</button>
         </div>
-      </form>
-      <div class="filter-actions">
-        <button type="button" id="clear-filters-btn">Limpiar</button>
-        <button type="button" id="apply-filters-btn">Aplicar</button>
-      </div>
-      <div id="quote-table-container" aria-live="polite">
-        <div class="empty-state" id="quote-empty-state" hidden>No hay cotizaciones registradas.</div>
-        <table class="quote-table" id="quote-table">
-          <thead>
-            <tr>
-              <th>Folio</th>
-              <th>Cliente</th>
-              <th>Estado</th>
-              <th>Total UF</th>
-              <th>Actualizado</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="pagination" id="quote-pagination">
-        <button type="button" id="prev-page-btn">&larr; Anterior</button>
-        <span id="pagination-info">Pagina 1</span>
-        <button type="button" id="next-page-btn">Siguiente &rarr;</button>
+        <div id="quote-table-container" aria-live="polite">
+          <div class="empty-state" id="quote-empty-state" hidden>No hay cotizaciones registradas.</div>
+          <table class="quote-table" id="quote-table">
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th>Total UF</th>
+                <th>Actualizado</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="quote-pagination">
+          <button type="button" id="prev-page-btn">&larr; Anterior</button>
+          <span id="pagination-info">Pagina 1</span>
+          <button type="button" id="next-page-btn">Siguiente &rarr;</button>
+        </div>
       </div>
     </section>
 
-    <section class="quote-pane quote-pane--detail" aria-live="polite">
+    <section class="quote-pane quote-pane--detail" data-pane="detail" aria-live="polite">
       <div class="quote-pane__header">
-        <h2 id="detail-title">Detalle</h2>
-        <span class="helper-text" id="detail-subtitle">Selecciona una cotizacion o crea una nueva.</span>
+        <div class="quote-pane__title">
+          <h2 id="detail-title">Detalle</h2>
+          <span class="helper-text" id="detail-subtitle">Selecciona una cotizacion o crea una nueva.</span>
+        </div>
+        <div class="quote-pane__actions">
+          <button type="button" class="pane-toggle" data-toggle-pane="detail" aria-expanded="true">Contraer</button>
+        </div>
       </div>
-      <div class="empty-state" id="detail-placeholder">
-        Selecciona una cotizacion del listado o usa "Nueva cotizacion".
-      </div>
-      <div class="quote-detail" id="quote-detail" hidden>
-        <form id="quote-detail-form" autocomplete="off">
-          <input type="hidden" id="quote-id">
-          <div class="detail-section">
-            <h3>Datos del cliente</h3>
-            <div class="detail-grid">
-              <div class="detail-field">
-                <label for="client-name">Nombre empresa</label>
-                <input id="client-name" name="clienteNombre" type="text" required>
-              </div>
-              <div class="detail-field">
-                <label for="client-rut">RUT</label>
-                <input id="client-rut" name="clienteRut" type="text" placeholder="11.111.111-1">
-              </div>
-              <div class="detail-field">
-                <label for="client-contact">Contacto</label>
-                <input id="client-contact" name="clienteContacto" type="text">
-              </div>
-              <div class="detail-field">
-                <label for="client-email">Correo</label>
-                <input id="client-email" name="clienteCorreo" type="email">
-              </div>
-              <div class="detail-field">
-                <label for="client-phone">Telefono</label>
-                <input id="client-phone" name="clienteTelefono" type="text">
-              </div>
-              <div class="detail-field">
-                <label>&nbsp;</label>
-                <div class="client-actions">
-                  <button type="button" id="client-search-btn">Buscar cliente</button>
-                  <button type="button" id="client-save-btn">Guardar cliente</button>
+      <div class="quote-pane__body">
+        <div class="empty-state" id="detail-placeholder">
+          Selecciona una cotizacion del listado o usa "Nueva cotizacion".
+        </div>
+        <div class="quote-detail" id="quote-detail" hidden>
+          <form id="quote-detail-form" autocomplete="off">
+            <input type="hidden" id="quote-id">
+            <div class="detail-section">
+              <h3>Datos del cliente</h3>
+              <div class="detail-grid">
+                <div class="detail-field">
+                  <label for="client-name">Nombre empresa</label>
+                  <input id="client-name" name="clienteNombre" type="text" required>
+                </div>
+                <div class="detail-field">
+                  <label for="client-rut">RUT</label>
+                  <input id="client-rut" name="clienteRut" type="text" placeholder="11.111.111-1">
+                </div>
+                <div class="detail-field">
+                  <label for="client-contact">Contacto</label>
+                  <input id="client-contact" name="clienteContacto" type="text">
+                </div>
+                <div class="detail-field">
+                  <label for="client-email">Correo</label>
+                  <input id="client-email" name="clienteCorreo" type="email">
+                </div>
+                <div class="detail-field">
+                  <label for="client-phone">Telefono</label>
+                  <input id="client-phone" name="clienteTelefono" type="text">
+                </div>
+                <div class="detail-field">
+                  <label>&nbsp;</label>
+                  <div class="client-actions">
+                    <button type="button" id="client-search-btn">Buscar cliente</button>
+                    <button type="button" id="client-save-btn">Guardar cliente</button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div class="detail-section">
-            <h3>Servicios</h3>
-            <table class="items-table" id="items-table">
-              <thead>
-                <tr>
-                  <th>Servicio</th>
-                  <th>Cant.</th>
-                  <th>UF c/u</th>
-                  <th>Total UF</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-            <div class="items-actions">
-              <button type="button" id="add-item-btn">Agregar servicio</button>
-            </div>
-          </div>
-
-          <div class="detail-section">
-            <h3>Montos</h3>
-            <div class="detail-grid">
-              <div class="detail-field">
-                <label for="prepared-by">Preparado por</label>
-                <input id="prepared-by" name="preparedBy" type="text">
-              </div>
-              <div class="detail-field">
-                <label for="prepared-email">Correo responsable</label>
-                <input id="prepared-email" name="preparedEmail" type="email">
-              </div>
-              <div class="detail-field">
-                <label for="discount-percent">Descuento (%)</label>
-                <input id="discount-percent" name="descuentoPct" type="number" min="0" max="100" step="0.5" value="0">
-              </div>
-              <div class="detail-field">
-                <label for="uf-value">Valor UF (CLP)</label>
-                <input id="uf-value" name="ufValorClp" type="number" min="0" step="1">
-              </div>
-              <div class="detail-field">
-                <label for="validity-days">Vigencia (dias)</label>
-                <input id="validity-days" name="vigenciaDias" type="number" min="1" max="180" value="30">
-              </div>
-              <div class="detail-field" style="grid-column: 1 / -1;">
-                <label for="quote-notes">Observaciones</label>
-                <textarea id="quote-notes" name="observaciones" placeholder="Condiciones comerciales, notas adicionales..."></textarea>
+            <div class="detail-section">
+              <h3>Servicios</h3>
+              <table class="items-table" id="items-table">
+                <thead>
+                  <tr>
+                    <th>Servicio</th>
+                    <th>Cant.</th>
+                    <th>UF c/u</th>
+                    <th>Total UF</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <div class="items-actions">
+                <button type="button" id="add-item-btn">Agregar servicio</button>
               </div>
             </div>
-            <div class="totals-grid" id="totals-grid">
-              <div><span>Subtotal</span><strong id="totals-subtotal">0.00 UF</strong></div>
-              <div><span>Descuento</span><strong id="totals-discount">0.00 UF</strong></div>
-              <div><span>Total neto</span><strong id="totals-net">0.00 UF</strong></div>
-              <div><span>IVA (19%)</span><strong id="totals-tax">0.00 UF</strong></div>
-              <div><span>Total + IVA</span><strong id="totals-total">0.00 UF</strong></div>
-            </div>
-          </div>
 
-          <div class="detail-actions">
-            <button type="button" id="save-quote-btn">Guardar</button>
-            <button type="button" id="send-quote-btn">Enviar</button>
-            <button type="button" id="accept-quote-btn">Marcar aceptada</button>
-            <button type="button" class="danger" id="void-quote-btn">Anular</button>
-            <button type="button" id="download-quote-btn">Descargar PDF</button>
-          </div>
-        </form>
+            <div class="detail-section">
+              <h3>Montos</h3>
+              <div class="detail-grid">
+                <div class="detail-field">
+                  <label for="prepared-by">Preparado por</label>
+                  <input id="prepared-by" name="preparedBy" type="text">
+                </div>
+                <div class="detail-field">
+                  <label for="prepared-email">Correo responsable</label>
+                  <input id="prepared-email" name="preparedEmail" type="email">
+                </div>
+                <div class="detail-field">
+                  <label for="discount-percent">Descuento (%)</label>
+                  <input id="discount-percent" name="descuentoPct" type="number" min="0" max="100" step="0.5" value="0">
+                </div>
+                <div class="detail-field">
+                  <label for="uf-value">Valor UF (CLP)</label>
+                  <input id="uf-value" name="ufValorClp" type="number" min="0" step="1">
+                </div>
+                <div class="detail-field">
+                  <label for="validity-days">Vigencia (dias)</label>
+                  <input id="validity-days" name="vigenciaDias" type="number" min="1" max="180" value="30">
+                </div>
+                <div class="detail-field" style="grid-column: 1 / -1;">
+                  <label for="quote-notes">Observaciones</label>
+                  <textarea id="quote-notes" name="observaciones" placeholder="Condiciones comerciales, notas adicionales..."></textarea>
+                </div>
+              </div>
+              <div class="totals-grid" id="totals-grid">
+                <div><span>Subtotal</span><strong id="totals-subtotal">0.00 UF</strong></div>
+                <div><span>Descuento</span><strong id="totals-discount">0.00 UF</strong></div>
+                <div><span>Total neto</span><strong id="totals-net">0.00 UF</strong></div>
+                <div><span>IVA (19%)</span><strong id="totals-tax">0.00 UF</strong></div>
+                <div><span>Total + IVA</span><strong id="totals-total">0.00 UF</strong></div>
+              </div>
+            </div>
+
+            <div class="detail-actions">
+              <button type="button" id="save-quote-btn">Guardar</button>
+              <button type="button" id="send-quote-btn">Enviar</button>
+              <button type="button" id="accept-quote-btn">Marcar aceptada</button>
+              <button type="button" class="danger" id="void-quote-btn">Anular</button>
+              <button type="button" id="download-quote-btn">Descargar PDF</button>
+            </div>
+          </form>
+        </div>
 
         <div class="detail-section">
           <h3>Historial</h3>

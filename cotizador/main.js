@@ -38,6 +38,8 @@ window.addEventListener("DOMContentLoaded", initialize);
 async function initialize() {
   cacheDom();
   bindEvents();
+  ensurePaneExpanded("list");
+  ensurePaneExpanded("detail");
   toggleDetail(false);
   await loadCatalog();
   await loadQuotes();
@@ -92,6 +94,8 @@ function cacheDom() {
   dom.voidBtn = document.getElementById("void-quote-btn");
   dom.downloadBtn = document.getElementById("download-quote-btn");
   dom.timeline = document.getElementById("timeline");
+  dom.panes = document.querySelectorAll("[data-pane]");
+  dom.paneToggles = Array.from(document.querySelectorAll("[data-toggle-pane]"));
 }
 
 function bindEvents() {
@@ -122,6 +126,12 @@ function bindEvents() {
   dom.clientSearchBtn?.addEventListener("click", () => searchClient());
   dom.clientSaveBtn?.addEventListener("click", () => saveClientFromForm());
   dom.discountPercent?.addEventListener("input", () => updateTotals());
+  dom.paneToggles?.forEach((btn) => {
+    const paneName = btn.getAttribute("data-toggle-pane");
+    if (!paneName) return;
+    btn.addEventListener("click", () => togglePane(paneName));
+    refreshPaneToggle(paneName);
+  });
 }
 
 async function loadCatalog() {
@@ -501,8 +511,40 @@ function updateActionButtons(estado) {
   dom.downloadBtn.disabled = !state.selectedQuoteId;
 }
 
+function togglePane(paneName) {
+  if (!paneName) return;
+  const pane = document.querySelector(`[data-pane="${paneName}"]`);
+  const toggle = document.querySelector(`[data-toggle-pane="${paneName}"]`);
+  if (!pane || !toggle) return;
+  const isCollapsed = pane.getAttribute("data-collapsed") === "true";
+  const nextCollapsed = !isCollapsed;
+  pane.setAttribute("data-collapsed", String(nextCollapsed));
+  refreshPaneToggle(paneName);
+}
+
+function refreshPaneToggle(paneName) {
+  if (!paneName) return;
+  const pane = document.querySelector(`[data-pane="${paneName}"]`);
+  const toggle = document.querySelector(`[data-toggle-pane="${paneName}"]`);
+  if (!pane || !toggle) return;
+  const collapsed = pane.getAttribute("data-collapsed") === "true";
+  toggle.textContent = collapsed ? "Expandir" : "Contraer";
+  toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
+
+function ensurePaneExpanded(paneName) {
+  if (!paneName) return;
+  const pane = document.querySelector(`[data-pane="${paneName}"]`);
+  if (!pane) return;
+  if (pane.getAttribute("data-collapsed") === "true") {
+    pane.setAttribute("data-collapsed", "false");
+  }
+  refreshPaneToggle(paneName);
+}
+
 function toggleDetail(show) {
   if (show) {
+    ensurePaneExpanded("detail");
     dom.detailPlaceholder.setAttribute("hidden", "hidden");
     dom.detailContainer.removeAttribute("hidden");
   } else {
