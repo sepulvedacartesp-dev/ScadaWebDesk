@@ -81,7 +81,7 @@ async def _catalog_id_map(conn: asyncpg.Connection, slugs: Iterable[str]) -> Dic
 
 async def _next_quote_number(conn: asyncpg.Connection, empresa_id: str) -> str:
     current_year = _now_utc().year
-    prefix = f"SUR-{empresa_id}-{current_year}-"
+    prefix = f"SN-{empresa_id}-{current_year}-"
     row = await conn.fetchrow(
         """
         SELECT quote_number
