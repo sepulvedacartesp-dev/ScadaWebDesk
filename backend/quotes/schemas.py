@@ -94,6 +94,9 @@ class QuoteSummary(BaseModel):
     estado: QuoteStatus
     cliente_nombre: str
     cliente_rut: str
+    cliente_contacto: Optional[str] = None
+    cliente_correo: Optional[str] = None
+    cliente_telefono: Optional[str] = None
     total_uf: Decimal
     vigencia_hasta: Optional[datetime]
     created_at: datetime

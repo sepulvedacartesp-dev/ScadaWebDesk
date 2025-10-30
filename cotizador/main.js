@@ -6,6 +6,7 @@ import {
   updateQuote,
   changeQuoteStatus,
   listClients,
+  createClient,
   logQuotePdfDownload,
 } from "./api.js";
 import { downloadQuotePdf } from "./pdf.js";
@@ -68,6 +69,7 @@ function cacheDom() {
   dom.clientEmail = document.getElementById("client-email");
   dom.clientPhone = document.getElementById("client-phone");
   dom.clientSearchBtn = document.getElementById("client-search-btn");
+  dom.clientSaveBtn = document.getElementById("client-save-btn");
   dom.itemsTable = document.getElementById("items-table");
   dom.itemsBody = dom.itemsTable.querySelector("tbody");
   dom.addItemBtn = document.getElementById("add-item-btn");
@@ -118,6 +120,7 @@ function bindEvents() {
   dom.voidBtn?.addEventListener("click", () => updateStatus("anulada"));
   dom.downloadBtn?.addEventListener("click", () => downloadCurrentQuote());
   dom.clientSearchBtn?.addEventListener("click", () => searchClient());
+  dom.clientSaveBtn?.addEventListener("click", () => saveClientFromForm());
   dom.discountPercent?.addEventListener("input", () => updateTotals());
 }
 
@@ -719,6 +722,39 @@ async function searchClient() {
   } catch (error) {
     console.error("Error buscando cliente", error);
     alert(error?.message || "No se pudo buscar el cliente.");
+  }
+}
+
+async function saveClientFromForm() {
+  const nombre = dom.clientName.value.trim();
+  const rut = dom.clientRut.value.trim();
+  if (!nombre || !rut) {
+    alert("Ingresa al menos nombre y RUT para guardar el cliente.");
+    return;
+  }
+  const payload = {
+    nombre,
+    rut,
+    contacto: dom.clientContact.value.trim() || null,
+    correo: dom.clientEmail.value.trim() || null,
+    telefono: dom.clientPhone.value.trim() || null,
+  };
+  dom.clientSaveBtn.disabled = true;
+  try {
+    const saved = await createClient(payload);
+    if (saved) {
+      dom.clientName.value = saved.nombre || nombre;
+      dom.clientRut.value = saved.rut || rut;
+      dom.clientContact.value = saved.contacto || "";
+      dom.clientEmail.value = saved.correo || "";
+      dom.clientPhone.value = saved.telefono || "";
+    }
+    alert("Cliente guardado correctamente.");
+  } catch (error) {
+    console.error("Error guardando cliente", error);
+    alert(error?.message || "No se pudo guardar el cliente.");
+  } finally {
+    dom.clientSaveBtn.disabled = false;
   }
 }
 

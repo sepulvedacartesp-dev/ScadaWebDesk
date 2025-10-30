@@ -281,7 +281,18 @@ async def list_quotes(
     total = await conn.fetchval(count_sql, *params)
 
     sql = f"""
-        SELECT id, quote_number, estado, cliente_nombre, cliente_rut, total_uf, vigencia_hasta, created_at, updated_at
+        SELECT id,
+               quote_number,
+               estado,
+               cliente_nombre,
+               cliente_rut,
+               contacto,
+               correo,
+               telefono,
+               total_uf,
+               vigencia_hasta,
+               created_at,
+               updated_at
         FROM quotes
         WHERE {where_clause}
         ORDER BY created_at DESC
