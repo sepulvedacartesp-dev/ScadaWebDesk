@@ -3,109 +3,262 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SCADA Web Desk</title>
+  <title>SurNex | Control industrial en la nube</title>
   <link rel="stylesheet" href="style.css">
-  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyAwac3okkBuOm0gB5aqRuHILefbryj9lAw",
-      authDomain: "scadaweb-64eba.firebaseapp.com",
-      projectId: "scadaweb-64eba",
-    };
-    firebase.initializeApp(firebaseConfig);
-  </script>
 </head>
-<body class="layout-shell dashboard-page">
-  <header class="app-header app-header--compact">
-    <div class="brand-group" id="brand-group">
-      <img id="company-logo" class="brand-logo-img" alt="Logo de la empresa" hidden>
-      <span class="brand-logo" aria-hidden="true">SW</span>
-      <div class="brand-copy">
-        <p class="brand-label">SurNex</p>
-        <h1 id="main-title">SurNex SCADA</h1>
-        <p class="brand-subtitle">Monitorea y controla tus procesos en tiempo real.</p>
-      </div>
-    </div>
-    <div class="session-panel">
-      <span id="status" class="session-status">Sin sesion</span>
-      <button id="logout-btn" type="button" class="btn btn-logout" disabled>Cerrar sesion</button>
-      <button id="open-login" type="button" class="btn btn-login">Ingresar</button>
+<body class="commercial-page">
+  <header class="commercial-header">
+    <a class="brand-link" href="#inicio" aria-label="Inicio SurNex">
+      <img src="Imagenes/Surnex Logo.png" alt="Logotipo SurNex" class="brand-link__image">
+      <span class="brand-link__text">SurNex</span>
+    </a>
+    <nav class="commercial-nav" aria-label="Navegación principal">
+      <a href="#soluciones">Soluciones</a>
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#planes">Planes</a>
+      <a href="#confianza">Confianza</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="btn btn-outline" href="#contacto">Solicitar demo</a>
+      <a class="btn" href="dashboard.html">Clientes</a>
     </div>
   </header>
 
-  <main class="main-layout">
-    <section class="intro-banner card-surface">
-      <div class="intro-copy">
-        <h2 class="section-title">Tablero operativo</h2>
-        <p class="helper-text">Mantiene visibilidad total de tus activos y alterna la distribucion segun el contexto de operacion.</p>
-      </div>
-      <div class="intro-metrics">
-        <article class="metric-card">
-          <span class="metric-label">Servidor</span>
-          <span id="connect-status" class="chip chip-disconnected">Desconectado</span>
-          <p class="helper-text">Conectate para recibir datos en vivo.</p>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">Usuario activo</span>
-          <strong id="current-user">Anonimo</strong>
-          <span id="current-company" class="helper-text" hidden>Empresa: --</span>
-          <p class="helper-text">Inicia sesion para mas herramientas.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="view-toolbar toolbar-grid">
-      <article class="toolbar-card toolbar-card--primary">
-        <h2 class="toolbar-title">Disposicion del tablero</h2>
-        <p class="helper-text">Alterna la vista para trabajar con paneles simultaneos o enfocarte en un solo contenedor.</p>
-        <div class="view-buttons" role="group" aria-label="Cambiar vista">
-          <button id="view-matrix" class="btn btn-view active">Vista en Matriz</button>
-          <button id="view-sidebar" class="btn btn-view">Vista Lateral</button>
+  <main class="commercial-main">
+    <section class="commercial-hero" id="inicio">
+      <div class="hero-copy">
+        <span class="hero-tag">SCADA como servicio</span>
+        <h1>Control industrial 24/7 desde la nube</h1>
+        <p>Integramos tus procesos a un escritorio web con monitoreo en tiempo real, alarmas inteligentes y soporte experto. Optimiza producción y mantenimiento sin inversiones iniciales altas.</p>
+        <div class="hero-actions">
+          <a class="btn" href="#planes">Explorar planes</a>
+          <a class="btn btn-outline" href="dashboard.html">Clientes</a>
         </div>
-      </article>
-      <article class="toolbar-card">
-        <h3 class="toolbar-title">Accesos rapidos</h3>
-        <ul class="toolbar-list">
-          <li><a id="config-link" class="config-link" href="config.html" hidden>Editor de configuracion</a></li>
-          <li><a id="trend-link" class="config-link" href="trend.html" hidden>Tendencias historicas</a></li>
-          <li><a id="cotizador-link" class="config-link" href="cotizador.html" hidden>Cotizador comercial</a></li>
-          <li><span class="helper-text">Duplica contenedores desde el modo lateral para reutilizar tus layouts.</span></li>
-        </ul>
-      </article>
+        <div class="hero-highlights">
+          <article class="highlight-card">
+            <h3>Monitoreo en minutos</h3>
+            <p>Despliegue remoto, dashboards personalizables y conectividad cifrada a tus activos OT.</p>
+          </article>
+          <article class="highlight-card">
+            <h3>Operación confiable</h3>
+            <p>+99.8% de disponibilidad y soporte industrial listo para incidentes de misión crítica.</p>
+          </article>
+        </div>
+      </div>
+      <div class="hero-media">
+        <img src="Imagenes/Control desde Oficina.png" alt="Operador monitoreando una planta desde la oficina" loading="lazy">
+      </div>
     </section>
 
-    <section class="scada-wrapper">
-      <div class="scada-grid">
-        <aside id="sidebar-menu" class="sidebar-menu" hidden></aside>
-        <div id="scada-container" class="system-group matrix-view"></div>
+    <section class="commercial-section" id="soluciones">
+      <header class="section-header">
+        <span class="section-kicker">Lo que recibirás</span>
+        <h2 class="section-heading">Supervisión industrial completa en la nube</h2>
+        <p class="section-subtitle">Desde el tablero SCADA hasta el análisis de tendencias, todo está integrado para que tomes decisiones con datos confiables en tiempo real.</p>
+      </header>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <img src="Imagenes/simplicidad y control.png" alt="Visualización web intuitiva" loading="lazy">
+          <div>
+            <h3>Visualización web intuitiva</h3>
+            <p>Paneles adaptables, vista matriz y vista lateral para supervisar múltiples procesos sin perder detalle.</p>
+          </div>
+        </article>
+        <article class="feature-card">
+          <img src="Imagenes/acceso remoto.png" alt="Acceso remoto seguro" loading="lazy">
+          <div>
+            <h3>Acceso remoto seguro</h3>
+            <p>Inicio de sesión con autenticación Firebase y conexión cifrada para usuarios autorizados.</p>
+          </div>
+        </article>
+        <article class="feature-card">
+          <img src="Imagenes/Control desde Oficina.png" alt="Operación coordinada desde cualquier lugar" loading="lazy">
+          <div>
+            <h3>Operación coordinada</h3>
+            <p>Duplica contenedores, configura roles y centraliza decisiones desde cualquier dispositivo conectado.</p>
+          </div>
+        </article>
+        <article class="feature-card">
+          <img src="Imagenes/Surnex Logo y Slogan.png" alt="Servicios SurNex integrados" loading="lazy">
+          <div>
+            <h3>Servicios integrados</h3>
+            <p>Editor de configuraciones, tendencias históricas y cotizador comercial listos para escalar tus operaciones.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="commercial-section commercial-section--alt" id="como-funciona">
+      <header class="section-header">
+        <span class="section-kicker">Implementación ágil</span>
+        <h2 class="section-heading">Pon en marcha tu tablero SurNex en tres pasos</h2>
+      </header>
+      <div class="steps-grid">
+        <article class="step-card">
+          <span class="step-number">1</span>
+          <h3>Instalamos tu gateway</h3>
+          <p>Renta anual de equipos SurNex para capturar señales en planta y conectarlas a la nube con total seguridad.</p>
+        </article>
+        <article class="step-card">
+          <span class="step-number">2</span>
+          <h3>Configuramos tus procesos</h3>
+          <p>Definimos tags, alarmas y contenedores SCADA en línea. Todo listo para operar sin detener la producción.</p>
+        </article>
+        <article class="step-card">
+          <span class="step-number">3</span>
+          <h3>Operas desde cualquier lugar</h3>
+          <p>Supervisión en tiempo real, tendencias históricas y cotización de nuevos servicios desde el mismo escritorio.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="commercial-section" id="planes">
+      <header class="section-header">
+        <span class="section-kicker">Pagas solo lo que usas</span>
+        <h2 class="section-heading">Planes flexibles según contenedores, periféricos y soporte</h2>
+        <p class="section-subtitle">Escoge la cantidad de contenedores a monitorear y los periféricos a integrar; agrega soporte profesional si necesitas atención 24/7.</p>
+      </header>
+      <div class="plan-grid">
+        <article class="plan-card">
+          <header>
+            <h3>Plan Esencial</h3>
+            <p>Ideal para un sitio o línea de producción.</p>
+          </header>
+          <ul>
+            <li>Hasta 10 contenedores activos.</li>
+            <li>Periféricos estándar incluidos en la renta.</li>
+            <li>Soporte básico vía mesa de ayuda sin costo adicional.</li>
+            <li>Monitoreo web seguro con vista matriz.</li>
+          </ul>
+          <a class="plan-cta" href="#contacto">Solicitar detalle</a>
+        </article>
+        <article class="plan-card plan-card--highlight">
+          <header>
+            <span class="badge">Más elegido</span>
+            <h3>Plan Profesional</h3>
+            <p>Para operaciones multi-planta con análisis avanzado.</p>
+          </header>
+          <ul>
+            <li>Contenedores ilimitados según necesidad operativa.</li>
+            <li>Integración de periféricos especializados.</li>
+            <li>Soporte profesional con emergencias 24/7.</li>
+            <li>Editor de configuraciones y tendencias históricas.</li>
+          </ul>
+          <a class="plan-cta" href="#contacto">Hablar con ventas</a>
+        </article>
+        <article class="plan-card">
+          <header>
+            <h3>Plan Enterprise</h3>
+            <p>Catálogo de servicios a medida y SLA dedicado.</p>
+          </header>
+          <ul>
+            <li>Dimensionamiento por sitio, filial o región.</li>
+            <li>Periféricos y gateways personalizados.</li>
+            <li>Integraciones API y soporte OT especializado.</li>
+            <li>Acompañamiento de seguridad y continuidad.</li>
+          </ul>
+          <a class="plan-cta" href="#contacto">Agendar evaluación</a>
+        </article>
+      </div>
+      <p class="plan-note">Cada plan se contrata como suscripción anual; la renta de equipos se ajusta al número de contenedores y periféricos activos. Escala tu inversión conforme crece tu operación.</p>
+    </section>
+
+    <section class="commercial-section commercial-section--alt" id="propuesta">
+      <header class="section-header">
+        <span class="section-kicker">Nuestro compromiso</span>
+        <h2 class="section-heading">Más que software: somos tu aliado industrial</h2>
+      </header>
+      <div class="mission-vision">
+        <article>
+          <h3>Misión</h3>
+          <p>Hacer accesible la automatización industrial con soluciones SaaS seguras, escalables y enfocadas en continuidad operacional.</p>
+        </article>
+        <article>
+          <h3>Visión</h3>
+          <p>Ser el aliado latinoamericano que conecta operaciones distribuidas con decisiones inteligentes en tiempo real.</p>
+        </article>
+        <article>
+          <h3>Promesa</h3>
+          <p>Reducir tus tiempos de respuesta crítica, potenciar la productividad y ofrecer transparencia total en costos y soporte.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="commercial-section" id="confianza">
+      <header class="section-header">
+        <span class="section-kicker">Confianza y respaldo</span>
+        <h2 class="section-heading">Operamos con estándares de clase mundial</h2>
+        <p class="section-subtitle">Arquitectura redundante, cifrado end-to-end y acompañamiento experto para mantener tu planta segura y productiva.</p>
+      </header>
+      <div class="trust-grid">
+        <figure class="trust-card">
+          <img src="Imagenes/Surnex Logo y Slogan.png" alt="Sello SurNex: monitoreo y control" loading="lazy">
+          <figcaption>+50 activos OT conectados en la región.</figcaption>
+        </figure>
+        <figure class="trust-card">
+          <img src="Imagenes/acceso remoto.png" alt="Operador verificando alarmas" loading="lazy">
+          <figcaption>Procedimientos alineados a IEC 62443 e ISO 27001.</figcaption>
+        </figure>
+        <figure class="trust-card">
+          <img src="Imagenes/simplicidad y control.png" alt="Tableros de supervisión en múltiples dispositivos" loading="lazy">
+          <figcaption>Disponibilidad promedio 99.8% durante 2024.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="commercial-section final-cta" id="contacto">
+      <div class="cta-panel">
+        <div>
+          <h2>¿Listo para tu escritorio SurNex?</h2>
+          <p>Conversemos sobre tus procesos, definamos contenedores y activa tu monitoreo en cuestión de días.</p>
+        </div>
+        <div class="cta-actions">
+          <a class="btn" href="mailto:contacto@surnex.com">Solicitar demo</a>
+          <a class="btn btn-outline" href="dashboard.html">Clientes</a>
+        </div>
       </div>
     </section>
   </main>
 
-  <dialog id="login-dialog" class="login-dialog">
-    <form id="login-form" method="dialog" class="login-form">
-      <h2>Iniciar Sesion</h2>
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" required autocomplete="username">
-      <label for="password">Contrasena</label>
-      <input type="password" id="password" name="password" required autocomplete="current-password">
-      <div class="login-actions">
-        <button type="submit" class="btn btn-login">Entrar</button>
-        <button type="button" class="btn btn-cancel" id="close-login">Cancelar</button>
+  <footer class="commercial-footer">
+    <div class="footer-brand">
+      <img src="Imagenes/Surnex Logo.png" alt="Logo SurNex" loading="lazy">
+      <p>SurNex | Control industrial inteligente desde la nube.</p>
+    </div>
+    <div class="footer-links">
+      <div>
+        <h4>Soluciones</h4>
+        <ul>
+          <li><a href="dashboard.html">Dashboard SCADA</a></li>
+          <li><a href="config.html">Editor de configuraciones</a></li>
+          <li><a href="trend.html">Tendencias históricas</a></li>
+        </ul>
       </div>
-    </form>
-  </dialog>
+      <div>
+        <h4>Recursos</h4>
+        <ul>
+          <li><a href="#planes">Planes</a></li>
+          <li><a href="#confianza">Certificaciones</a></li>
+          <li><a href="cotizador.html">Cotizador comercial</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Contacto</h4>
+        <ul>
+          <li><a href="mailto:contacto@surnex.com">contacto@surnex.com</a></li>
+          <li><a href="tel:+56900000000">+56 9 0000 0000</a></li>
+          <li>Monitoreo 24/7 | LatAm</li>
+        </ul>
+      </div>
+    </div>
+    <p class="footer-note">© <span id="current-year"></span> SurNex. Todos los derechos reservados.</p>
+  </footer>
 
-  <template id="container-template">
-    <section class="container-card">
-      <header class="container-header">
-        <h3 class="container-title"></h3>
-      </header>
-      <div class="container-body"></div>
-    </section>
-  </template>
-
-  <script src="script.js" defer></script>
+  <script>
+    const yearNode = document.getElementById("current-year");
+    if (yearNode) {
+      yearNode.textContent = new Date().getFullYear();
+    }
+  </script>
 </body>
 </html>

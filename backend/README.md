@@ -115,7 +115,7 @@ Configura el servicio exactamente con los siguientes valores:
 Configura en Render una base PostgreSQL accesible via `DATABASE_URL` y un cron job/worker que ejecute la sentencia de retencion respetando `DIAS_RETENCION_HISTORICO`.
 
 ## Integracion del Frontend
-1. Incluye los SDK compat de Firebase en `index.html`.
+1. Incluye los SDK compat de Firebase en `dashboard.html`.
 2. Inicializa Firebase con la configuracion del proyecto `scadaweb-64eba`.
 3. Implementa login Email/Password y recupera el `ID Token` actual con `firebase.auth().currentUser.getIdToken(true)`.
 4. Abre el WebSocket contra `wss://scadawebdesk.onrender.com/ws?token=<ID_TOKEN>`.

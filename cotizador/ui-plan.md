@@ -28,7 +28,7 @@ Transformar `cotizador.html/js` en una mini‑aplicación con:
   - `cotizador/list-view.js`: render del listado + filtros.
   - `cotizador/editor.js`: formulario y lógica de cálculos.
   - `cotizador/events.js`: timeline y logs.
-- `index.html` seguirá cargando `cotizador.js` como entry point, que importará los módulos anteriores.
+- `dashboard.html` seguirá cargando `cotizador.js` como entry point, que importará los módulos anteriores.
 - Uso de eventos personalizados para coordinar cambios entre paneles.
 
 ## Estructura de Layout
