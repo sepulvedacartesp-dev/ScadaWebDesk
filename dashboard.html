@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SCADA Web Desk</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAwac3okkBuOm0gB5aqRuHILefbryj9lAw",
+      authDomain: "scadaweb-64eba.firebaseapp.com",
+      projectId: "scadaweb-64eba",
+    };
+    firebase.initializeApp(firebaseConfig);
+  </script>
+</head>
+<body class="layout-shell dashboard-page">
+  <header class="app-header app-header--compact">
+    <div class="brand-group" id="brand-group">
+      <img id="company-logo" class="brand-logo-img" alt="Logo de la empresa" hidden>
+      <span class="brand-logo" aria-hidden="true">SW</span>
+      <div class="brand-copy">
+        <p class="brand-label">SurNex</p>
+        <h1 id="main-title">SurNex SCADA</h1>
+        <p class="brand-subtitle">Monitorea y controla tus procesos en tiempo real.</p>
+      </div>
+    </div>
+    <div class="session-panel">
+      <span id="status" class="session-status">Sin sesion</span>
+      <button id="logout-btn" type="button" class="btn btn-logout" disabled>Cerrar sesion</button>
+      <button id="open-login" type="button" class="btn btn-login">Ingresar</button>
+    </div>
+  </header>
+
+  <main class="main-layout">
+    <section class="intro-banner card-surface">
+      <div class="intro-copy">
+        <h2 class="section-title">Tablero operativo</h2>
+        <p class="helper-text">Mantiene visibilidad total de tus activos y alterna la distribucion segun el contexto de operacion.</p>
+      </div>
+      <div class="intro-metrics">
+        <article class="metric-card">
+          <span class="metric-label">Servidor</span>
+          <span id="connect-status" class="chip chip-disconnected">Desconectado</span>
+          <p class="helper-text">Conectate para recibir datos en vivo.</p>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Usuario activo</span>
+          <strong id="current-user">Anonimo</strong>
+          <span id="current-company" class="helper-text" hidden>Empresa: --</span>
+          <p class="helper-text">Inicia sesion para mas herramientas.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="view-toolbar toolbar-grid">
+      <article class="toolbar-card toolbar-card--primary">
+        <h2 class="toolbar-title">Disposicion del tablero</h2>
+        <p class="helper-text">Alterna la vista para trabajar con paneles simultaneos o enfocarte en un solo contenedor.</p>
+        <div class="view-buttons" role="group" aria-label="Cambiar vista">
+          <button id="view-matrix" class="btn btn-view active">Vista en Matriz</button>
+          <button id="view-sidebar" class="btn btn-view">Vista Lateral</button>
+        </div>
+      </article>
+      <article class="toolbar-card">
+        <h3 class="toolbar-title">Accesos rapidos</h3>
+        <ul class="toolbar-list">
+          <li><a id="config-link" class="config-link" href="config.html" hidden>Editor de configuracion</a></li>
+          <li><a id="trend-link" class="config-link" href="trend.html" hidden>Tendencias historicas</a></li>
+          <li><a id="cotizador-link" class="config-link" href="cotizador.html" hidden>Cotizador comercial</a></li>
+          <li><span class="helper-text">Duplica contenedores desde el modo lateral para reutilizar tus layouts.</span></li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="scada-wrapper">
+      <div class="scada-grid">
+        <aside id="sidebar-menu" class="sidebar-menu" hidden></aside>
+        <div id="scada-container" class="system-group matrix-view"></div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="login-dialog" class="login-dialog">
+    <form id="login-form" method="dialog" class="login-form">
+      <h2>Iniciar Sesion</h2>
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autocomplete="username">
+      <label for="password">Contrasena</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+      <div class="login-actions">
+        <button type="submit" class="btn btn-login">Entrar</button>
+        <button type="button" class="btn btn-cancel" id="close-login">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="container-template">
+    <section class="container-card">
+      <header class="container-header">
+        <h3 class="container-title"></h3>
+      </header>
+      <div class="container-body"></div>
+    </section>
+  </template>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
