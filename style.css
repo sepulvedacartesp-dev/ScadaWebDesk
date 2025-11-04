@@ -1665,6 +1665,165 @@ body {
   font-size: 0.85rem;
 }
 
+/* Demo simulation page */
+.demo-page {
+  background: radial-gradient(circle at top, #0c1a2c, #050a14 70%);
+}
+
+.demo-header {
+  position: static;
+  margin-bottom: 1.5rem;
+}
+
+.brand-group--demo .brand-logo-img {
+  box-shadow: 0 16px 38px rgba(0, 180, 216, 0.3);
+}
+
+.demo-session {
+  gap: 0.5rem;
+}
+
+.btn-small {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.demo-intro {
+  background: rgba(14, 26, 42, 0.9);
+}
+
+.demo-metrics .metric-card {
+  background: rgba(7, 16, 29, 0.82);
+}
+
+.demo-control-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.demo-control-buttons .btn-view {
+  min-width: 150px;
+}
+
+.demo-hint-card {
+  gap: 0.5rem;
+}
+
+.demo-wrapper {
+  border: 1px solid rgba(112, 138, 255, 0.22);
+}
+
+.demo-container {
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.demo-container--active {
+  border-color: rgba(0, 180, 216, 0.4);
+  box-shadow: 0 0 0 1px rgba(0, 180, 216, 0.45), 0 20px 45px rgba(0, 180, 216, 0.18);
+}
+
+.demo-container--alert {
+  border-color: rgba(255, 209, 102, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.4), 0 20px 45px rgba(255, 209, 102, 0.15);
+}
+
+.demo-readouts {
+  display: grid;
+  gap: 1.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.demo-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.demo-readout__label {
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(159, 197, 255, 0.8);
+}
+
+.demo-readout__value {
+  font-size: 1.8rem;
+  margin: 0;
+}
+
+.demo-tank {
+  position: relative;
+  height: 160px;
+  border-radius: 28px;
+  border: 1px solid rgba(112, 138, 255, 0.3);
+  background: linear-gradient(180deg, rgba(8, 18, 32, 0.6) 0%, rgba(7, 15, 26, 0.9) 100%);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.demo-tank__fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(0, 180, 216, 0.7), rgba(58, 134, 255, 0.7));
+  transition: height 0.45s ease;
+}
+
+.demo-tank__indicator {
+  position: relative;
+  z-index: 1;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #e6f1ff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.demo-log {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border-radius: 18px;
+  background: rgba(7, 16, 29, 0.78);
+  border: 1px solid rgba(112, 138, 255, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.demo-log h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.demo-log__list {
+  margin: 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.demo-footer {
+  padding: 1.75rem clamp(1.5rem, 4vw, 3rem) 3rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.demo-footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.demo-footer a:hover {
+  text-decoration: underline;
+}
+
 @media (min-width: 900px) {
   .toolbar-card--primary {
     grid-column: span 2;
@@ -1738,6 +1897,16 @@ body {
   .feature-card img {
     justify-self: center;
     width: min(180px, 100%);
+  }
+  .demo-control-buttons {
+    width: 100%;
+    justify-content: center;
+  }
+  .demo-control-buttons .btn-view {
+    flex: 1 1 45%;
+  }
+  .demo-readouts {
+    grid-template-columns: 1fr;
   }
   .cta-panel {
     flex-direction: column;
