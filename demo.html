@@ -26,7 +26,7 @@
     <section class="intro-banner card-surface demo-intro">
       <div class="intro-copy">
         <h2 class="section-title">Bomba de transferencia | Estanque principal</h2>
-        <p class="helper-text">Este escenario reproduce una operación típica: arranca o detén la bomba, observa el nivel del estanque y revisa los eventos tal como lo harías en tu dashboard SurNex.</p>
+        <p class="helper-text">Este escenario reproduce una operación típica: arranca o detén la bomba, observa el nivel del estanque y sigue su tendencia y estado tal como lo harías en tu dashboard SurNex.</p>
       </div>
       <div class="intro-metrics demo-metrics">
         <article class="metric-card">
@@ -42,26 +42,6 @@
       </div>
     </section>
 
-    <section class="view-toolbar toolbar-grid demo-controls">
-      <article class="toolbar-card toolbar-card--primary">
-        <h2 class="toolbar-title">Control rápido de la bomba</h2>
-        <p class="helper-text">Arranca o detén la bomba para ver cómo reaccionan las variables supervisadas.</p>
-        <div class="demo-control-buttons">
-          <button id="demo-start" class="btn btn-view">Arrancar bomba</button>
-          <button id="demo-stop" class="btn btn-view" disabled>Detener bomba</button>
-          <button id="demo-reset" class="btn btn-outline btn-view" disabled>Reiniciar simulación</button>
-        </div>
-      </article>
-      <article class="toolbar-card demo-hint-card">
-        <h3 class="toolbar-title">¿Qué estás viendo?</h3>
-        <ul class="toolbar-list">
-          <li><span class="helper-text">Contenedor SurNex con chips de estado y variables dinámicas.</span></li>
-          <li><span class="helper-text">Registro de eventos automático para auditar acciones.</span></li>
-          <li><span class="helper-text">Indicadores de nivel y estado que replican el panel real.</span></li>
-        </ul>
-      </article>
-    </section>
-
     <section class="scada-wrapper demo-wrapper">
       <div class="scada-grid">
         <div id="demo-scada-container" class="system-group matrix-view">
@@ -71,29 +51,62 @@
               <span id="demo-pump-chip" class="chip chip-disconnected" aria-live="polite">Bomba detenida</span>
             </header>
             <div class="container-body">
-              <div class="demo-readouts">
-                <div class="demo-readout">
-                  <span class="demo-readout__label">Nivel del estanque</span>
-                  <strong id="demo-level" class="demo-readout__value">0%</strong>
-                  <div class="demo-tank">
-                    <div id="demo-tank-fill" class="demo-tank__fill" style="height: 0%;" aria-hidden="true"></div>
-                    <span id="demo-tank-indicator" class="demo-tank__indicator">0%</span>
+              <div class="demo-layout">
+                <div class="demo-main">
+                  <div class="demo-readouts">
+                    <div class="demo-readout demo-readout--tank">
+                      <span class="demo-readout__label">Nivel del estanque</span>
+                      <strong id="demo-level" class="demo-readout__value">0%</strong>
+                      <div class="demo-tank">
+                        <div id="demo-tank-fill" class="demo-tank__fill" style="height: 0%;" aria-hidden="true"></div>
+                        <span id="demo-tank-indicator" class="demo-tank__indicator">0%</span>
+                      </div>
+                    </div>
+                    <div class="demo-readout">
+                      <span class="demo-readout__label">Estado de la bomba</span>
+                      <strong id="demo-pump-status" class="demo-readout__value">Detenida</strong>
+                      <p id="demo-pump-description" class="helper-text">Lista para iniciar. No hay consumo de energía.</p>
+                    </div>
+                    <div class="demo-readout">
+                      <span class="demo-readout__label">Flujo estimado</span>
+                      <strong id="demo-flow" class="demo-readout__value">0.0 m3/h</strong>
+                      <p class="helper-text">Valor aproximado según el estado de la bomba.</p>
+                    </div>
+                  </div>
+                  <div class="demo-button-group">
+                    <button id="demo-start" class="btn demo-btn-start">Arrancar bomba</button>
+                    <button id="demo-stop" class="btn demo-btn-stop" disabled>Detener bomba</button>
+                    <button id="demo-reset" class="btn btn-outline demo-btn-reset" disabled>Reiniciar</button>
                   </div>
                 </div>
-                <div class="demo-readout">
-                  <span class="demo-readout__label">Estado de la bomba</span>
-                  <strong id="demo-pump-status" class="demo-readout__value">Detenida</strong>
-                  <p id="demo-pump-description" class="helper-text">Lista para iniciar. No hay consumo de energía.</p>
-                </div>
-                <div class="demo-readout">
-                  <span class="demo-readout__label">Flujo estimado</span>
-                  <strong id="demo-flow" class="demo-readout__value">0.0 m³/h</strong>
-                  <p class="helper-text">Valor aproximado según el estado de la bomba.</p>
-                </div>
-              </div>
-              <div class="demo-log">
-                <h4>Eventos recientes</h4>
-                <ul id="demo-log-list" class="demo-log__list"></ul>
+                <aside class="demo-trend-panel">
+                  <h4>Nivel en las últimas lecturas</h4>
+                  <div class="demo-chart" role="img" aria-label="Tendencia del nivel del estanque">
+                    <svg viewBox="0 0 220 120" preserveAspectRatio="none">
+                      <path id="demo-trend-area" class="demo-trend-area" d=""></path>
+                      <path id="demo-trend-line" class="demo-trend-line" d=""></path>
+                    </svg>
+                  </div>
+                  <div class="demo-trend-metrics">
+                    <div>
+                      <span>Actual</span>
+                      <strong id="demo-trend-current">0%</strong>
+                    </div>
+                    <div>
+                      <span>Máximo</span>
+                      <strong id="demo-trend-max">0%</strong>
+                    </div>
+                    <div>
+                      <span>Mínimo</span>
+                      <strong id="demo-trend-min">0%</strong>
+                    </div>
+                  </div>
+                  <div class="demo-status-summary">
+                    <span class="demo-status-label">Estatus bomba</span>
+                    <span id="demo-status-badge" class="chip chip-disconnected">Detenida</span>
+                    <p id="demo-status-message" class="helper-text demo-status-message">Simulación lista. Esperando acción del operador.</p>
+                  </div>
+                </aside>
               </div>
             </div>
           </section>

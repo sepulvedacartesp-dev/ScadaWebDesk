@@ -7,16 +7,24 @@ const pumpChip = document.getElementById("demo-pump-chip");
 const pumpStatus = document.getElementById("demo-pump-status");
 const pumpDescription = document.getElementById("demo-pump-description");
 const flowReadout = document.getElementById("demo-flow");
-const logList = document.getElementById("demo-log-list");
 const startBtn = document.getElementById("demo-start");
 const stopBtn = document.getElementById("demo-stop");
 const resetBtn = document.getElementById("demo-reset");
 const containerCard = document.querySelector(".demo-container");
+const statusBadge = document.getElementById("demo-status-badge");
+const statusMessage = document.getElementById("demo-status-message");
+const trendArea = document.getElementById("demo-trend-area");
+const trendLine = document.getElementById("demo-trend-line");
+const trendCurrent = document.getElementById("demo-trend-current");
+const trendMax = document.getElementById("demo-trend-max");
+const trendMin = document.getElementById("demo-trend-min");
 
 const TICK_MS = 600;
 const FILL_PER_TICK = 3.2;
 const DRAIN_PER_TICK = 1.4;
-const MAX_LOG_ITEMS = 6;
+const HISTORY_LENGTH = 28;
+const CHART_WIDTH = 220;
+const CHART_HEIGHT = 120;
 
 const state = {
   pumpOn: false,
@@ -24,6 +32,7 @@ const state = {
   lastTick: Date.now(),
   timer: null,
 };
+const trendHistory = Array(HISTORY_LENGTH).fill(0);
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -34,20 +43,14 @@ function formatLevel(level) {
 }
 
 function formatFlow(pumpOn) {
-  if (!pumpOn) return "0.0 m³/h";
+  if (!pumpOn) return "0.0 m3/h";
   const value = 14 + Math.random() * 4;
-  return `${value.toFixed(1)} m³/h`;
+  return `${value.toFixed(1)} m3/h`;
 }
 
-function appendLog(message) {
-  if (!logList) return;
-  const time = new Date();
-  const timestamp = time.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const item = document.createElement("li");
-  item.textContent = `[${timestamp}] ${message}`;
-  logList.prepend(item);
-  while (logList.children.length > MAX_LOG_ITEMS) {
-    logList.removeChild(logList.lastElementChild);
+function setStatusMessage(text) {
+  if (statusMessage) {
+    statusMessage.textContent = text;
   }
 }
 
@@ -65,11 +68,64 @@ function setPumpChip(text, isActive) {
   pumpChip.classList.toggle("chip-disconnected", !isActive);
 }
 
+function setPumpBadge(text, isActive) {
+  if (!statusBadge) return;
+  statusBadge.textContent = text;
+  statusBadge.classList.toggle("chip-connected", isActive);
+  statusBadge.classList.toggle("chip-disconnected", !isActive);
+}
+
 function updateButtons() {
   if (!startBtn || !stopBtn || !resetBtn) return;
   startBtn.disabled = state.pumpOn;
   stopBtn.disabled = !state.pumpOn;
   resetBtn.disabled = state.pumpOn || state.level === 0;
+}
+
+function recordHistory(level) {
+  trendHistory.push(level);
+  if (trendHistory.length > HISTORY_LENGTH) {
+    trendHistory.shift();
+  }
+}
+
+function updateTrend() {
+  if (!trendArea || !trendLine) return;
+  if (!trendHistory.length) return;
+  const values = trendHistory;
+  const width = CHART_WIDTH;
+  const height = CHART_HEIGHT;
+  const step = values.length > 1 ? width / (values.length - 1) : width;
+
+  let areaPath = `M0 ${height}`;
+  let linePath = "";
+
+  values.forEach((value, index) => {
+    const x = index * step;
+    const y = height - (value / 100) * height;
+    if (index === 0) {
+      linePath = `M${x} ${y}`;
+      areaPath += ` L${x} ${y}`;
+    } else {
+      linePath += ` L${x} ${y}`;
+      areaPath += ` L${x} ${y}`;
+    }
+  });
+
+  areaPath += ` L${(values.length - 1) * step} ${height} Z`;
+
+  trendArea.setAttribute("d", areaPath);
+  trendLine.setAttribute("d", linePath);
+
+  if (trendCurrent) {
+    trendCurrent.textContent = formatLevel(values[values.length - 1]);
+  }
+  if (trendMax) {
+    trendMax.textContent = formatLevel(Math.max(...values));
+  }
+  if (trendMin) {
+    trendMin.textContent = formatLevel(Math.min(...values));
+  }
 }
 
 function updateVisuals() {
@@ -81,6 +137,7 @@ function updateVisuals() {
 
   const pumpOn = state.pumpOn;
   setPumpChip(pumpOn ? "Bomba en marcha" : "Bomba detenida", pumpOn);
+  setPumpBadge(pumpOn ? "En marcha" : "Detenida", pumpOn);
   if (pumpStatus) pumpStatus.textContent = pumpOn ? "En operación" : state.level > 0 ? "En pausa" : "Detenida";
 
   if (pumpDescription) {
@@ -101,6 +158,8 @@ function updateVisuals() {
     containerCard.classList.toggle("demo-container--active", pumpOn);
     containerCard.classList.toggle("demo-container--alert", state.level >= 98);
   }
+
+  updateTrend();
 }
 
 function tick() {
@@ -115,18 +174,15 @@ function tick() {
     delta = -(DRAIN_PER_TICK + Math.random() * 0.4) * elapsedTicks;
   }
 
-  const previousLevel = state.level;
   state.level = clamp(state.level + delta, 0, 100);
   if (state.level >= 100 && state.pumpOn) {
     state.pumpOn = false;
     setStatusChip("Nivel alto - bomba detenida", false);
-    appendLog("Nivel alto alcanzado. Bomba detenida automáticamente.");
+    setStatusMessage("Nivel alto alcanzado. Bomba detenida automáticamente.");
   }
 
-  if (previousLevel !== state.level) {
-    updateVisuals();
-  }
-
+  recordHistory(state.level);
+  updateVisuals();
   updateButtons();
 }
 
@@ -135,7 +191,7 @@ function startSimulation() {
   state.pumpOn = true;
   state.lastTick = Date.now();
   setStatusChip("Simulación activa", true);
-  appendLog("Operador inicia bomba BP-7.");
+  setStatusMessage("Operador inicia bomba BP-7.");
   updateButtons();
   updateVisuals();
 }
@@ -145,7 +201,7 @@ function stopSimulation(manual = true) {
   state.pumpOn = false;
   setStatusChip("Simulación en pausa", false);
   if (manual) {
-    appendLog("Operador detiene bomba BP-7.");
+    setStatusMessage("Operador detiene bomba BP-7.");
   }
   updateButtons();
   updateVisuals();
@@ -155,16 +211,18 @@ function resetSimulation() {
   if (state.pumpOn) return;
   state.level = 0;
   setStatusChip("En espera", false);
-  appendLog("Variables reiniciadas. Estanque en nivel base.");
+  trendHistory.fill(0);
+  setStatusMessage("Variables reiniciadas. Estanque en nivel base.");
   updateVisuals();
   updateButtons();
 }
 
 function init() {
   if (!startBtn || !stopBtn || !resetBtn) return;
+  trendHistory.fill(state.level);
   updateVisuals();
   updateButtons();
-  appendLog("Simulación lista. Esperando acción del operador.");
+  setStatusMessage("Simulación lista. Esperando acción del operador.");
 
   startBtn.addEventListener("click", () => {
     startSimulation();
