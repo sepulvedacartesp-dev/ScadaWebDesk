@@ -1808,6 +1808,104 @@ body {
   justify-content: center;
 }
 
+.demo-temp-card .container-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.demo-temp-gauges {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.demo-temp-gauges .gauge-container {
+  max-width: 220px;
+  margin: 0 auto;
+}
+
+.demo-temp-gauges .gauge-label {
+  font-size: 0.95rem;
+}
+
+.demo-temp-gauges .gauge-reading {
+  font-size: 1.75rem;
+}
+
+.demo-temp-trend {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-radius: 20px;
+  background: rgba(7, 16, 29, 0.78);
+  border: 1px solid rgba(112, 138, 255, 0.22);
+  box-shadow: var(--shadow-soft);
+}
+
+.demo-chart--temps svg {
+  width: 100%;
+  height: 120px;
+}
+
+.demo-temp-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.demo-temp-line--a {
+  stroke: #3a86ff;
+}
+
+.demo-temp-line--b {
+  stroke: #ffd166;
+}
+
+.demo-temp-line--c {
+  stroke: #ef476f;
+}
+
+.demo-temp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.demo-temp-legend strong {
+  margin-left: 0.35rem;
+  color: var(--text-primary);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 0.45rem;
+}
+
+.legend-dot--a {
+  background: #3a86ff;
+}
+
+.legend-dot--b {
+  background: #ffd166;
+}
+
+.legend-dot--c {
+  background: #ef476f;
+}
+
+.demo-temp-trend .helper-text {
+  margin: 0;
+  color: rgba(159, 197, 255, 0.7);
+}
+
 .demo-btn-start {
   background: linear-gradient(135deg, #06d6a0, #00b4d8);
 }
@@ -1989,10 +2087,13 @@ body {
     grid-template-columns: 1fr;
     text-align: center;
   }
-    .feature-card img {
-      justify-self: center;
-      width: min(180px, 100%);
-    }
+  .feature-card img {
+    justify-self: center;
+    width: min(180px, 100%);
+  }
+  .demo-temp-gauges {
+    grid-template-columns: 1fr;
+  }
   .cta-panel {
     flex-direction: column;
     text-align: center;

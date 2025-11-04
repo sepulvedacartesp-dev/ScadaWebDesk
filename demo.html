@@ -11,9 +11,9 @@
     <div class="brand-group brand-group--demo">
       <img src="Imagenes/Surnex Logo.png" alt="Logo SurNex" class="brand-logo-img">
       <div class="brand-copy">
-        <p class="brand-label">Demostración interactiva</p>
+        <p class="brand-label">Demostracion interactiva</p>
         <h1>SurNex SCADA Demo</h1>
-        <p class="brand-subtitle">Explora cómo monitorearías tu bomba y estanque en el entorno real.</p>
+        <p class="brand-subtitle">Explora como monitorearias tu bomba y estanque en el entorno real.</p>
       </div>
     </div>
     <div class="session-panel demo-session">
@@ -26,18 +26,18 @@
     <section class="intro-banner card-surface demo-intro">
       <div class="intro-copy">
         <h2 class="section-title">Bomba de transferencia | Estanque principal</h2>
-        <p class="helper-text">Este escenario reproduce una operación típica: arranca o detén la bomba, observa el nivel del estanque y sigue su tendencia y estado tal como lo harías en tu dashboard SurNex.</p>
+        <p class="helper-text">Este escenario reproduce una operacion tipica: arranca o detiene la bomba, observa el nivel del estanque y sigue su tendencia y estado tal como lo harias en tu dashboard SurNex.</p>
       </div>
       <div class="intro-metrics demo-metrics">
         <article class="metric-card">
-          <span class="metric-label">Estado de la simulación</span>
+          <span class="metric-label">Estado de la simulacion</span>
           <span id="demo-status" class="chip chip-disconnected">En espera</span>
-          <p class="helper-text">Presiona "Partir" para iniciar la simulación.</p>
+          <p class="helper-text">Presiona "Partir" para iniciar la simulacion.</p>
         </article>
         <article class="metric-card">
           <span class="metric-label">Nivel del estanque</span>
           <strong id="demo-level-hero">0%</strong>
-          <p class="helper-text">El nivel sube cuando la bomba está en marcha y baja lentamente cuando se detiene.</p>
+          <p class="helper-text">El nivel sube cuando la bomba esta en marcha y baja lentamente cuando se detiene.</p>
         </article>
       </div>
     </section>
@@ -80,7 +80,7 @@
               </div>
 
               <aside class="demo-trend-panel">
-                <h4>Nivel en las últimas lecturas</h4>
+                <h4>Nivel en las ultimas lecturas</h4>
                 <div class="demo-chart" role="img" aria-label="Tendencia del nivel del estanque">
                   <svg viewBox="0 0 220 120" preserveAspectRatio="none">
                     <path id="demo-trend-area" class="demo-trend-area" d=""></path>
@@ -93,21 +93,47 @@
                     <strong id="demo-trend-current">0%</strong>
                   </div>
                   <div>
-                    <span>Máximo</span>
+                    <span>Maximo</span>
                     <strong id="demo-trend-max">0%</strong>
                   </div>
                   <div>
-                    <span>Mínimo</span>
+                    <span>Minimo</span>
                     <strong id="demo-trend-min">0%</strong>
                   </div>
                 </div>
                 <div class="demo-status-summary">
                   <span class="demo-status-label">Estatus bomba</span>
                   <span id="demo-status-badge" class="chip chip-disconnected">Detenida</span>
-                  <p id="demo-status-message" class="helper-text demo-status-message">Simulación lista. Esperando acción del operador.</p>
+                  <p id="demo-status-message" class="helper-text demo-status-message">Simulacion lista. Esperando accion del operador.</p>
                   <button id="demo-reset" class="btn btn-outline btn-small demo-btn-reset" disabled>Reiniciar</button>
                 </div>
               </aside>
+            </div>
+          </section>
+
+          <section class="container-card demo-container demo-temp-card">
+            <header class="container-header">
+              <h3 class="container-title">Sensores de temperatura</h3>
+              <span class="chip chip-connected">Modo simulado</span>
+            </header>
+            <div class="container-body demo-temp-layout">
+              <div id="demo-temp-gauges" class="demo-temp-gauges"></div>
+              <div class="demo-temp-trend">
+                <h4>Tendencia sensores</h4>
+                <div class="demo-chart demo-chart--temps" role="img" aria-label="Tendencia de temperaturas">
+                  <svg viewBox="0 0 220 120" preserveAspectRatio="none">
+                    <path id="demo-temp-line-a" class="demo-temp-line demo-temp-line--a" d=""></path>
+                    <path id="demo-temp-line-b" class="demo-temp-line demo-temp-line--b" d=""></path>
+                    <path id="demo-temp-line-c" class="demo-temp-line demo-temp-line--c" d=""></path>
+                  </svg>
+                </div>
+                <div class="demo-temp-legend">
+                  <div><span class="legend-dot legend-dot--a"></span> Sensor A <strong id="demo-temp-current-a">0 &deg;C</strong></div>
+                  <div><span class="legend-dot legend-dot--b"></span> Sensor B <strong id="demo-temp-current-b">0 &deg;C</strong></div>
+                  <div><span class="legend-dot legend-dot--c"></span> Sensor C <strong id="demo-temp-current-c">0 &deg;C</strong></div>
+                </div>
+                <small class="helper-text">Rango visualizado: 0 - 150 &deg;C</small>
+              </div>
             </div>
           </section>
         </div>
@@ -116,7 +142,7 @@
   </main>
 
   <footer class="demo-footer">
-    <p>¿Quieres ver tus activos en vivo? <a href="mailto:contacto@surnex.com">Agenda una demo guiada</a> o ingresa con tu cuenta de cliente.</p>
+    <p>Quieres ver tus activos en vivo? <a href="mailto:contacto@surnex.com">Agenda una demo guiada</a> o ingresa con tu cuenta de cliente.</p>
   </footer>
 
   <script src="demo.js" defer></script>
