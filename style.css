@@ -1406,6 +1406,27 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.como-funciona-visual {
+  margin-top: clamp(1.75rem, 4vw, 2.75rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.como-funciona-visual img {
+  width: min(620px, 100%);
+  border-radius: 24px;
+  border: 1px solid rgba(112, 138, 255, 0.22);
+  background: rgba(6, 15, 25, 0.8);
+  box-shadow: var(--shadow-soft);
+}
+
+.como-funciona-visual .helper-text {
+  text-align: center;
+  max-width: 520px;
+}
+
 .step-card {
   position: relative;
   padding: 2.5rem 1.5rem 1.5rem;
