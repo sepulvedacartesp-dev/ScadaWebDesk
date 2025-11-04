@@ -4,13 +4,13 @@ const levelReadout = document.getElementById("demo-level");
 const tankFill = document.getElementById("demo-tank-fill");
 const tankIndicator = document.getElementById("demo-tank-indicator");
 const pumpChip = document.getElementById("demo-pump-chip");
-const pumpStatus = document.getElementById("demo-pump-status");
-const pumpDescription = document.getElementById("demo-pump-description");
 const flowReadout = document.getElementById("demo-flow");
 const startBtn = document.getElementById("demo-start");
 const stopBtn = document.getElementById("demo-stop");
 const resetBtn = document.getElementById("demo-reset");
 const containerCard = document.querySelector(".demo-container");
+const pumpStatusLabel = document.getElementById("demo-pump-status-label");
+const pumpIndicatorNode = document.getElementById("demo-pump-indicator");
 const statusBadge = document.getElementById("demo-status-badge");
 const statusMessage = document.getElementById("demo-status-message");
 const trendArea = document.getElementById("demo-trend-area");
@@ -136,18 +136,16 @@ function updateVisuals() {
   if (tankFill) tankFill.style.height = `${state.level}%`;
 
   const pumpOn = state.pumpOn;
-  setPumpChip(pumpOn ? "Bomba en marcha" : "Bomba detenida", pumpOn);
-  setPumpBadge(pumpOn ? "En marcha" : "Detenida", pumpOn);
-  if (pumpStatus) pumpStatus.textContent = pumpOn ? "En operación" : state.level > 0 ? "En pausa" : "Detenida";
+  setPumpChip(pumpOn ? "Bomba funcionando" : "Bomba detenida", pumpOn);
+  setPumpBadge(pumpOn ? "Funcionando" : "Detenida", pumpOn);
 
-  if (pumpDescription) {
-    if (pumpOn) {
-      pumpDescription.textContent = state.level >= 98 ? "Estanque en nivel alto. Evaluar detener la bomba." : "Bomba energizada. Supervisando presión y flujo.";
-    } else if (state.level > 0) {
-      pumpDescription.textContent = "Estanque estabilizado. La bomba puede arrancar si se requiere reposición.";
-    } else {
-      pumpDescription.textContent = "Lista para iniciar. No hay consumo de energía.";
-    }
+  if (pumpStatusLabel) {
+    pumpStatusLabel.textContent = pumpOn ? "Funcionando" : "Detenida";
+  }
+
+  if (pumpIndicatorNode) {
+    pumpIndicatorNode.classList.toggle("is-on", pumpOn);
+    pumpIndicatorNode.classList.toggle("is-alert", !pumpOn && state.level >= 95);
   }
 
   if (flowReadout) {
@@ -178,7 +176,7 @@ function tick() {
   if (state.level >= 100 && state.pumpOn) {
     state.pumpOn = false;
     setStatusChip("Nivel alto - bomba detenida", false);
-    setStatusMessage("Nivel alto alcanzado. Bomba detenida automáticamente.");
+    setStatusMessage("Nivel alto alcanzado. Bomba detenida automaticamente.");
   }
 
   recordHistory(state.level);
@@ -190,7 +188,7 @@ function startSimulation() {
   if (state.pumpOn) return;
   state.pumpOn = true;
   state.lastTick = Date.now();
-  setStatusChip("Simulación activa", true);
+  setStatusChip("Simulacion activa", true);
   setStatusMessage("Operador inicia bomba BP-7.");
   updateButtons();
   updateVisuals();
@@ -199,7 +197,7 @@ function startSimulation() {
 function stopSimulation(manual = true) {
   if (!state.pumpOn) return;
   state.pumpOn = false;
-  setStatusChip("Simulación en pausa", false);
+  setStatusChip("Simulacion en pausa", false);
   if (manual) {
     setStatusMessage("Operador detiene bomba BP-7.");
   }
@@ -222,7 +220,7 @@ function init() {
   trendHistory.fill(state.level);
   updateVisuals();
   updateButtons();
-  setStatusMessage("Simulación lista. Esperando acción del operador.");
+  setStatusMessage("Simulacion lista. Esperando accion del operador.");
 
   startBtn.addEventListener("click", () => {
     startSimulation();
