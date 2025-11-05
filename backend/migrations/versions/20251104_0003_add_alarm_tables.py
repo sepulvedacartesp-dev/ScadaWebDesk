@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "20251104_0003"
-down_revision = "20251029_0002_add_catalog_id_to_quote_items"
+down_revision = "20250101_0001"
 branch_labels: tuple[str, ...] | None = None
 depends_on: tuple[str, ...] | None = None
 
@@ -77,4 +77,3 @@ def downgrade() -> None:
     op.drop_table("alarm_events")
     op.drop_index("ix_alarm_rules_empresa_tag_active", table_name="alarm_rules")
     op.drop_table("alarm_rules")
-
