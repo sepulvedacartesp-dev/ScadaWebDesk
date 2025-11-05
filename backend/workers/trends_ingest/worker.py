@@ -2,11 +2,25 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+CURRENT_DIR = Path(__file__).resolve().parent
+BACKEND_ROOT = CURRENT_DIR.parent.parent
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.append(str(BACKEND_ROOT))
 
 import asyncpg
 import paho.mqtt.client as mqtt
+
+try:
+    from .alarm_monitor import AlarmEngine, TrendPoint
+    from .emailer import EmailNotifier, EmailSettings
+except ImportError:
+    from alarm_monitor import AlarmEngine, TrendPoint  # type: ignore
+    from emailer import EmailNotifier, EmailSettings  # type: ignore
 
 logging.basicConfig(level=logging.INFO, format="[trend-worker] %(message)s")
 logger = logging.getLogger("trend-worker")
@@ -55,6 +69,18 @@ def coerce_int(value: Any, default: int) -> int:
         return default
 
 
+def coerce_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+ENABLE_ALARM_MONITOR = coerce_bool(os.environ.get("ENABLE_ALARM_MONITOR"), True)
+ALARM_RULES_REFRESH_SECONDS = coerce_int(os.environ.get("ALARM_RULES_REFRESH_SECONDS"), 60)
+ALARM_QUEUE_MAXSIZE = coerce_int(os.environ.get("ALARM_QUEUE_MAXSIZE"), 2048)
+
+
 def load_broker_profiles() -> Dict[str, Dict[str, Any]]:
     base = {
         "host": os.environ.get("MQTT_HOST"),
@@ -96,6 +122,38 @@ def load_broker_profiles() -> Dict[str, Dict[str, Any]]:
             raise RuntimeError("Debe definir MQTT_HOST o MQTT_BROKER_PROFILES con al menos un host.")
         profiles["default"] = base
     return profiles
+
+
+def load_email_settings() -> Optional[EmailSettings]:
+    host = (os.environ.get("ALARM_SMTP_HOST") or "").strip()
+    username = (os.environ.get("ALARM_SMTP_USERNAME") or "").strip()
+    password = (os.environ.get("ALARM_SMTP_PASSWORD") or "").strip()
+    if not host or not username or not password:
+        logger.info("Motor de alarmas deshabilitado: faltan credenciales SMTP.")
+        return None
+
+    from_address = (os.environ.get("ALARM_EMAIL_FROM") or "notificaciones@surnex.cl").strip()
+    if "@" not in from_address:
+        logger.warning("ALARM_EMAIL_FROM invalido (%s); se utilizara notificaciones@surnex.cl", from_address)
+        from_address = "notificaciones@surnex.cl"
+
+    settings = EmailSettings(
+        host=host,
+        port=coerce_int(os.environ.get("ALARM_SMTP_PORT"), 587),
+        username=username,
+        password=password,
+        from_address=from_address,
+        from_name=(os.environ.get("ALARM_EMAIL_FROM_NAME") or "").strip() or None,
+        use_starttls=coerce_bool(os.environ.get("ALARM_SMTP_STARTTLS"), True),
+        use_tls=coerce_bool(os.environ.get("ALARM_SMTP_USE_SSL"), False),
+        timeout=coerce_float(os.environ.get("ALARM_SMTP_TIMEOUT"), 10.0),
+        subject_prefix=(os.environ.get("ALARM_EMAIL_SUBJECT_PREFIX") or "[Alarma SCADA]").strip(),
+        reply_to=(os.environ.get("ALARM_EMAIL_REPLY_TO") or "").strip() or None,
+    )
+    if settings.use_starttls and settings.use_tls:
+        logger.warning("Configuracion SMTP indica STARTTLS y SSL simultaneamente; se prioriza STARTTLS.")
+        settings.use_tls = False
+    return settings
 
 
 def parse_payload(raw_payload: bytes, topic: str) -> Dict[str, Any]:
@@ -174,58 +232,89 @@ async def insert_point(pool: asyncpg.pool.Pool, point: Dict[str, Any]) -> None:
 async def main() -> None:
     loop = asyncio.get_running_loop()
     pool = await create_pool()
-    broker_profiles = load_broker_profiles()
-    logger.info("Iniciando ingesta para %d perfiles de broker.", len(broker_profiles))
-
-    clients: List[mqtt.Client] = []
-
-    def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
-        try:
-            point = parse_payload(msg.payload, msg.topic)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("No se pudo parsear payload (%s): %s", msg.topic, exc)
-            return
-        asyncio.run_coroutine_threadsafe(insert_point(pool, point), loop)
-
+    alarm_engine: Optional[AlarmEngine] = None
     try:
-        for key, cfg in broker_profiles.items():
-            client = mqtt.Client(client_id=cfg.get("client_id"))
-            client.user_data_set({"broker": key})
-            if cfg.get("username") or cfg.get("password"):
-                client.username_pw_set(cfg.get("username"), cfg.get("password"))
-            if cfg.get("tls"):
-                if cfg.get("ca_cert_path"):
-                    client.tls_set(ca_certs=cfg.get("ca_cert_path"))
-                else:
-                    client.tls_set()
-                client.tls_insecure_set(bool(cfg.get("tls_insecure")))
-            client.on_message = on_message
-            client.connect(cfg["host"], cfg["port"], cfg.get("keepalive") or 60)
-            for topic in MQTT_TOPICS:
-                client.subscribe(topic)
-                logger.info("Broker %s suscrito a %s", key, topic)
-            client.loop_start()
-            clients.append(client)
-            logger.info("Broker %s conectado en %s:%s", key, cfg["host"], cfg["port"])
-    except Exception:  # noqa: BLE001
-        for client in clients:
-            try:
-                client.loop_stop()
-                client.disconnect()
-            except Exception:
-                pass
-        raise
+        if ENABLE_ALARM_MONITOR:
+            email_settings = load_email_settings()
+            if email_settings:
+                notifier = EmailNotifier(email_settings, logger)
+                alarm_engine = AlarmEngine(
+                    pool,
+                    notifier,
+                    refresh_seconds=ALARM_RULES_REFRESH_SECONDS,
+                    queue_maxsize=ALARM_QUEUE_MAXSIZE,
+                    logger=logger,
+                    loop=loop,
+                )
+                await alarm_engine.start()
+            else:
+                logger.info("Motor de alarmas no iniciado: configuracion SMTP incompleta.")
+        else:
+            logger.info("Motor de alarmas deshabilitado por configuracion.")
 
-    logger.info("Worker de tendencias activo (brokers: %s)", ", ".join(broker_profiles.keys()))
-    try:
-        await asyncio.Event().wait()
-    finally:
-        for client in clients:
+        broker_profiles = load_broker_profiles()
+        logger.info("Iniciando ingesta para %d perfiles de broker.", len(broker_profiles))
+
+        clients: List[mqtt.Client] = []
+
+        def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
             try:
-                client.loop_stop()
-                client.disconnect()
+                point = parse_payload(msg.payload, msg.topic)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("No se pudo cerrar un cliente MQTT: %s", exc)
+                logger.error("No se pudo parsear payload (%s): %s", msg.topic, exc)
+                return
+            asyncio.run_coroutine_threadsafe(insert_point(pool, point), loop)
+            if alarm_engine:
+                trend_point = TrendPoint(
+                    empresa_id=point["empresa_id"],
+                    tag=point["tag"],
+                    value=point["value"],
+                    timestamp=point["timestamp"],
+                )
+                alarm_engine.submit_point(trend_point)
+
+        try:
+            for key, cfg in broker_profiles.items():
+                client = mqtt.Client(client_id=cfg.get("client_id"))
+                client.user_data_set({"broker": key})
+                if cfg.get("username") or cfg.get("password"):
+                    client.username_pw_set(cfg.get("username"), cfg.get("password"))
+                if cfg.get("tls"):
+                    if cfg.get("ca_cert_path"):
+                        client.tls_set(ca_certs=cfg.get("ca_cert_path"))
+                    else:
+                        client.tls_set()
+                    client.tls_insecure_set(bool(cfg.get("tls_insecure")))
+                client.on_message = on_message
+                client.connect(cfg["host"], cfg["port"], cfg.get("keepalive") or 60)
+                for topic in MQTT_TOPICS:
+                    client.subscribe(topic)
+                    logger.info("Broker %s suscrito a %s", key, topic)
+                client.loop_start()
+                clients.append(client)
+                logger.info("Broker %s conectado en %s:%s", key, cfg["host"], cfg["port"])
+        except Exception:  # noqa: BLE001
+            for client in clients:
+                try:
+                    client.loop_stop()
+                    client.disconnect()
+                except Exception:
+                    pass
+            raise
+
+        logger.info("Worker de tendencias activo (brokers: %s)", ", ".join(broker_profiles.keys()))
+        try:
+            await asyncio.Event().wait()
+        finally:
+            for client in clients:
+                try:
+                    client.loop_stop()
+                    client.disconnect()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("No se pudo cerrar un cliente MQTT: %s", exc)
+    finally:
+        if alarm_engine:
+            await alarm_engine.stop()
         await pool.close()
 
 

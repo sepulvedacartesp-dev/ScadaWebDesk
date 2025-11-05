@@ -162,6 +162,10 @@ const state = {
   userFallback: false,
   showingUserForm: false,
   userInviteLink: null,
+  alarmRules: [],
+  alarmSelectedId: null,
+  alarmLoading: false,
+  alarmSaving: false,
   config: createEmptyConfig(),
 };
 
@@ -187,6 +191,23 @@ const dom = {
   rolesAdmins: document.getElementById("roles-admins"),
   rolesOperators: document.getElementById("roles-operators"),
   rolesViewers: document.getElementById("roles-viewers"),
+  alarmCard: document.getElementById("alarm-card"),
+  alarmStatus: document.getElementById("alarm-status"),
+  alarmRefreshBtn: document.getElementById("alarm-refresh-btn"),
+  alarmForm: document.getElementById("alarm-form"),
+  alarmFormTitle: document.getElementById("alarm-form-title"),
+  alarmId: document.getElementById("alarm-id"),
+  alarmTag: document.getElementById("alarm-tag"),
+  alarmOperator: document.getElementById("alarm-operator"),
+  alarmValueType: document.getElementById("alarm-value-type"),
+  alarmThreshold: document.getElementById("alarm-threshold"),
+  alarmEmail: document.getElementById("alarm-email"),
+  alarmCooldown: document.getElementById("alarm-cooldown"),
+  alarmActive: document.getElementById("alarm-active"),
+  alarmSubmitBtn: document.getElementById("alarm-submit-btn"),
+  alarmResetBtn: document.getElementById("alarm-reset-btn"),
+  alarmTableBody: document.getElementById("alarm-table-body"),
+  alarmEmpty: document.getElementById("alarm-empty"),
   addContainer: document.getElementById("add-container"),
   expandCollapse: document.getElementById("expand-collapse"),
   containersList: document.getElementById("containers-list"),
@@ -299,6 +320,12 @@ function attachStaticHandlers() {
   dom.userForm?.addEventListener("submit", submitUserForm);
   dom.userList?.addEventListener("click", handleUserListClick);
   dom.refreshUsersBtn?.addEventListener("click", () => loadUsers(true));
+  dom.alarmForm?.addEventListener("submit", handleAlarmFormSubmit);
+  dom.alarmResetBtn?.addEventListener("click", () => resetAlarmForm());
+  dom.alarmValueType?.addEventListener("change", updateAlarmThresholdInput);
+  dom.alarmTableBody?.addEventListener("click", handleAlarmTableClick);
+  dom.alarmRefreshBtn?.addEventListener("click", () => loadAlarmRules(true));
+  updateAlarmThresholdInput();
 }
 
 function setLogoStatus(message, tone = "info") {
@@ -593,6 +620,7 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     updateRoleBadge();
     applyPermissions();
     renderAll();
+    await loadAlarmRules(true);
     refreshCompanyLogo({ bustCache: empresaChanged });
     ensureUserCardVisibility();
     if (state.canManageUsers && (empresaChanged || !state.usersLoaded)) {
@@ -634,9 +662,427 @@ function emailsFrom(value) {
   return [];
 }
 
+function buildEmpresaQuery() {
+  const empresaId = state.empresaId ? state.empresaId.trim() : "";
+  return empresaId ? `?empresaId=${encodeURIComponent(empresaId)}` : "";
+}
+
+function setAlarmStatus(message, tone = "info") {
+  if (!dom.alarmStatus) return;
+  dom.alarmStatus.textContent = message || "";
+  dom.alarmStatus.dataset.tone = tone || "info";
+  dom.alarmStatus.hidden = !message;
+}
+
+function updateAlarmThresholdInput() {
+  const input = dom.alarmThreshold;
+  const selector = dom.alarmValueType;
+  if (!input || !selector) return;
+  const type = selector.value || "number";
+  if (type === "boolean") {
+    input.setAttribute("min", "0");
+    input.setAttribute("max", "1");
+    input.setAttribute("step", "1");
+    input.placeholder = "0 o 1";
+  } else {
+    input.removeAttribute("min");
+    input.removeAttribute("max");
+    input.setAttribute("step", "any");
+    input.placeholder = "Valor numerico";
+  }
+}
+
+function resetAlarmForm() {
+  state.alarmSelectedId = null;
+  dom.alarmForm?.reset();
+  if (dom.alarmOperator) {
+    const fallback = dom.alarmOperator.getAttribute("data-default") || "gte";
+    dom.alarmOperator.value = fallback;
+  }
+  if (dom.alarmValueType) {
+    const fallback = dom.alarmValueType.getAttribute("data-default") || "number";
+    dom.alarmValueType.value = fallback;
+  }
+  if (dom.alarmCooldown) {
+    dom.alarmCooldown.value = dom.alarmCooldown.getAttribute("data-default") || "300";
+  }
+  if (dom.alarmActive) {
+    dom.alarmActive.checked = true;
+  }
+  if (dom.alarmThreshold) {
+    dom.alarmThreshold.value = "";
+  }
+  if (dom.alarmEmail) {
+    dom.alarmEmail.value = "";
+  }
+  if (dom.alarmId) {
+    dom.alarmId.value = "";
+  }
+  if (dom.alarmFormTitle) {
+    dom.alarmFormTitle.textContent = "Crear alarma";
+  }
+  if (dom.alarmSubmitBtn) {
+    dom.alarmSubmitBtn.textContent = "Guardar alarma";
+  }
+  updateAlarmThresholdInput();
+}
+
+function fillAlarmForm(rule) {
+  if (!rule || typeof rule !== "object") return;
+  state.alarmSelectedId = rule.id !== undefined ? Number(rule.id) : null;
+  if (dom.alarmId) {
+    dom.alarmId.value = rule.id !== undefined ? String(rule.id) : "";
+  }
+  if (dom.alarmTag) {
+    dom.alarmTag.value = rule.tag || "";
+  }
+  if (dom.alarmOperator) {
+    dom.alarmOperator.value = rule.operator || dom.alarmOperator.value || "gte";
+  }
+  if (dom.alarmValueType) {
+    dom.alarmValueType.value = rule.valueType || dom.alarmValueType.value || "number";
+  }
+  if (dom.alarmThreshold) {
+    const threshold = rule.threshold ?? rule.thresholdValue;
+    dom.alarmThreshold.value = threshold === undefined || threshold === null ? "" : String(threshold);
+  }
+  if (dom.alarmEmail) {
+    dom.alarmEmail.value = rule.notifyEmail || "";
+  }
+  if (dom.alarmCooldown) {
+    dom.alarmCooldown.value = rule.cooldownSeconds !== undefined ? String(rule.cooldownSeconds) : dom.alarmCooldown.value || "300";
+  }
+  if (dom.alarmActive) {
+    dom.alarmActive.checked = Boolean(rule.active);
+  }
+  if (dom.alarmFormTitle) {
+    dom.alarmFormTitle.textContent = "Editar alarma";
+  }
+  if (dom.alarmSubmitBtn) {
+    dom.alarmSubmitBtn.textContent = "Actualizar alarma";
+  }
+  updateAlarmThresholdInput();
+  dom.alarmForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function formatAlarmOperator(operator) {
+  switch (operator) {
+    case "gte":
+      return "≥";
+    case "lte":
+      return "≤";
+    case "eq":
+      return "=";
+    default:
+      return operator || "";
+  }
+}
+
+function formatAlarmValueType(valueType) {
+  return valueType === "boolean" ? "Booleano" : "Numero";
+}
+
+function upsertAlarmRuleState(rule) {
+  if (!rule || typeof rule !== "object") return;
+  if (!Array.isArray(state.alarmRules)) {
+    state.alarmRules = [];
+  }
+  const entry = {
+    ...rule,
+    id: rule.id !== undefined ? Number(rule.id) : rule.id,
+    cooldownSeconds: rule.cooldownSeconds !== undefined ? Number(rule.cooldownSeconds) : rule.cooldownSeconds,
+    threshold: rule.threshold ?? rule.thresholdValue,
+  };
+  const index = state.alarmRules.findIndex((item) => item.id === entry.id);
+  if (index >= 0) {
+    state.alarmRules[index] = entry;
+  } else {
+    state.alarmRules.push(entry);
+  }
+  state.alarmRules.sort((a, b) => {
+    const tagA = (a.tag || "").toLowerCase();
+    const tagB = (b.tag || "").toLowerCase();
+    if (tagA !== tagB) {
+      return tagA < tagB ? -1 : 1;
+    }
+    return (a.id || 0) - (b.id || 0);
+  });
+}
+
+async function loadAlarmRules(force = false) {
+  if (!state.token) return;
+  if (!state.empresaId) {
+    state.alarmRules = [];
+    renderAlarmSection();
+    setAlarmStatus("Selecciona una empresa para configurar alarmas.", "info");
+    return;
+  }
+  if (state.alarmLoading && !force) return;
+  state.alarmLoading = true;
+  setAlarmStatus("Cargando alarmas...", "info");
+  try {
+    const query = buildEmpresaQuery();
+    const response = await fetch(`${BACKEND_HTTP}/api/alarms/rules${query}`, {
+      headers: {
+        Authorization: "Bearer " + state.token,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const data = await response.json();
+    state.alarmRules = Array.isArray(data) ? data : [];
+    resetAlarmForm();
+    renderAlarmSection();
+    if ((state.alarmRules || []).length === 0) {
+      setAlarmStatus("No hay alarmas configuradas.", "info");
+    } else {
+      setAlarmStatus("");
+    }
+  } catch (error) {
+    console.error("loadAlarmRules", error);
+    setAlarmStatus("No se pudieron cargar las alarmas: " + ((error && error.message) || error), "error");
+  } finally {
+    state.alarmLoading = false;
+  }
+}
+
+function renderAlarmSection() {
+  if (!dom.alarmCard) return;
+  const rules = Array.isArray(state.alarmRules) ? [...state.alarmRules] : [];
+  rules.sort((a, b) => {
+    const tagA = (a.tag || "").toLowerCase();
+    const tagB = (b.tag || "").toLowerCase();
+    if (tagA !== tagB) {
+      return tagA < tagB ? -1 : 1;
+    }
+    return (a.id || 0) - (b.id || 0);
+  });
+  if (dom.alarmTableBody) {
+    const rows = rules
+      .map((rule) => {
+        const id = rule.id !== undefined ? String(rule.id) : "";
+        const operator = formatAlarmOperator(rule.operator);
+        const thresholdValue = rule.threshold ?? rule.thresholdValue;
+        const thresholdLabel =
+          thresholdValue === undefined || thresholdValue === null ? "-" : Number.isFinite(Number(thresholdValue)) ? Number(thresholdValue) : thresholdValue;
+        const statusLabel = rule.active ? "Activa" : "Pausada";
+        const statusClass = rule.active ? "alarm-status-pill--active" : "alarm-status-pill--inactive";
+        const actions = state.canEdit
+          ? [
+              `<button type="button" class="btn btn-link" data-action="edit" data-rule-id="${escapeHtml(id)}">Editar</button>`,
+              `<button type="button" class="btn btn-link" data-action="toggle" data-rule-id="${escapeHtml(id)}">${rule.active ? "Desactivar" : "Activar"}</button>`,
+              `<button type="button" class="btn btn-link btn-danger" data-action="delete" data-rule-id="${escapeHtml(id)}">Eliminar</button>`,
+            ].join("")
+          : "";
+        return `
+          <tr data-rule-id="${escapeHtml(id)}">
+            <td>${escapeHtml(rule.tag || "")}</td>
+            <td>${escapeHtml(operator)} ${escapeHtml(String(thresholdLabel))}</td>
+            <td>${escapeHtml(formatAlarmValueType(rule.valueType))}</td>
+            <td>${escapeHtml(rule.notifyEmail || "")}</td>
+            <td>${escapeHtml(String(rule.cooldownSeconds ?? 0))} s</td>
+            <td><span class="alarm-status-pill ${statusClass}">${escapeHtml(statusLabel)}</span></td>
+            <td class="alarm-actions">${actions}</td>
+          </tr>
+        `;
+      })
+      .join("")
+      .trim();
+    dom.alarmTableBody.innerHTML = rows;
+  }
+  if (dom.alarmEmpty) {
+    dom.alarmEmpty.hidden = rules.length > 0;
+  }
+  const canEdit = Boolean(state.canEdit);
+  if (dom.alarmForm) {
+    const controls = dom.alarmForm.querySelectorAll("input, select, button");
+    controls.forEach((element) => {
+      if (!(element instanceof HTMLInputElement || element instanceof HTMLButtonElement || element instanceof HTMLSelectElement)) {
+        return;
+      }
+      if (canEdit) {
+        element.removeAttribute("disabled");
+      } else {
+        element.setAttribute("disabled", "");
+      }
+    });
+    dom.alarmForm.classList.toggle("is-readonly", !canEdit);
+  }
+  if (dom.alarmRefreshBtn) {
+    if (state.token) {
+      dom.alarmRefreshBtn.removeAttribute("disabled");
+    } else {
+      dom.alarmRefreshBtn.setAttribute("disabled", "");
+    }
+  }
+}
+
+async function handleAlarmFormSubmit(event) {
+  event.preventDefault();
+  if (!state.token) {
+    setAlarmStatus("Debes iniciar sesion para guardar alarmas.", "warning");
+    return;
+  }
+  const tag = dom.alarmTag?.value.trim();
+  const operator = dom.alarmOperator?.value || "gte";
+  const valueType = dom.alarmValueType?.value || "number";
+  const thresholdRaw = dom.alarmThreshold?.value;
+  const notifyEmail = dom.alarmEmail?.value.trim();
+  const cooldownRaw = dom.alarmCooldown?.value;
+  const active = dom.alarmActive ? Boolean(dom.alarmActive.checked) : true;
+  if (!tag) {
+    setAlarmStatus("El topic es obligatorio.", "warning");
+    return;
+  }
+  const threshold = Number(thresholdRaw);
+  if (!Number.isFinite(threshold)) {
+    setAlarmStatus("Ingresa un valor numerico valido como umbral.", "warning");
+    return;
+  }
+  if (valueType === "boolean" && !(threshold === 0 || threshold === 1)) {
+    setAlarmStatus("Para alarmas booleanas el umbral debe ser 0 o 1.", "warning");
+    return;
+  }
+  if (!notifyEmail) {
+    setAlarmStatus("El correo de notificacion es obligatorio.", "warning");
+    return;
+  }
+  const cooldownSeconds = Math.max(0, Math.min(86400, Math.round(Number(cooldownRaw || 0))));
+  const payload = {
+    tag,
+    operator,
+    threshold,
+    valueType,
+    notifyEmail,
+    cooldownSeconds,
+    active,
+  };
+  const query = buildEmpresaQuery();
+  const url = state.alarmSelectedId
+    ? `${BACKEND_HTTP}/api/alarms/rules/${state.alarmSelectedId}${query}`
+    : `${BACKEND_HTTP}/api/alarms/rules${query}`;
+  const method = state.alarmSelectedId ? "PUT" : "POST";
+  setAlarmStatus("Guardando alarma...", "info");
+  state.alarmSaving = true;
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + state.token,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const data = await response.json();
+    upsertAlarmRuleState(data);
+    renderAlarmSection();
+    resetAlarmForm();
+    setAlarmStatus("Alarma guardada correctamente.", "success");
+  } catch (error) {
+    console.error("handleAlarmFormSubmit", error);
+    setAlarmStatus("No se pudo guardar la alarma: " + ((error && error.message) || error), "error");
+  } finally {
+    state.alarmSaving = false;
+  }
+}
+
+async function applyAlarmUpdate(ruleId, payload, successMessage) {
+  if (!state.token) {
+    setAlarmStatus("Debes iniciar sesion para modificar alarmas.", "warning");
+    return;
+  }
+  const query = buildEmpresaQuery();
+  setAlarmStatus("Actualizando alarma...", "info");
+  try {
+    const response = await fetch(`${BACKEND_HTTP}/api/alarms/rules/${ruleId}${query}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + state.token,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const data = await response.json();
+    upsertAlarmRuleState(data);
+    if (state.alarmSelectedId === Number(ruleId)) {
+      fillAlarmForm(data);
+    } else {
+      renderAlarmSection();
+    }
+    if (successMessage) {
+      setAlarmStatus(successMessage, "success");
+    } else {
+      setAlarmStatus("", "info");
+    }
+  } catch (error) {
+    console.error("applyAlarmUpdate", error);
+    setAlarmStatus("No se pudo actualizar la alarma: " + ((error && error.message) || error), "error");
+  }
+}
+
+async function deleteAlarmRule(ruleId) {
+  if (!state.token) {
+    setAlarmStatus("Debes iniciar sesion para eliminar alarmas.", "warning");
+    return;
+  }
+  const query = buildEmpresaQuery();
+  setAlarmStatus("Eliminando alarma...", "info");
+  try {
+    const response = await fetch(`${BACKEND_HTTP}/api/alarms/rules/${ruleId}${query}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer " + state.token,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    state.alarmRules = (state.alarmRules || []).filter((rule) => rule.id !== Number(ruleId));
+    if (state.alarmSelectedId === Number(ruleId)) {
+      resetAlarmForm();
+    }
+    renderAlarmSection();
+    setAlarmStatus("Alarma eliminada.", "success");
+  } catch (error) {
+    console.error("deleteAlarmRule", error);
+    setAlarmStatus("No se pudo eliminar la alarma: " + ((error && error.message) || error), "error");
+  }
+}
+
+function handleAlarmTableClick(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const ruleId = Number(button.dataset.ruleId || button.closest("tr")?.dataset.ruleId);
+  if (!Number.isFinite(ruleId)) return;
+  const action = button.dataset.action;
+  const rule = (state.alarmRules || []).find((item) => item.id === ruleId);
+  if (!rule && action !== "delete") return;
+  if (action === "edit") {
+    fillAlarmForm(rule);
+  } else if (action === "toggle" && rule) {
+    applyAlarmUpdate(ruleId, { active: !rule.active }, !rule.active ? "Alarma activada." : "Alarma desactivada.");
+  } else if (action === "delete") {
+    if (confirm("¿Eliminar esta alarma permanentemente?")) {
+      deleteAlarmRule(ruleId);
+    }
+  }
+}
+
 function renderAll() {
   renderGeneralSection();
   renderRolesSection();
+  renderAlarmSection();
   renderContainers();
   renderUserList();
 }

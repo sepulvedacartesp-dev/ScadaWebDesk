@@ -60,6 +60,9 @@ from quotes.schemas import (
     QuoteUpdatePayload,
 )
 
+from alarms import service as alarm_service
+from alarms.schemas import AlarmRuleCreate, AlarmRuleOut, AlarmRuleUpdate, AlarmEventOut
+
 load_dotenv()
 
 logger = logging.getLogger("bridge")
@@ -1604,6 +1607,109 @@ def update_config_endpoint(config: Dict[str, Any] = Body(...), authorization: Op
     role = "admin" if is_master else role_for_email(normalized, email)
     logger.info("Config updated by %s en empresa %s", email, company_id)
     return {"ok": True, "config": normalized, "role": role, "empresaId": company_id, "isMaster": is_master}
+
+
+# ---- Alarm management ----
+
+
+def ensure_alarm_admin(decoded_token: Dict[str, Any], empresa_id: str) -> Dict[str, Any]:
+    email = decoded_token.get("email")
+    if is_master_admin(decoded_token):
+        return load_scada_config(empresa_id)
+    cfg = load_scada_config(empresa_id)
+    ensure_admin(email, empresa_id, cfg)
+    return cfg
+
+
+@app.get("/api/alarms/rules", response_model=List[AlarmRuleOut])
+async def list_alarm_rules_endpoint(
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    ensure_alarm_admin(decoded, company_id)
+    pool = require_trend_pool()
+    rules = await alarm_service.list_rules(pool, company_id)
+    return rules
+
+
+@app.post("/api/alarms/rules", response_model=AlarmRuleOut)
+async def create_alarm_rule_endpoint(
+    payload: AlarmRuleCreate,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    ensure_alarm_admin(decoded, company_id)
+    pool = require_trend_pool()
+    try:
+        rule = await alarm_service.create_rule(pool, company_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except asyncpg.PostgresError as exc:
+        logger.exception("No se pudo crear la regla de alarma: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudo crear la regla de alarma") from exc
+    return rule
+
+
+@app.put("/api/alarms/rules/{rule_id}", response_model=AlarmRuleOut)
+async def update_alarm_rule_endpoint(
+    rule_id: int,
+    payload: AlarmRuleUpdate,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    ensure_alarm_admin(decoded, company_id)
+    pool = require_trend_pool()
+    try:
+        rule = await alarm_service.update_rule(pool, company_id, rule_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except asyncpg.PostgresError as exc:
+        logger.exception("No se pudo actualizar la regla de alarma %s: %s", rule_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo actualizar la regla de alarma") from exc
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Regla no encontrada")
+    return rule
+
+
+@app.delete("/api/alarms/rules/{rule_id}")
+async def delete_alarm_rule_endpoint(
+    rule_id: int,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    ensure_alarm_admin(decoded, company_id)
+    pool = require_trend_pool()
+    try:
+        deleted = await alarm_service.delete_rule(pool, company_id, rule_id)
+    except asyncpg.PostgresError as exc:
+        logger.exception("No se pudo eliminar la regla de alarma %s: %s", rule_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo eliminar la regla de alarma") from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Regla no encontrada")
+    return {"ok": True}
+
+
+@app.get("/api/alarms/events", response_model=List[AlarmEventOut])
+async def list_alarm_events_endpoint(
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    tag: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    ensure_alarm_admin(decoded, company_id)
+    pool = require_trend_pool()
+    events = await alarm_service.list_events(pool, company_id, limit=limit, tag=tag)
+    return events
 
 
 @app.post("/logos")

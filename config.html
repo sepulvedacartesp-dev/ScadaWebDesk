@@ -213,6 +213,78 @@
     .logo-status--success { color: var(--success); }
     .logo-status--error { color: var(--danger); }
     .logo-status--info { color: var(--text-muted); }
+    .alarm-status {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .alarm-status[data-tone="success"] { color: #6cffd6; }
+    .alarm-status[data-tone="error"] { color: #ff9fb4; }
+    .alarm-status[data-tone="warning"] { color: #ffdd91; }
+    .alarm-form-grid {
+      display: grid;
+      gap: 1rem 1.35rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .alarm-form.is-readonly {
+      opacity: 0.7;
+    }
+    .alarm-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      border: 1px solid rgba(112, 138, 255, 0.32);
+      background: rgba(9, 18, 32, 0.6);
+    }
+    .alarm-status-pill--active {
+      border-color: rgba(6, 214, 160, 0.55);
+      color: #6cffd6;
+      background: rgba(6, 214, 160, 0.15);
+    }
+    .alarm-status-pill--inactive {
+      border-color: rgba(239, 71, 111, 0.45);
+      color: #ff9fb4;
+      background: rgba(239, 71, 111, 0.12);
+    }
+    .table-wrapper {
+      overflow-x: auto;
+    }
+    .alarm-table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+    }
+    .alarm-table th,
+    .alarm-table td {
+      padding: 0.65rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(112, 138, 255, 0.12);
+      font-size: 0.9rem;
+    }
+    .alarm-table th {
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .alarm-table tbody tr:hover {
+      background: rgba(12, 22, 36, 0.55);
+    }
+    .alarm-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+    .alarm-card .container-header {
+      align-items: flex-start;
+    }
+    .alarm-card .container-header .button-row {
+      margin-left: auto;
+      gap: 0.5rem;
+    }
     .roles-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
     .form-group label {
       display: flex;
@@ -713,6 +785,83 @@
               <label for="roles-viewers">Visualizacion <small>(uno por linea)</small></label>
               <textarea id="roles-viewers" class="textarea" placeholder="cliente@empresa.com"></textarea>
             </div>
+          </div>
+        </section>
+
+        <section class="config-card alarm-card" id="alarm-card">
+          <div class="container-header">
+            <h2>Alarmas de proceso</h2>
+            <div class="button-row">
+              <button id="alarm-refresh-btn" type="button" class="btn btn-ghost">Actualizar</button>
+            </div>
+          </div>
+          <p class="helper-text">Configura comparaciones por topic y envia notificaciones automáticas desde <strong>notificaciones@surnex.cl</strong>.</p>
+          <p id="alarm-status" class="helper-text alarm-status" hidden></p>
+          <form id="alarm-form" class="alarm-form" autocomplete="off">
+            <input type="hidden" id="alarm-id">
+            <header class="alarm-form__head">
+              <h3 id="alarm-form-title">Crear alarma</h3>
+            </header>
+            <div class="alarm-form-grid">
+              <div class="form-group">
+                <label for="alarm-tag">Topic MQTT</label>
+                <input id="alarm-tag" type="text" class="text-input" placeholder="scada/customers/empresa/trend/tag">
+              </div>
+              <div class="form-group">
+                <label for="alarm-operator">Comparador</label>
+                <select id="alarm-operator" class="select-input" data-default="gte">
+                  <option value="gte">Valor ≥ umbral</option>
+                  <option value="lte">Valor ≤ umbral</option>
+                  <option value="eq">Valor = umbral</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="alarm-value-type">Tipo de variable</label>
+                <select id="alarm-value-type" class="select-input" data-default="number">
+                  <option value="number">Numero</option>
+                  <option value="boolean">Booleano (0/1)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="alarm-threshold">Umbral</label>
+                <input id="alarm-threshold" type="number" class="text-input" placeholder="Valor numerico" step="any">
+              </div>
+              <div class="form-group">
+                <label for="alarm-email">Correo destino</label>
+                <input id="alarm-email" type="email" class="text-input" placeholder="operador@empresa.com">
+              </div>
+              <div class="form-group">
+                <label for="alarm-cooldown">Repetir cada (segundos)</label>
+                <input id="alarm-cooldown" type="number" class="text-input" value="300" min="0" max="86400" data-default="300">
+              </div>
+              <div class="form-group checkbox-inline">
+                <label class="checkbox">
+                  <input type="checkbox" id="alarm-active" checked>
+                  <span>Alarma activa</span>
+                </label>
+              </div>
+            </div>
+            <div class="button-row">
+              <button type="submit" class="btn btn-editable" id="alarm-submit-btn">Guardar alarma</button>
+              <button type="button" class="btn btn-ghost" id="alarm-reset-btn">Limpiar</button>
+            </div>
+          </form>
+          <div class="table-wrapper">
+            <table class="alarm-table">
+              <thead>
+                <tr>
+                  <th>Topic</th>
+                  <th>Comparacion</th>
+                  <th>Tipo</th>
+                  <th>Correo</th>
+                  <th>Cooldown</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="alarm-table-body"></tbody>
+            </table>
+            <div id="alarm-empty" class="empty-state">Aun no hay alarmas configuradas.</div>
           </div>
         </section>
 

@@ -1,0 +1,2 @@
+"""Trend ingest worker package."""
+

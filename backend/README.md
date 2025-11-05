@@ -49,6 +49,21 @@ Si necesitas validar revocacion de tokens, agrega `FIREBASE_SERVICE_ACCOUNT` con
 - `FIREBASE_WEB_API_KEY` (opcional): Web API Key del proyecto Firebase. Permite que el backend dispare correos de invitacion/reset usando `accounts:sendOobCode`.
 - `FIREBASE_EMAIL_CONTINUE_URL` (opcional): URL de redireccion usada en los enlaces de restablecimiento generados (`ActionCodeSettings`).
 - `FIREBASE_AUTH_TIMEOUT` (opcional, por defecto `10` segundos): timeout HTTP para las llamadas al servicio Identity Toolkit.
+- Motor de alarmas 24/7 (Zoho Mail):
+  - `ENABLE_ALARM_MONITOR=1`
+  - `ALARM_SMTP_HOST=smtp.zoho.com`
+  - `ALARM_SMTP_PORT=587`
+  - `ALARM_SMTP_USERNAME=notificaciones@surnex.cl`
+  - `ALARM_SMTP_PASSWORD=<clave_app_zoho>`
+  - `ALARM_SMTP_STARTTLS=1`
+  - `ALARM_SMTP_USE_SSL=0`
+  - `ALARM_SMTP_TIMEOUT=15`
+  - `ALARM_EMAIL_FROM=notificaciones@surnex.cl`
+  - `ALARM_EMAIL_FROM_NAME=SurNex Alarmas`
+  - `ALARM_EMAIL_SUBJECT_PREFIX=[Alarma SCADA]`
+  - `ALARM_EMAIL_REPLY_TO=`
+  - `ALARM_RULES_REFRESH_SECONDS=60`
+  - `ALARM_QUEUE_MAXSIZE=2048`
 
 ## Ejecucion local
 ```bash
@@ -114,6 +129,31 @@ Configura el servicio exactamente con los siguientes valores:
 
 Configura en Render una base PostgreSQL accesible via `DATABASE_URL` y un cron job/worker que ejecute la sentencia de retencion respetando `DIAS_RETENCION_HISTORICO`.
 
+### Motor de alarmas 24/7
+- El worker `backend/workers/trends_ingest/worker.py` ejecuta en paralelo la ingesta de tendencias y la evaluación de reglas almacenadas en `alarm_rules`. Cada valor que llega via MQTT se compara contra los umbrales activos y, si corresponde, se registra un evento en `alarm_events` y se dispara un correo usando Zoho Mail.
+- Requisitos:
+  - Variables de entorno de la sección anterior (`ENABLE_ALARM_MONITOR`, `ALARM_SMTP_*`, `ALARM_EMAIL_*`, `ALARM_RULES_REFRESH_SECONDS`, `ALARM_QUEUE_MAXSIZE`).
+  - Credenciales SMTP de `notificaciones@surnex.cl` (clave de aplicación y TLS STARTTLS).
+  - Base PostgreSQL accesible desde el worker (`DATABASE_URL`).
+- Ejecución local:
+  ```bash
+  cd backend/workers/trends_ingest
+  pip install -r requirements.txt
+  # exporta las variables necesarias y luego
+  python worker.py
+  ```
+  El stdout mostrará la cantidad de reglas activas y registrará los correos enviados o errores de SMTP.
+- Despliegue: en Render (u otro proveedor) publica un proceso worker adicional o ejecuta el script en el mismo servicio usando `Procfile` (`web` + `worker`). Asegúrate de correr `alembic upgrade head` antes de iniciar para crear `alarm_rules` y `alarm_events`.
+
+### API de alarmas
+- `GET /api/alarms/rules`: lista las reglas de la empresa autenticada (`empresaId` opcional para administradores maestros).
+- `POST /api/alarms/rules`: crea una regla (`tag`, `operator` ∈ {`gte`,`lte`,`eq`}, `threshold`, `valueType`, `notifyEmail`, `cooldownSeconds`, `active`).
+- `PUT /api/alarms/rules/{id}`: actualiza una regla existente.
+- `DELETE /api/alarms/rules/{id}`: elimina la regla y sus eventos asociados.
+- `GET /api/alarms/events`: entrega el historial reciente (`limit`, `tag` opcionales).
+
+Las rutas requieren un token válido de Firebase y rol `admin` de la empresa (o `master/config`). El frontend `config.html` expone un formulario para gestionar estas reglas sin tocar `config.html`.
+
 ## Integracion del Frontend
 1. Incluye los SDK compat de Firebase en `dashboard.html`.
 2. Inicializa Firebase con la configuracion del proyecto `scadaweb-64eba`.
@@ -142,6 +182,9 @@ Configura en Render una base PostgreSQL accesible via `DATABASE_URL` y un cron j
 5. Publicar desde HiveMQ (con las credenciales del broker asignado) en `scada/customers/<empresaId>/lab/externo` se refleja en el navegador.
 6. (Opcional) Solicitud `GET /` o `/publish` con token invalido responde `401`.
 7. Render mantiene el servicio activo tras cold start (espera hasta 50 s en primer request).
+8. `GET /api/alarms/rules?empresaId=<id>` devuelve la lista de reglas (requiere rol `admin`).
+9. `POST /api/alarms/rules` con `{"tag":"scada/customers/demo/trend/temp","operator":"gte","threshold":80,"valueType":"number","notifyEmail":"alertas@demo.cl","cooldownSeconds":300}` responde con la regla persistida y vuelve a aparecer en el listado.
+10. Publicar un valor que cumpla el umbral genera un registro en `alarm_events` y envía un correo desde `notificaciones@surnex.cl`. Reintentos dentro del `cooldownSeconds` no duplican notificaciones.
 
 ## Buenas practicas adicionales
 - Mantener `MQTT_TLS_INSECURE=0`; solo cambiar a 1 si usas certificados autofirmados.
