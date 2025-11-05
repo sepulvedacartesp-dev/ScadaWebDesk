@@ -43,6 +43,7 @@ QUOTE_DB_MIN_POOL_SIZE=1
 QUOTE_DB_MAX_POOL_SIZE=5
 QUOTE_DB_TIMEOUT=10
 ```
+Puedes indicar múltiples orígenes separándolos por comas en `FRONTEND_ORIGIN`. Si usas `*`, el backend desactiva `allow_credentials` para cumplir con CORS.
 `MQTT_BROKER_PROFILES` permite definir un mapa JSON plano `{ "claveBroker": { ... } }`. Cada entrada hereda las credenciales base (`HIVEMQ_*`) y puede sobrescribir `host`, `port`, `username`, `password`, `tls`, `tlsInsecure`, `caCertPath`, `clientId` y `keepalive`. Usa la clave `default` para la configuración por omisión y agrega entradas adicionales (`cliente1`, `cliente2`, etc.) para asignarlas a empresas concretas.
 Si necesitas validar revocacion de tokens, agrega `FIREBASE_SERVICE_ACCOUNT` con el JSON completo del service account.
 
@@ -107,7 +108,7 @@ Configura el servicio exactamente con los siguientes valores:
 - Start Command: `uvicorn app:app --host 0.0.0.0 --port $PORT`
 - Runtime Environment Variables:
   - `PYTHON_VERSION=3.11.9`
-  - `FRONTEND_ORIGIN` (tu dominio Hostinger o `http://127.0.0.1:8001` para pruebas locales)
+- `FRONTEND_ORIGIN` (tu dominio Hostinger o `http://127.0.0.1:8001` para pruebas locales; acepta lista separada por comas)
   - `FIREBASE_PROJECT_ID=scadaweb-64eba`
   - `FIREBASE_SERVICE_ACCOUNT` (solo si aplicas revocation check)
   - `HIVEMQ_HOST`, `HIVEMQ_PORT`, `HIVEMQ_USERNAME`, `HIVEMQ_PASSWORD`

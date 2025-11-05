@@ -504,7 +504,18 @@ event_loop: Optional[asyncio.AbstractEventLoop] = None
 trend_db_pool: Optional[asyncpg.pool.Pool] = None
 # ---- Config ----
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*").strip()
+
+
+def parse_allowed_origins(raw: str) -> List[str]:
+    if not raw:
+        return ["*"]
+    parts = [item.strip() for item in raw.split(",") if item.strip()]
+    return parts or ["*"]
+
+
+ALLOWED_CORS_ORIGINS = parse_allowed_origins(FRONTEND_ORIGIN)
+ALLOW_CREDENTIALS = "*" not in ALLOWED_CORS_ORIGINS
 
 MQTT_HOST = os.getenv("HIVEMQ_HOST", "").strip()
 MQTT_PORT = int(os.getenv("HIVEMQ_PORT", "8883"))
@@ -845,8 +856,8 @@ async def shutdown_quote_database_pool():
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if FRONTEND_ORIGIN == "*" else [FRONTEND_ORIGIN],
-    allow_credentials=True,
+    allow_origins=ALLOWED_CORS_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
