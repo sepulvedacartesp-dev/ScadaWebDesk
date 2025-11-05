@@ -1,38 +1,28 @@
-"""Add catalog_id column to quote_items
+"""placeholder to preserve migration chain for quote catalog id
 
-Revision ID: 20251029_0002
+Revision ID: 20251029_0002_add_catalog_id_to_quote_items
 Revises: 20250101_0001
-Create Date: 2025-10-29 13:00:00.000000
+Create Date: 2025-10-29 00:00:00.000000
 """
-from typing import Sequence, Union
 
-from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from __future__ import annotations
 
-
-revision: str = "20251029_0002"
-down_revision: Union[str, None] = "20250101_0001"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+from alembic import op  # noqa: F401
 
 
-def upgrade() -> None:
-    op.add_column(
-        "quote_items",
-        sa.Column("catalog_id", postgresql.UUID(as_uuid=True), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_quote_items_catalog",
-        "quote_items",
-        "quote_catalog",
-        ["catalog_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+revision = "20251029_0002_add_catalog_id_to_quote_items"
+down_revision = "20250101_0001"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:  # noqa: D401
+    """No structural changes required; migration retained for compatibility."""
+    # El esquema actual ya incluye catalog_id en quote_items desde la revision inicial.
+    # Este archivo se mantiene para enlazar la cadena historica de migraciones.
+    pass
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_quote_items_catalog", "quote_items", type_="foreignkey")
-    op.drop_column("quote_items", "catalog_id")
+    pass
 
