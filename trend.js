@@ -667,7 +667,8 @@ function renderSeries(seriesCollection) {
 
       backgroundColor: `${color}33`,
 
-      tension: 0.15,
+      tension: 0,
+      stepped: "before",
 
       pointRadius: 0,
 
