@@ -516,6 +516,8 @@ def parse_allowed_origins(raw: str) -> List[str]:
 
 ALLOWED_CORS_ORIGINS = parse_allowed_origins(FRONTEND_ORIGIN)
 ALLOW_CREDENTIALS = "*" not in ALLOWED_CORS_ORIGINS
+if not ALLOW_CREDENTIALS:
+    logger.warning("CORS credentials disabled because '*' is present in FRONTEND_ORIGIN")
 
 MQTT_HOST = os.getenv("HIVEMQ_HOST", "").strip()
 MQTT_PORT = int(os.getenv("HIVEMQ_PORT", "8883"))
