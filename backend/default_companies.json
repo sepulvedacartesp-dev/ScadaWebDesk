@@ -1,0 +1,32 @@
+{
+  "companies": [
+    {
+      "empresaId": "default",
+      "name": "default",
+      "description": "",
+      "active": true,
+      "createdAt": "2025-01-01T00:00:00Z",
+      "updatedAt": "2025-01-01T00:00:00Z",
+      "mqttBrokerKey": "default"
+    },
+    {
+      "empresaId": "cliente1",
+      "name": "Cliente 1",
+      "description": "Eliminada - dada de baja",
+      "active": true,
+      "createdAt": "2025-01-01T00:00:00Z",
+      "updatedAt": "2025-01-01T00:00:00Z",
+      "mqttBrokerKey": "cliente1"
+    },
+    {
+      "empresaId": "zero_corp",
+      "name": "zero_corp",
+      "description": "Empresa Zero corp ",
+      "active": true,
+      "createdAt": "2025-01-01T00:00:00Z",
+      "updatedAt": "2025-01-01T00:00:00Z",
+      "mqttBrokerKey": "zero_corp"
+    }
+  ],
+  "updatedAt": "2025-01-01T00:00:00Z"
+}
