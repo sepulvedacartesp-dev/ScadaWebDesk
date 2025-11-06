@@ -1548,6 +1548,21 @@ def extract_company_id(decoded: Dict[str, Any]) -> str:
         logger.warning("Token sin empresa; usando DEFAULT_EMPRESA_ID=%s", DEFAULT_COMPANY_ID)
         return DEFAULT_COMPANY_ID
     raise HTTPException(status_code=403, detail="El usuario no tiene empresa asignada")
+
+
+def resolve_company_access(decoded: Dict[str, Any], requested_empresa: Optional[str]) -> str:
+    if requested_empresa:
+        try:
+            requested = sanitize_company_id(requested_empresa)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"empresaId invalido: {exc}") from exc
+        if is_master_admin(decoded):
+            return requested
+        current = extract_company_id(decoded)
+        if requested == current:
+            return requested
+        raise HTTPException(status_code=403, detail="Usuario no autorizado para la empresa solicitada")
+    return extract_company_id(decoded)
 def allowed_prefixes_for_user(uid: str, company_id: Optional[str]) -> List[str]:
     base = TOPIC_BASE.rstrip("/")
     if company_id:
