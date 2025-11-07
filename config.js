@@ -168,6 +168,7 @@ const state = {
   alarmSaving: false,
   config: createEmptyConfig(),
   plantAccessEntries: [],
+  currentPlantId: null,
 };
 
 const dom = {
@@ -221,6 +222,8 @@ const dom = {
   expandCollapse: document.getElementById("expand-collapse"),
   containersList: document.getElementById("containers-list"),
   containersEmpty: document.getElementById("containers-empty"),
+  containersPlantFilter: document.getElementById("containers-plant-filter"),
+  containersFilterStatus: document.getElementById("containers-filter-status"),
   containerTemplate: document.getElementById("container-template"),
   objectTemplate: document.getElementById("object-template"),
   reloadBtn: document.getElementById("reload-btn"),
@@ -278,6 +281,7 @@ function attachStaticHandlers() {
     setDirty(true);
   });
   dom.expandCollapse?.addEventListener("click", toggleAllContainers);
+  dom.containersPlantFilter?.addEventListener("change", handleContainersFilterChange);
   dom.addPlantBtn?.addEventListener("click", () => {
     addPlant();
     setDirty(true);
@@ -528,6 +532,7 @@ async function onAuthStateChanged(user) {
     state.userFallback = false;
     state.showingUserForm = false;
     state.userInviteLink = null;
+    state.currentPlantId = null;
     ensureUserCardVisibility();
     renderMasterPanel();
     await refreshToken(user);
@@ -559,6 +564,7 @@ async function onAuthStateChanged(user) {
     state.userInviteLink = null;
     state.logoVersion = 0;
     state.logoUploading = false;
+    state.currentPlantId = null;
     setLogoStatus("");
     containerUiState = new WeakMap();
     objectUiState = new WeakMap();
@@ -632,6 +638,7 @@ async function loadConfig(force = false, targetEmpresaId = null) {
       state.userFallback = false;
       state.showingUserForm = false;
       state.userInviteLink = null;
+      state.currentPlantId = null;
     }
     state.config = config;
     state.config.empresaId = state.empresaId;
@@ -1453,13 +1460,11 @@ function handlePlantAccessClick(event) {
 
 function renderContainers() {
   if (!dom.containersList || !dom.containerTemplate) return;
+  const activePlantId = resolveActivePlantId();
+  renderContainerFilterControls(activePlantId);
   dom.containersList.querySelectorAll('[data-container-index]').forEach((node) => node.remove());
-  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
-  const hasContainers = containers.length > 0;
-  if (dom.containersEmpty) {
-    dom.containersEmpty.hidden = hasContainers;
-  }
-  containers.forEach((container, index) => {
+  const visibleEntries = getVisibleContainerEntries();
+  visibleEntries.forEach(({ container, index }) => {
     ensureContainerUiState(container);
     const card = dom.containerTemplate.content.firstElementChild.cloneNode(true);
     card.dataset.containerIndex = String(index);
@@ -1484,6 +1489,7 @@ function renderContainers() {
         const value = (event.target.value || "").trim().toLowerCase();
         state.config.containers[index].plantId = value || getDefaultPlantId();
         setDirty(true);
+        renderContainers();
       });
     }
     const collapsed = isContainerCollapsed(container);
@@ -1502,7 +1508,107 @@ function renderContainers() {
     applyContainerCapacityState(card, container);
     dom.containersList.appendChild(card);
   });
+  const showEmpty = !activePlantId || visibleEntries.length === 0;
+  if (dom.containersEmpty) {
+    dom.containersEmpty.hidden = !showEmpty;
+    if (!activePlantId) {
+      dom.containersEmpty.textContent = 'Selecciona una planta para ver sus contenedores.';
+    } else {
+      dom.containersEmpty.textContent = 'La planta seleccionada no tiene contenedores configurados.';
+    }
+  }
+  updateContainerFilterStatus(activePlantId, visibleEntries.length);
+  updateContainerActionsAvailability(activePlantId);
   updateExpandCollapseButton();
+}
+
+function renderContainerFilterControls(activePlantId) {
+  if (!dom.containersPlantFilter) return;
+  const select = dom.containersPlantFilter;
+  const plants = getPlantList();
+  select.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Selecciona una planta";
+  select.appendChild(placeholder);
+  plants.forEach((plant) => {
+    const option = document.createElement("option");
+    option.value = plant.id;
+    option.textContent = plant.serialCode ? `${plant.name} (${plant.serialCode})` : plant.name;
+    select.appendChild(option);
+  });
+  select.value = activePlantId || "";
+  select.disabled = !plants.length;
+}
+
+function updateContainerFilterStatus(activePlantId, visibleCount) {
+  if (!dom.containersFilterStatus) return;
+  const plants = getPlantList();
+  if (!plants.length) {
+    dom.containersFilterStatus.textContent = "Crea al menos una planta para administrar contenedores.";
+    return;
+  }
+  if (!activePlantId) {
+    dom.containersFilterStatus.textContent = "Selecciona una planta para ver sus contenedores.";
+    return;
+  }
+  const plantName = getPlantDisplayName(activePlantId);
+  if (!visibleCount) {
+    dom.containersFilterStatus.textContent = `La planta "${plantName}" no tiene contenedores configurados.`;
+    return;
+  }
+  const suffix = visibleCount === 1 ? "contenedor" : "contenedores";
+  dom.containersFilterStatus.textContent = `Mostrando ${visibleCount} ${suffix} de "${plantName}".`;
+}
+
+function updateContainerActionsAvailability(activePlantId) {
+  if (!dom.addContainer) return;
+  if (state.canEdit && activePlantId) {
+    dom.addContainer.removeAttribute('disabled');
+  } else {
+    dom.addContainer.setAttribute('disabled', '');
+  }
+}
+
+function resolveActivePlantId() {
+  const plants = getPlantList();
+  if (!plants.length) {
+    state.currentPlantId = null;
+    return null;
+  }
+  if (state.currentPlantId && plants.some((plant) => plant.id === state.currentPlantId)) {
+    return state.currentPlantId;
+  }
+  if (plants.length === 1) {
+    state.currentPlantId = plants[0].id;
+    return state.currentPlantId;
+  }
+  state.currentPlantId = null;
+  return null;
+}
+
+function getVisibleContainerEntries() {
+  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
+  const activePlantId = state.currentPlantId;
+  if (!activePlantId) return [];
+  return containers
+    .map((container, index) => ({ container, index }))
+    .filter(({ container }) => resolveContainerPlantId(container) === activePlantId);
+}
+
+function resolveContainerPlantId(container) {
+  const fallback = (getDefaultPlantId() || "").toLowerCase();
+  if (!container || typeof container !== "object") {
+    return fallback;
+  }
+  const raw = typeof container.plantId === "string" ? container.plantId.trim() : "";
+  return raw ? raw.toLowerCase() : fallback;
+}
+
+function getPlantDisplayName(plantId) {
+  const plants = getPlantList();
+  const match = plants.find((plant) => plant.id === plantId);
+  return match ? match.name : plantId;
 }
 
 function ensureContainerUiState(container) {
@@ -1826,7 +1932,12 @@ function splitLines(value) {
 
 
 function addContainer() {
-  const container = { title: '', objects: [] };
+  const activePlantId = resolveActivePlantId();
+  if (!activePlantId) {
+    setStatus('Selecciona una planta antes de agregar contenedores.', 'warning');
+    return;
+  }
+  const container = { title: '', objects: [], plantId: activePlantId };
   if (!Array.isArray(state.config.containers)) {
     state.config.containers = [];
   }
@@ -1890,6 +2001,12 @@ function handleContainerActions(event) {
   }
 }
 
+function handleContainersFilterChange(event) {
+  const value = event?.target?.value || "";
+  state.currentPlantId = value ? value.toLowerCase() : null;
+  renderContainers();
+}
+
 function addObject(containerIndex, type = 'level') {
   const container = state.config.containers?.[containerIndex];
   if (!container) return;
@@ -1947,33 +2064,36 @@ function duplicateObject(containerIndex, objectIndex) {
 }
 
 function toggleAllContainers() {
-  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
-  if (!containers.length) {
+  const visibleEntries = getVisibleContainerEntries();
+  if (!visibleEntries.length) {
     updateExpandCollapseButton();
     return;
   }
-  const allExpanded = containers.every((container) => !isContainerCollapsed(container));
+  const allExpanded = visibleEntries.every(({ container }) => !isContainerCollapsed(container));
   const collapseAll = allExpanded;
-  containers.forEach((container) => {
+  visibleEntries.forEach(({ container }) => {
     setContainerCollapsed(container, collapseAll);
   });
   const cards = dom.containersList?.querySelectorAll('[data-container-index]') || [];
-  cards.forEach((card, index) => {
+  cards.forEach((card) => {
     card.classList.toggle('collapsed', collapseAll);
     updateContainerToggleState(card, collapseAll);
-    updateContainerSummary(card, state.config.containers[index]);
+    const containerIndex = Number(card.dataset.containerIndex || '0');
+    if (Number.isFinite(containerIndex) && state.config.containers?.[containerIndex]) {
+      updateContainerSummary(card, state.config.containers[containerIndex]);
+    }
   });
   updateExpandCollapseButton();
 }
 
 function updateExpandCollapseButton() {
   if (!dom.expandCollapse) return;
-  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
-  const total = containers.length;
-  const allExpanded = total === 0 || containers.every((container) => !isContainerCollapsed(container));
+  const visibleEntries = getVisibleContainerEntries();
+  const total = visibleEntries.length;
+  const allExpanded = total === 0 || visibleEntries.every(({ container }) => !isContainerCollapsed(container));
   dom.expandCollapse.dataset.expanded = String(allExpanded);
   dom.expandCollapse.textContent = allExpanded ? 'Contraer todo' : 'Expandir todo';
-  dom.expandCollapse.disabled = total === 0;
+  dom.expandCollapse.disabled = !state.canEdit || total === 0;
 }
 
 function updateContainerSummary(card, container) {

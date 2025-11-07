@@ -92,6 +92,28 @@
       gap: 1.25rem;
       position: relative;
     }
+    .containers-filter {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.5rem;
+      align-items: flex-end;
+      padding: 0.5rem 0 0.25rem;
+      border-top: 1px solid rgba(112, 138, 255, 0.12);
+    }
+    .containers-filter .filter-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      min-width: min(260px, 100%);
+      flex: 1 1 260px;
+    }
+    .containers-filter select {
+      min-width: 220px;
+    }
+    .containers-filter .helper-text {
+      margin: 0;
+      flex: 1 1 220px;
+    }
     .config-card h2 {
       margin: 0;
       font-size: 1.35rem;
@@ -948,6 +970,15 @@
               <button id="add-container" type="button" class="btn btn-editable">Agregar contenedor</button>
               <button id="expand-collapse" type="button" class="btn btn-ghost" data-expanded="true">Contraer todo</button>
             </div>
+          </div>
+          <div class="containers-filter" id="containers-filter">
+            <div class="filter-field">
+              <label for="containers-plant-filter">Planta a trabajar</label>
+              <select id="containers-plant-filter" class="text-input">
+                <option value="">Selecciona una planta</option>
+              </select>
+            </div>
+            <p id="containers-filter-status" class="helper-text">Selecciona una planta para ver sus contenedores.</p>
           </div>
           <p class="helper-text">Crea grupos para tus procesos (por ejemplo: "Linea 1", "PLC CompactLogix", "Calderas"). Dentro de cada contenedor agrega widgets con la opcion "Agregar widget".</p>
           <div id="containers-list" class="containers-list">
