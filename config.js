@@ -573,6 +573,7 @@ async function onAuthStateChanged(user) {
     updateRoleBadge();
     applyPermissions();
     renderAll();
+    initializeCollapsibleSections(false);
     refreshCompanyLogo({ bustCache: true });
     renderMasterPanel();
     ensureUserCardVisibility();
@@ -653,6 +654,7 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     updateRoleBadge();
     applyPermissions();
     renderAll();
+    initializeCollapsibleSections(false);
     await loadAlarmRules(true);
     refreshCompanyLogo({ bustCache: empresaChanged });
     ensureUserCardVisibility();
@@ -1675,10 +1677,12 @@ function initializeCollapsibleSections(forceReset = false) {
     if (!sectionId) return;
     if (forceReset) {
       card.classList.add('collapsed');
+      setCollapsibleBodyVisibility(card, true);
     }
     const toggleBtn = card.querySelector(`[data-section-toggle="${sectionId}"]`);
     if (!toggleBtn) return;
     updateSectionToggleUi(toggleBtn, card.classList.contains('collapsed'));
+    setCollapsibleBodyVisibility(card, card.classList.contains('collapsed'));
     if (!toggleBtn.dataset.boundSectionToggle) {
       toggleBtn.addEventListener('click', (event) => {
         event.preventDefault();
@@ -1692,7 +1696,20 @@ function initializeCollapsibleSections(forceReset = false) {
 function toggleCollapsibleSection(card, toggleBtn) {
   if (!card || !toggleBtn) return;
   const collapsed = card.classList.toggle('collapsed');
+  setCollapsibleBodyVisibility(card, collapsed);
   updateSectionToggleUi(toggleBtn, collapsed);
+}
+
+function setCollapsibleBodyVisibility(card, collapsed) {
+  const body = card.querySelector('.collapsible-body');
+  if (!body) return;
+  if (collapsed) {
+    body.setAttribute('hidden', '');
+    body.style.display = 'none';
+  } else {
+    body.removeAttribute('hidden');
+    body.style.display = '';
+  }
 }
 
 function updateSectionToggleUi(toggleBtn, collapsed) {
@@ -2273,6 +2290,7 @@ function handleImportFile(event) {
       objectUiState = new WeakMap();
       setDirty(true);
       renderAll();
+      initializeCollapsibleSections(false);
       setStatus("Archivo importado. Revisa y guarda para aplicar.", "info");
     } catch (error) {
       console.error("import", error);
