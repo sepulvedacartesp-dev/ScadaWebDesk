@@ -5,9 +5,7 @@
     "admins": [
       "lagia.sur@gmail.com"
     ],
-    "operators": [
-      "alt.f4-do41i4d7@yopmail.com"
-    ],
+    "operators": [],
     "viewers": []
   },
   "containers": [
@@ -58,7 +56,8 @@
           "onText": "Manual",
           "offText": "Automatico"
         }
-      ]
+      ],
+      "plantId": "general"
     },
     {
       "title": "Planta 1 - ABox 002",
@@ -107,7 +106,8 @@
           "onText": "Manual",
           "offText": "Automatico"
         }
-      ]
+      ],
+      "plantId": "general"
     },
     {
       "title": "Ajuste de Parametros",
@@ -147,7 +147,19 @@
           "onText": "Valor Simulado",
           "offText": "Valor Real"
         }
-      ]
+      ],
+      "plantId": "general"
     }
-  ]
+  ],
+  "plants": [
+    {
+      "id": "general",
+      "name": "Planta General",
+      "serialCode": "zero_corp",
+      "description": "",
+      "active": true,
+      "isDefault": true
+    }
+  ],
+  "plantAssignments": {}
 }
