@@ -10,9 +10,31 @@
     ],
     "viewers": []
   },
+  "plants": [
+    {
+      "id": "general",
+      "name": "Planta General",
+      "serialCode": "zero_corp",
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "zero_corp_2",
+      "name": "Purranque",
+      "serialCode": "ZC25001",
+      "description": "Planta Purranque Core norte",
+      "active": true
+    }
+  ],
+  "plantAssignments": {
+    "alt.f4-do41i4d7@yopmail.com": [
+      "zero_corp_2"
+    ]
+  },
   "containers": [
     {
       "title": "Planta 1 - ABox 001",
+      "plantId": "general",
       "objects": [
         {
           "type": "gauge",
@@ -58,11 +80,11 @@
           "onText": "Manual",
           "offText": "Automatico"
         }
-      ],
-      "plantId": "general"
+      ]
     },
     {
       "title": "Planta 1 - ABox 002",
+      "plantId": "general",
       "objects": [
         {
           "type": "gauge",
@@ -108,11 +130,11 @@
           "onText": "Manual",
           "offText": "Automatico"
         }
-      ],
-      "plantId": "general"
+      ]
     },
     {
       "title": "Ajuste de Parametros",
+      "plantId": "zero_corp_2",
       "objects": [
         {
           "type": "valuePublisher",
@@ -149,19 +171,7 @@
           "onText": "Valor Simulado",
           "offText": "Valor Real"
         }
-      ],
-      "plantId": "general"
+      ]
     }
-  ],
-  "plants": [
-    {
-      "id": "general",
-      "name": "Planta General",
-      "serialCode": "zero_corp",
-      "description": "",
-      "active": true,
-      "isDefault": true
-    }
-  ],
-  "plantAssignments": {}
+  ]
 }
