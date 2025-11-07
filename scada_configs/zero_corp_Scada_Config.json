@@ -12,10 +12,10 @@
   },
   "plants": [
     {
-      "id": "general",
-      "name": "Planta General",
+      "id": "zero_corp1",
+      "name": "Zero Corp",
       "serialCode": "zero_corp",
-      "description": "",
+      "description": "Planta Zero Corp",
       "active": true
     },
     {
@@ -34,7 +34,7 @@
   "containers": [
     {
       "title": "Planta 1 - ABox 001",
-      "plantId": "general",
+      "plantId": "zero_corp1",
       "objects": [
         {
           "type": "gauge",
@@ -84,7 +84,7 @@
     },
     {
       "title": "Planta 1 - ABox 002",
-      "plantId": "general",
+      "plantId": "zero_corp1",
       "objects": [
         {
           "type": "gauge",
