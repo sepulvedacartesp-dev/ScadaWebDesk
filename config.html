@@ -114,6 +114,51 @@
       margin: 0;
       flex: 1 1 220px;
     }
+    .collapsible-card {
+      overflow: hidden;
+    }
+    .collapsible-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .collapsible-card .collapsible-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      width: 100%;
+    }
+    .collapsible-card.collapsed .collapsible-body {
+      display: none;
+    }
+    .section-headline {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .section-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+    }
+    .section-toggle {
+      border: 1px solid rgba(112, 138, 255, 0.3);
+      background: rgba(9, 18, 32, 0.6);
+      color: var(--text-primary);
+      border-radius: 12px;
+      padding: 0.35rem 1.1rem;
+      font-size: 0.85rem;
+      line-height: 1.2;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+    .section-toggle:hover {
+      background: rgba(58, 134, 255, 0.25);
+      transform: translateY(-1px);
+    }
     .config-card h2 {
       margin: 0;
       font-size: 1.35rem;
@@ -763,203 +808,239 @@
           <div id="status-banner" class="status-banner">Autenticate para cargar la configuracion.</div>
         </section>
 
-        <section class="config-card">
-          <div class="container-header">
-            <h2>Datos generales</h2>
-            <span class="badge-inline">Paso esencial</span>
-          </div>
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="mainTitle">Titulo principal</label>
-              <input id="mainTitle" type="text" class="text-input" placeholder="SCADA Web">
+        <section class="config-card collapsible-card collapsed" id="general-card" data-section-id="general">
+          <div class="container-header collapsible-header">
+            <div class="section-headline">
+              <h2>Datos generales</h2>
+              <span class="badge-inline">Paso esencial</span>
             </div>
-            <div class="form-group logo-upload">
-              <label for="company-logo-input">Logo de la empresa</label>
-              <div class="logo-upload__frame" id="company-logo-frame">
-                <img id="company-logo-preview" alt="Vista previa del logo" hidden>
-                <span id="company-logo-placeholder" class="logo-upload__placeholder">Sin logo</span>
+            <button type="button" class="section-toggle" data-section-toggle="general" aria-expanded="false">Expandir</button>
+          </div>
+          <div class="collapsible-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="mainTitle">Titulo principal</label>
+                <input id="mainTitle" type="text" class="text-input" placeholder="SCADA Web">
+              </div>
+              <div class="form-group logo-upload">
+                <label for="company-logo-input">Logo de la empresa</label>
+                <div class="logo-upload__frame" id="company-logo-frame">
+                  <img id="company-logo-preview" alt="Vista previa del logo" hidden>
+                  <span id="company-logo-placeholder" class="logo-upload__placeholder">Sin logo</span>
+                </div>
+                <div class="button-row">
+                  <button id="upload-logo-btn" type="button" class="btn btn-editable" data-label="Subir logo">Subir logo</button>
+                </div>
+                <input id="company-logo-input" type="file" accept="image/jpeg" hidden>
+                <p id="company-logo-status" class="helper-text logo-status"></p>
+                <p class="helper-text">Sube un JPG (maximo 2 MB). El archivo se guardara como &lt;empresa&gt;.jpg.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="config-card collapsible-card collapsed" id="roles-card" data-section-id="roles">
+          <div class="container-header collapsible-header">
+            <div class="section-headline">
+              <h2>Roles y permisos</h2>
+              <span class="badge-inline">Solo administradores pueden guardar cambios</span>
+            </div>
+            <button type="button" class="section-toggle" data-section-toggle="roles" aria-expanded="false">Expandir</button>
+          </div>
+          <div class="collapsible-body">
+            <div class="form-grid roles-grid">
+              <div class="form-group">
+                <label for="roles-admins">Administradores <small>(uno por linea)</small></label>
+                <textarea id="roles-admins" class="textarea" placeholder="admin@empresa.com&#10;soporte@empresa.com"></textarea>
+              </div>
+              <div class="form-group">
+                <label for="roles-operators">Operadores <small>(uno por linea)</small></label>
+                <textarea id="roles-operators" class="textarea" placeholder="operador@empresa.com"></textarea>
+              </div>
+              <div class="form-group">
+                <label for="roles-viewers">Visualizacion <small>(uno por linea)</small></label>
+                <textarea id="roles-viewers" class="textarea" placeholder="cliente@empresa.com"></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="config-card alarm-card collapsible-card collapsed" id="alarm-card" data-section-id="alarms">
+          <div class="container-header collapsible-header">
+            <div class="section-headline">
+              <h2>Alarmas de proceso</h2>
+            </div>
+            <div class="section-controls">
+              <div class="button-row">
+                <button id="alarm-refresh-btn" type="button" class="btn btn-ghost">Actualizar</button>
+              </div>
+              <button type="button" class="section-toggle" data-section-toggle="alarms" aria-expanded="false">Expandir</button>
+            </div>
+          </div>
+          <div class="collapsible-body">
+            <p class="helper-text">Configura comparaciones por topic y envia notificaciones automaticas desde <strong>notificaciones@surnex.cl</strong>.</p>
+            <p id="alarm-status" class="helper-text alarm-status" hidden></p>
+            <form id="alarm-form" class="alarm-form" autocomplete="off">
+              <input type="hidden" id="alarm-id">
+              <header class="alarm-form__head">
+                <h3 id="alarm-form-title">Crear alarma</h3>
+              </header>
+              <div class="alarm-form-grid">
+                <div class="form-group">
+                  <label for="alarm-tag">Topico</label>
+                  <input id="alarm-tag" type="text" class="text-input" placeholder="equipo/tag">
+                </div>
+                <div class="form-group">
+                  <label for="alarm-operator">Comparador</label>
+                  <select id="alarm-operator" class="select-input" data-default="gte">
+                    <option value="gte">Valor = umbral</option>
+                    <option value="lte">Valor = umbral</option>
+                    <option value="eq">Valor = umbral</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="alarm-value-type">Tipo de variable</label>
+                  <select id="alarm-value-type" class="select-input" data-default="number">
+                    <option value="number">Numero</option>
+                    <option value="boolean">Booleano (0/1)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="alarm-threshold">Umbral</label>
+                  <input id="alarm-threshold" type="number" class="text-input" placeholder="Valor numerico" step="any">
+                </div>
+                <div class="form-group">
+                  <label for="alarm-email">Correo destino</label>
+                  <input id="alarm-email" type="email" class="text-input" placeholder="operador@empresa.com">
+                </div>
+                <div class="form-group">
+                  <label for="alarm-cooldown">Repetir cada (segundos)</label>
+                  <input id="alarm-cooldown" type="number" class="text-input" value="300" min="0" max="86400" data-default="300">
+                </div>
+                <div class="form-group checkbox-inline">
+                  <label class="checkbox">
+                    <input type="checkbox" id="alarm-active" checked>
+                    <span>Alarma activa</span>
+                  </label>
+                </div>
               </div>
               <div class="button-row">
-                <button id="upload-logo-btn" type="button" class="btn btn-editable" data-label="Subir logo">Subir logo</button>
+                <button type="submit" class="btn btn-editable" id="alarm-submit-btn">Guardar alarma</button>
+                <button type="button" class="btn btn-ghost" id="alarm-reset-btn">Limpiar</button>
               </div>
-              <input id="company-logo-input" type="file" accept="image/jpeg" hidden>
-              <p id="company-logo-status" class="helper-text logo-status"></p>
-              <p class="helper-text">Sube un JPG (maximo 2 MB). El archivo se guardara como &lt;empresa&gt;.jpg.</p>
+            </form>
+            <div class="table-wrapper">
+              <table class="alarm-table">
+                <thead>
+                  <tr>
+                    <th>Topic</th>
+                    <th>Comparacion</th>
+                    <th>Tipo</th>
+                    <th>Correo</th>
+                    <th>Cooldown</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="alarm-table-body"></tbody>
+              </table>
+              <div id="alarm-empty" class="empty-state">Aun no hay alarmas configuradas.</div>
             </div>
           </div>
         </section>
 
-        <section class="config-card">
-          <div class="container-header">
-            <h2>Roles y permisos</h2>
-            <span class="badge-inline">Solo administradores pueden guardar cambios</span>
+        <section class="config-card collapsible-card collapsed" id="user-card" data-section-id="users" hidden>
+          <div class="container-header collapsible-header">
+            <div class="section-headline">
+              <h2>Usuarios</h2>
+              <span class="badge-inline">Gestion segura</span>
+            </div>
+            <button type="button" class="section-toggle" data-section-toggle="users" aria-expanded="false">Expandir</button>
           </div>
-          <div class="form-grid roles-grid">
-            <div class="form-group">
-              <label for="roles-admins">Administradores <small>(uno por linea)</small></label>
-              <textarea id="roles-admins" class="textarea" placeholder="admin@empresa.com&#10;soporte@empresa.com"></textarea>
+          <div class="collapsible-body">
+            <p class="helper-text">
+              Crea o elimina cuentas para esta empresa. Los nuevos usuarios reciben una invitacion para definir su contrasena.
+            </p>
+            <div class="button-row user-toolbar">
+              <button id="toggle-user-form" type="button" class="btn btn-editable">Agregar usuario</button>
+              <button id="refresh-users-btn" type="button" class="btn btn-ghost">Recargar</button>
             </div>
-            <div class="form-group">
-              <label for="roles-operators">Operadores <small>(uno por linea)</small></label>
-              <textarea id="roles-operators" class="textarea" placeholder="operador@empresa.com"></textarea>
+            <div id="user-status" class="helper-text"></div>
+            <form id="user-form" class="user-form" hidden>
+              <div class="form-grid user-form-grid">
+                <div class="form-group">
+                  <label for="user-email">Email</label>
+                  <input id="user-email" type="email" class="text-input" placeholder="usuario@cliente.com" autocomplete="off" required>
+                </div>
+                <div class="form-group">
+                  <label for="user-role">Rol</label>
+                  <select id="user-role" class="select-input">
+                    <option value="admin">Administrador</option>
+                    <option value="operador" selected>Operador</option>
+                    <option value="visualizacion">Solo lectura</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="user-plants">Plantas asignadas</label>
+                  <select id="user-plants" class="select-input" multiple></select>
+                  <p class="helper-text">Selecciona una o mas plantas para operadores y usuarios de visualizacion.</p>
+                </div>
+                <div class="form-group checkbox-inline">
+                  <label class="checkbox">
+                    <input type="checkbox" id="user-send-invite" checked>
+                    <span>Enviar invitacion/reset por correo</span>
+                  </label>
+                </div>
+              </div>
+              <div class="user-form-actions">
+                <span id="user-form-status" class="helper-text"></span>
+                <div class="button-row">
+                  <button type="submit" class="btn btn-editable" id="user-submit-btn">Crear usuario</button>
+                  <button type="button" class="btn btn-ghost" id="cancel-user-form">Cancelar</button>
+                </div>
+              </div>
+            </form>
+            <ul id="user-list" class="user-list"></ul>
+          </div>
+        </section>
+
+        <section class="config-card collapsible-card collapsed" id="plants-card" data-section-id="plants">
+          <div class="container-header collapsible-header">
+            <div class="section-headline">
+              <h2>Plantas</h2>
             </div>
-            <div class="form-group">
-              <label for="roles-viewers">Visualizacion <small>(uno por linea)</small></label>
-              <textarea id="roles-viewers" class="textarea" placeholder="cliente@empresa.com"></textarea>
+            <div class="section-controls">
+              <div class="button-row align-start">
+                <button id="add-plant" type="button" class="btn btn-editable">Agregar planta</button>
+              </div>
+              <button type="button" class="section-toggle" data-section-toggle="plants" aria-expanded="false">Expandir</button>
+            </div>
+          </div>
+          <div class="collapsible-body">
+            <p class="helper-text">Cada planta representa un subconjunto de equipos dentro de la empresa y requiere un codigo de serie para diferenciar los topicos MQTT.</p>
+            <div id="plants-list" class="plants-list">
+              <div id="plants-empty" class="empty-state">No hay plantas configuradas.</div>
             </div>
           </div>
         </section>
 
-        <section class="config-card alarm-card" id="alarm-card">
-          <div class="container-header">
-            <h2>Alarmas de proceso</h2>
-            <div class="button-row">
-              <button id="alarm-refresh-btn" type="button" class="btn btn-ghost">Actualizar</button>
+        <section class="config-card collapsible-card collapsed" id="plant-access-card" data-section-id="plantAccess">
+          <div class="container-header collapsible-header">
+            <div class="section-headline">
+              <h2>Accesos por planta</h2>
+            </div>
+            <div class="section-controls">
+              <div class="button-row align-start">
+                <button id="add-plant-access" type="button" class="btn btn-editable">Agregar acceso</button>
+              </div>
+              <button type="button" class="section-toggle" data-section-toggle="plantAccess" aria-expanded="false">Expandir</button>
             </div>
           </div>
-          <p class="helper-text">Configura comparaciones por topic y envia notificaciones automáticas desde <strong>notificaciones@surnex.cl</strong>.</p>
-          <p id="alarm-status" class="helper-text alarm-status" hidden></p>
-          <form id="alarm-form" class="alarm-form" autocomplete="off">
-            <input type="hidden" id="alarm-id">
-            <header class="alarm-form__head">
-              <h3 id="alarm-form-title">Crear alarma</h3>
-            </header>
-            <div class="alarm-form-grid">
-              <div class="form-group">
-                <label for="alarm-tag">Topico</label>
-                <input id="alarm-tag" type="text" class="text-input" placeholder="equipo/tag">
-              </div>
-              <div class="form-group">
-                <label for="alarm-operator">Comparador</label>
-                <select id="alarm-operator" class="select-input" data-default="gte">
-                  <option value="gte">Valor ≥ umbral</option>
-                  <option value="lte">Valor ≤ umbral</option>
-                  <option value="eq">Valor = umbral</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="alarm-value-type">Tipo de variable</label>
-                <select id="alarm-value-type" class="select-input" data-default="number">
-                  <option value="number">Numero</option>
-                  <option value="boolean">Booleano (0/1)</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="alarm-threshold">Umbral</label>
-                <input id="alarm-threshold" type="number" class="text-input" placeholder="Valor numerico" step="any">
-              </div>
-              <div class="form-group">
-                <label for="alarm-email">Correo destino</label>
-                <input id="alarm-email" type="email" class="text-input" placeholder="operador@empresa.com">
-              </div>
-              <div class="form-group">
-                <label for="alarm-cooldown">Repetir cada (segundos)</label>
-                <input id="alarm-cooldown" type="number" class="text-input" value="300" min="0" max="86400" data-default="300">
-              </div>
-              <div class="form-group checkbox-inline">
-                <label class="checkbox">
-                  <input type="checkbox" id="alarm-active" checked>
-                  <span>Alarma activa</span>
-                </label>
-              </div>
+          <div class="collapsible-body">
+            <p class="helper-text">Relaciona los correos autorizados con las plantas que pueden visualizar.</p>
+            <div id="plant-access-list" class="plant-access-list">
+              <div id="plant-access-empty" class="empty-state">Aun no hay asignaciones registradas.</div>
             </div>
-            <div class="button-row">
-              <button type="submit" class="btn btn-editable" id="alarm-submit-btn">Guardar alarma</button>
-              <button type="button" class="btn btn-ghost" id="alarm-reset-btn">Limpiar</button>
-            </div>
-          </form>
-          <div class="table-wrapper">
-            <table class="alarm-table">
-              <thead>
-                <tr>
-                  <th>Topic</th>
-                  <th>Comparacion</th>
-                  <th>Tipo</th>
-                  <th>Correo</th>
-                  <th>Cooldown</th>
-                  <th>Estado</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody id="alarm-table-body"></tbody>
-            </table>
-            <div id="alarm-empty" class="empty-state">Aun no hay alarmas configuradas.</div>
-          </div>
-        </section>
-
-        <section class="config-card" id="user-card" hidden>
-          <div class="container-header">
-            <h2>Usuarios</h2>
-            <span class="badge-inline">Gestion segura</span>
-          </div>
-          <p class="helper-text">
-            Crea o elimina cuentas para esta empresa. Los nuevos usuarios reciben una invitacion para definir su contraseña.
-          </p>
-          <div class="button-row user-toolbar">
-            <button id="toggle-user-form" type="button" class="btn btn-editable">Agregar usuario</button>
-            <button id="refresh-users-btn" type="button" class="btn btn-ghost">Recargar</button>
-          </div>
-          <div id="user-status" class="helper-text"></div>
-          <form id="user-form" class="user-form" hidden>
-            <div class="form-grid user-form-grid">
-              <div class="form-group">
-                <label for="user-email">Email</label>
-                <input id="user-email" type="email" class="text-input" placeholder="usuario@cliente.com" autocomplete="off" required>
-              </div>
-              <div class="form-group">
-                <label for="user-role">Rol</label>
-                <select id="user-role" class="select-input">
-                  <option value="admin">Administrador</option>
-                  <option value="operador" selected>Operador</option>
-                  <option value="visualizacion">Solo lectura</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="user-plants">Plantas asignadas</label>
-                <select id="user-plants" class="select-input" multiple></select>
-                <p class="helper-text">Selecciona una o mas plantas para operadores y usuarios de visualizacion.</p>
-              </div>
-              <div class="form-group checkbox-inline">
-                <label class="checkbox">
-                  <input type="checkbox" id="user-send-invite" checked>
-                  <span>Enviar invitacion/reset por correo</span>
-                </label>
-              </div>
-            </div>
-            <div class="user-form-actions">
-              <span id="user-form-status" class="helper-text"></span>
-              <div class="button-row">
-                <button type="submit" class="btn btn-editable" id="user-submit-btn">Crear usuario</button>
-                <button type="button" class="btn btn-ghost" id="cancel-user-form">Cancelar</button>
-              </div>
-            </div>
-          </form>
-          <ul id="user-list" class="user-list"></ul>
-        </section>
-
-        <section class="config-card" id="plants-card">
-          <div class="container-header">
-            <h2>Plantas</h2>
-            <div class="button-row align-start">
-              <button id="add-plant" type="button" class="btn btn-editable">Agregar planta</button>
-            </div>
-          </div>
-          <p class="helper-text">Cada planta representa un subconjunto de equipos dentro de la empresa y requiere un c�digo de serie para diferenciar los topicos MQTT.</p>
-          <div id="plants-list" class="plants-list">
-            <div id="plants-empty" class="empty-state">No hay plantas configuradas.</div>
-          </div>
-        </section>
-
-        <section class="config-card" id="plant-access-card">
-          <div class="container-header">
-            <h2>Accesos por planta</h2>
-            <div class="button-row align-start">
-              <button id="add-plant-access" type="button" class="btn btn-editable">Agregar acceso</button>
-            </div>
-          </div>
-          <p class="helper-text">Relaciona los correos autorizados con las plantas que pueden visualizar.</p>
-          <div id="plant-access-list" class="plant-access-list">
-            <div id="plant-access-empty" class="empty-state">Aun no hay asignaciones registradas.</div>
           </div>
         </section>
 

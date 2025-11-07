@@ -264,10 +264,12 @@ const logoButtonDefaultText = dom.uploadLogoBtn?.dataset.label || dom.uploadLogo
 
 let containerUiState = new WeakMap();
 let objectUiState = new WeakMap();
+let sectionUiState = new Map();
 
 
 document.addEventListener("DOMContentLoaded", () => {
   attachStaticHandlers();
+  initializeCollapsibleSections(true);
   firebase.auth().onAuthStateChanged(onAuthStateChanged);
 });
 function attachStaticHandlers() {
@@ -568,6 +570,8 @@ async function onAuthStateChanged(user) {
     setLogoStatus("");
     containerUiState = new WeakMap();
     objectUiState = new WeakMap();
+    sectionUiState = new Map();
+    initializeCollapsibleSections(true);
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
@@ -647,6 +651,8 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     }
     containerUiState = new WeakMap();
     objectUiState = new WeakMap();
+    sectionUiState = new Map();
+    initializeCollapsibleSections(true);
     setDirty(false);
     updateRoleBadge();
     applyPermissions();
@@ -1663,6 +1669,49 @@ function updateObjectToggleState(card, collapsed) {
   if (!toggleBtn) return;
   toggleBtn.setAttribute('aria-expanded', String(!collapsed));
   toggleBtn.textContent = collapsed ? 'Expandir' : 'Contraer';
+}
+
+function initializeCollapsibleSections(forceReset = false) {
+  if (typeof document === 'undefined') return;
+  const cards = document.querySelectorAll('[data-section-id]');
+  cards.forEach((card) => {
+    const sectionId = card.dataset.sectionId;
+    if (!sectionId) return;
+    if (forceReset || !sectionUiState.has(sectionId)) {
+      sectionUiState.set(sectionId, true);
+    }
+    applySectionCollapsedState(sectionId, sectionUiState.get(sectionId));
+    const toggleBtn = card.querySelector(`[data-section-toggle="${sectionId}"]`);
+    if (toggleBtn && !toggleBtn.dataset.boundSectionToggle) {
+      toggleBtn.addEventListener('click', () => toggleSectionCollapsed(sectionId));
+      toggleBtn.dataset.boundSectionToggle = 'true';
+    }
+  });
+}
+
+function toggleSectionCollapsed(sectionId) {
+  if (!sectionUiState.has(sectionId)) {
+    sectionUiState.set(sectionId, true);
+  }
+  const nextState = !sectionUiState.get(sectionId);
+  setSectionCollapsedState(sectionId, nextState);
+}
+
+function setSectionCollapsedState(sectionId, collapsed) {
+  sectionUiState.set(sectionId, !!collapsed);
+  applySectionCollapsedState(sectionId, !!collapsed);
+}
+
+function applySectionCollapsedState(sectionId, collapsed) {
+  if (typeof document === 'undefined') return;
+  const card = document.querySelector(`[data-section-id="${sectionId}"]`);
+  if (!card) return;
+  card.classList.toggle('collapsed', collapsed);
+  const toggleBtn = card.querySelector(`[data-section-toggle="${sectionId}"]`);
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    toggleBtn.textContent = collapsed ? 'Expandir' : 'Contraer';
+  }
 }
 
 function formatContainerTitle(title, index) {
