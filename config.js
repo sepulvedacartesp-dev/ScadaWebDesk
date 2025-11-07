@@ -294,6 +294,7 @@ function attachStaticHandlers() {
   dom.plantAccessList?.addEventListener("input", handlePlantAccessChange);
   dom.plantAccessList?.addEventListener("change", handlePlantAccessChange);
   dom.plantAccessList?.addEventListener("click", handlePlantAccessClick);
+  document.addEventListener("click", handleSectionToggleClick);
   dom.mainTitle?.addEventListener("input", (event) => {
     state.config.mainTitle = event.target.value;
     setDirty(true);
@@ -2054,6 +2055,15 @@ function handleContainersFilterChange(event) {
   const value = event?.target?.value || "";
   state.currentPlantId = value ? value.toLowerCase() : null;
   renderContainers();
+}
+
+function handleSectionToggleClick(event) {
+  const toggleBtn = event.target.closest('[data-section-toggle]');
+  if (!toggleBtn) return;
+  const sectionId = toggleBtn.dataset.sectionToggle;
+  if (!sectionId) return;
+  event.preventDefault();
+  toggleSectionCollapsed(sectionId);
 }
 
 function addObject(containerIndex, type = 'level') {
