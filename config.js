@@ -264,8 +264,6 @@ const logoButtonDefaultText = dom.uploadLogoBtn?.dataset.label || dom.uploadLogo
 
 let containerUiState = new WeakMap();
 let objectUiState = new WeakMap();
-let sectionUiState = new Map();
-
 
 document.addEventListener("DOMContentLoaded", () => {
   attachStaticHandlers();
@@ -294,7 +292,6 @@ function attachStaticHandlers() {
   dom.plantAccessList?.addEventListener("input", handlePlantAccessChange);
   dom.plantAccessList?.addEventListener("change", handlePlantAccessChange);
   dom.plantAccessList?.addEventListener("click", handlePlantAccessClick);
-  document.addEventListener("click", handleSectionToggleClick);
   dom.mainTitle?.addEventListener("input", (event) => {
     state.config.mainTitle = event.target.value;
     setDirty(true);
@@ -571,7 +568,6 @@ async function onAuthStateChanged(user) {
     setLogoStatus("");
     containerUiState = new WeakMap();
     objectUiState = new WeakMap();
-    sectionUiState = new Map();
     initializeCollapsibleSections(true);
     setDirty(false);
     updateRoleBadge();
@@ -652,7 +648,6 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     }
     containerUiState = new WeakMap();
     objectUiState = new WeakMap();
-    sectionUiState = new Map();
     initializeCollapsibleSections(true);
     setDirty(false);
     updateRoleBadge();
@@ -1678,41 +1673,32 @@ function initializeCollapsibleSections(forceReset = false) {
   cards.forEach((card) => {
     const sectionId = card.dataset.sectionId;
     if (!sectionId) return;
-    if (forceReset || !sectionUiState.has(sectionId)) {
-      sectionUiState.set(sectionId, true);
+    if (forceReset) {
+      card.classList.add('collapsed');
     }
-    applySectionCollapsedState(sectionId, sectionUiState.get(sectionId));
     const toggleBtn = card.querySelector(`[data-section-toggle="${sectionId}"]`);
-    if (toggleBtn && !toggleBtn.dataset.boundSectionToggle) {
-      toggleBtn.addEventListener('click', () => toggleSectionCollapsed(sectionId));
+    if (!toggleBtn) return;
+    updateSectionToggleUi(toggleBtn, card.classList.contains('collapsed'));
+    if (!toggleBtn.dataset.boundSectionToggle) {
+      toggleBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleCollapsibleSection(card, toggleBtn);
+      });
       toggleBtn.dataset.boundSectionToggle = 'true';
     }
   });
 }
 
-function toggleSectionCollapsed(sectionId) {
-  if (!sectionUiState.has(sectionId)) {
-    sectionUiState.set(sectionId, true);
-  }
-  const nextState = !sectionUiState.get(sectionId);
-  setSectionCollapsedState(sectionId, nextState);
+function toggleCollapsibleSection(card, toggleBtn) {
+  if (!card || !toggleBtn) return;
+  const collapsed = card.classList.toggle('collapsed');
+  updateSectionToggleUi(toggleBtn, collapsed);
 }
 
-function setSectionCollapsedState(sectionId, collapsed) {
-  sectionUiState.set(sectionId, !!collapsed);
-  applySectionCollapsedState(sectionId, !!collapsed);
-}
-
-function applySectionCollapsedState(sectionId, collapsed) {
-  if (typeof document === 'undefined') return;
-  const card = document.querySelector(`[data-section-id="${sectionId}"]`);
-  if (!card) return;
-  card.classList.toggle('collapsed', collapsed);
-  const toggleBtn = card.querySelector(`[data-section-toggle="${sectionId}"]`);
-  if (toggleBtn) {
-    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
-    toggleBtn.textContent = collapsed ? 'Expandir' : 'Contraer';
-  }
+function updateSectionToggleUi(toggleBtn, collapsed) {
+  if (!toggleBtn) return;
+  toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+  toggleBtn.textContent = collapsed ? 'Expandir' : 'Contraer';
 }
 
 function formatContainerTitle(title, index) {
@@ -2055,15 +2041,6 @@ function handleContainersFilterChange(event) {
   const value = event?.target?.value || "";
   state.currentPlantId = value ? value.toLowerCase() : null;
   renderContainers();
-}
-
-function handleSectionToggleClick(event) {
-  const toggleBtn = event.target.closest('[data-section-toggle]');
-  if (!toggleBtn) return;
-  const sectionId = toggleBtn.dataset.sectionToggle;
-  if (!sectionId) return;
-  event.preventDefault();
-  toggleSectionCollapsed(sectionId);
 }
 
 function addObject(containerIndex, type = 'level') {
