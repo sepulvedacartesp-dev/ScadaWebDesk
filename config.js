@@ -1508,7 +1508,7 @@ function renderContainers() {
 function ensureContainerUiState(container) {
   if (!container || typeof container !== "object") return;
   if (!containerUiState.has(container)) {
-    containerUiState.set(container, { collapsed: false });
+    containerUiState.set(container, { collapsed: true });
   }
 }
 
@@ -1535,7 +1535,7 @@ function updateContainerToggleState(card, collapsed) {
 function ensureObjectUiState(object) {
   if (!object || typeof object !== 'object') return;
   if (!objectUiState.has(object)) {
-    objectUiState.set(object, { collapsed: false });
+    objectUiState.set(object, { collapsed: true });
   }
 }
 
