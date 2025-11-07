@@ -8,6 +8,7 @@ import asyncio
 import logging
 import re
 import uuid
+import copy
 import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import List, Optional, Dict, Any, Set
@@ -98,6 +99,26 @@ def sanitize_broker_key(raw: Optional[str]) -> str:
     sanitized = sanitized.strip('_')
     if not sanitized:
         raise ValueError("Broker no definido")
+    return sanitized
+
+
+def sanitize_plant_id(raw: Optional[str]) -> str:
+    if raw is None:
+        raise ValueError("Planta no definida")
+    sanitized = re.sub(r'[^A-Za-z0-9_-]+', '_', str(raw).strip())
+    sanitized = sanitized.strip('_').lower()
+    if not sanitized:
+        raise ValueError("Planta no definida")
+    return sanitized
+
+
+def sanitize_serial_code(raw: Optional[str]) -> str:
+    if raw is None:
+        raise ValueError("Codigo de serie no definido")
+    sanitized = re.sub(r'[^A-Za-z0-9_-]+', '_', str(raw).strip())
+    sanitized = sanitized.strip('_')
+    if not sanitized:
+        raise ValueError("Codigo de serie no definido")
     return sanitized
 
 
@@ -909,12 +930,164 @@ def try_decode(b: bytes) -> Any:
         return {"_binary_base64": base64.b64encode(b).decode("ascii")}
 
 
+def default_plants_for_company(company_id: str) -> List[Dict[str, Any]]:
+    serial = sanitize_serial_code(company_id)
+    return [{
+        "id": "general",
+        "name": "Planta General",
+        "serialCode": serial,
+        "description": "",
+        "active": True,
+        "isDefault": True,
+    }]
+
+
+def normalize_plants(raw_plants: Any, company_id: str) -> List[Dict[str, Any]]:
+    if not isinstance(raw_plants, list):
+        raw_plants = []
+    normalized: List[Dict[str, Any]] = []
+    seen_ids: Set[str] = set()
+    seen_serials: Set[str] = set()
+    for idx, entry in enumerate(raw_plants):
+        if not isinstance(entry, dict):
+            continue
+        name = coerce_str(entry.get("name"), "")
+        raw_id = entry.get("id") or entry.get("plantId") or name or f"plant_{idx + 1}"
+        try:
+            plant_id = sanitize_plant_id(raw_id)
+        except ValueError:
+            plant_id = sanitize_plant_id(f"plant_{idx + 1}")
+        raw_serial = entry.get("serialCode") or entry.get("serial") or entry.get("serie") or plant_id
+        try:
+            serial_code = sanitize_serial_code(raw_serial)
+        except ValueError:
+            serial_code = sanitize_serial_code(plant_id)
+        if plant_id in seen_ids:
+            raise ValueError(f"Plant ID duplicado: {plant_id}")
+        if serial_code in seen_serials:
+            raise ValueError(f"serialCode duplicado: {serial_code}")
+        seen_ids.add(plant_id)
+        seen_serials.add(serial_code)
+        normalized_entry = dict(entry)
+        normalized_entry["id"] = plant_id
+        normalized_entry["name"] = name or plant_id
+        normalized_entry["serialCode"] = serial_code
+        normalized_entry["description"] = coerce_str(entry.get("description"), "")
+        normalized_entry["active"] = coerce_bool(entry.get("active"), True)
+        normalized.append(normalized_entry)
+    if not normalized:
+        return default_plants_for_company(company_id)
+    return normalized
+
+
+def normalize_plant_assignments(raw_assignments: Any, plants: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+    if not isinstance(raw_assignments, dict):
+        raw_assignments = {}
+    valid_ids = {plant["id"] for plant in plants}
+    normalized: Dict[str, List[str]] = {}
+    for email, raw_ids in raw_assignments.items():
+        if not email:
+            continue
+        email_key = str(email).strip().lower()
+        if not email_key:
+            continue
+        candidates: List[str]
+        if isinstance(raw_ids, str):
+            candidates = [raw_ids]
+        elif isinstance(raw_ids, list):
+            candidates = [str(item).strip() for item in raw_ids]
+        else:
+            continue
+        filtered: List[str] = []
+        for candidate in candidates:
+            if not candidate:
+                continue
+            candidate_id = candidate.lower()
+            if candidate_id in valid_ids:
+                filtered.append(candidate_id)
+        if filtered:
+            normalized[email_key] = sorted(dict.fromkeys(filtered))
+    return normalized
+
+
+def normalize_container_plants(raw_containers: Any, plants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    containers = raw_containers if isinstance(raw_containers, list) else []
+    if not plants:
+        return [dict(container) for container in containers if isinstance(container, dict)]
+    valid_ids = [plant["id"] for plant in plants]
+    default_id = valid_ids[0]
+    normalized: List[Dict[str, Any]] = []
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        normalized_container = dict(container)
+        raw_id = container.get("plantId") or container.get("plant") or default_id
+        plant_id = str(raw_id).strip().lower() if isinstance(raw_id, str) else str(raw_id or default_id).strip().lower()
+        if plant_id not in valid_ids:
+            plant_id = default_id
+        normalized_container["plantId"] = plant_id
+        normalized.append(normalized_container)
+    return normalized
+
+
+def plant_lookup(plants: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    return {plant["id"]: plant for plant in plants}
+
+
+def resolve_user_plant_ids(
+    cfg: Dict[str, Any],
+    email: Optional[str],
+    role: Optional[str],
+    is_master: bool,
+) -> List[str]:
+    plants = cfg.get("plants") or []
+    if not plants:
+        return []
+    lookup = plant_lookup(plants)
+    if is_master or role == "admin":
+        return list(lookup.keys())
+    assignments = cfg.get("plantAssignments") or {}
+    if not isinstance(assignments, dict) or not assignments:
+        return list(lookup.keys())
+    if not email:
+        return []
+    email_key = email.lower()
+    if not email_key:
+        return []
+    assigned = assignments.get(email_key)
+    if assigned:
+        return [plant_id for plant_id in assigned if plant_id in lookup]
+    return []
+
+
+def normalize_requested_plant_ids(
+    requested: Optional[List[str]],
+    plants: List[Dict[str, Any]],
+) -> Optional[List[str]]:
+    if requested is None:
+        return None
+    if not isinstance(requested, list):
+        requested = [requested]
+    lookup = plant_lookup(plants)
+    normalized: List[str] = []
+    for item in requested:
+        if item is None:
+            continue
+        candidate = str(item).strip().lower()
+        if not candidate or candidate not in lookup:
+            continue
+        normalized.append(candidate)
+    return sorted(dict.fromkeys(normalized))
+
+
 def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(data, dict):
         return {
             "mainTitle": "SCADA Web",
             "roles": {"admins": [], "operators": [], "viewers": []},
-            "containers": []
+            "containers": [],
+            "plants": default_plants_for_company(DEFAULT_COMPANY_ID),
+            "plantAssignments": {},
         }
     result = dict(data)
     empresa_candidate = result.get("empresaId") or result.get("empresa_id") or result.get("companyId") or result.get("company_id")
@@ -939,10 +1112,10 @@ def normalize_config(data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             normalized_roles[key] = []
     result["roles"] = normalized_roles
-    containers = result.get("containers")
-    if not isinstance(containers, list):
-        containers = []
-    result["containers"] = containers
+    plants = normalize_plants(result.get("plants"), result["empresaId"])
+    result["plants"] = plants
+    result["plantAssignments"] = normalize_plant_assignments(result.get("plantAssignments"), plants)
+    result["containers"] = normalize_container_plants(result.get("containers"), plants)
     return result
 
 
@@ -1190,7 +1363,13 @@ def normalize_role_lists(cfg: Dict[str, Any]) -> Dict[str, List[str]]:
             normalized[key] = []
     return normalized
 
-def apply_role_to_config(company_id: str, email: str, role: str, actor_email: Optional[str]) -> None:
+def apply_role_to_config(
+    company_id: str,
+    email: str,
+    role: str,
+    actor_email: Optional[str],
+    plant_ids: Optional[List[str]] = None,
+) -> None:
     cfg = load_scada_config(company_id)
     normalized = normalize_config(cfg)
     roles = normalize_role_lists(normalized)
@@ -1201,6 +1380,17 @@ def apply_role_to_config(company_id: str, email: str, role: str, actor_email: Op
     roles[target_key].append(email.strip())
     roles[target_key] = sorted(dict.fromkeys(roles[target_key]), key=lambda item: item.lower())
     normalized["roles"] = roles
+    normalized_plants = normalized.get("plants", [])
+    assignment_map = normalized.get("plantAssignments", {})
+    if not isinstance(assignment_map, dict):
+        assignment_map = {}
+    normalized_selection = normalize_requested_plant_ids(plant_ids, normalized_plants)
+    if normalized_selection is not None:
+        if normalized_selection:
+            assignment_map[lower_email] = normalized_selection
+        elif lower_email in assignment_map:
+            assignment_map.pop(lower_email, None)
+    normalized["plantAssignments"] = assignment_map
     normalized["empresaId"] = company_id
     save_scada_config(normalized, company_id, actor_email or "system")
 
@@ -1220,6 +1410,10 @@ def remove_user_from_config(company_id: str, email: Optional[str], actor_email: 
     if not changed:
         return
     normalized["roles"] = roles
+    assignments = normalized.get("plantAssignments") or {}
+    if isinstance(assignments, dict):
+        assignments.pop(lower_email, None)
+        normalized["plantAssignments"] = assignments
     normalized["empresaId"] = company_id
     save_scada_config(normalized, company_id, actor_email or "system")
 
@@ -1293,9 +1487,17 @@ def send_password_reset_email(email: str, continue_url: Optional[str]) -> bool:
 
 
 
-def users_from_roles_snapshot(company_id: str, roles: Dict[str, List[str]]) -> List[Dict[str, Any]]:
+def users_from_roles_snapshot(
+    company_id: str,
+    roles: Dict[str, List[str]],
+    cfg: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     snapshot: List[Dict[str, Any]] = []
     seen: Set[str] = set()
+    cfg = cfg or {}
+    plants = cfg.get("plants") or []
+    lookup = plant_lookup(plants) if plants else {}
+    assignments = cfg.get("plantAssignments") if isinstance(cfg.get("plantAssignments"), dict) else {}
     for role_name, key in ROLE_KEY_MAP.items():
         for email in roles.get(key, []):
             stripped = str(email).strip()
@@ -1305,6 +1507,16 @@ def users_from_roles_snapshot(company_id: str, roles: Dict[str, List[str]]) -> L
             if lower in seen:
                 continue
             seen.add(lower)
+            if lookup:
+                if assignments:
+                    assigned = assignments.get(lower, [])
+                    plant_ids = [pid for pid in assigned if pid in lookup]
+                else:
+                    plant_ids = list(lookup.keys())
+            else:
+                plant_ids = []
+            plant_serials = [lookup[pid]["serialCode"] for pid in plant_ids if pid in lookup]
+            plant_names = [lookup[pid]["name"] for pid in plant_ids if pid in lookup]
             snapshot.append({
                 "uid": None,
                 "email": stripped,
@@ -1316,6 +1528,9 @@ def users_from_roles_snapshot(company_id: str, roles: Dict[str, List[str]]) -> L
                 "createdAt": None,
                 "lastLoginAt": None,
                 "isMasterAdmin": False,
+                "plantIds": plant_ids,
+                "plantSerials": plant_serials,
+                "plantNames": plant_names,
                 "source": "roles",
             })
     snapshot.sort(key=lambda item: item["email"].lower())
@@ -1334,11 +1549,12 @@ def list_company_users(company_id: str) -> List[Dict[str, Any]]:
         page = firebase_auth.list_users(app=firebase_app)
     except firebase_exceptions.FirebaseError as exc:
         logger.warning("No se pudo listar usuarios desde Firebase: %s", exc)
-        return users_from_roles_snapshot(company_id, roles)
+        return users_from_roles_snapshot(company_id, roles, normalized)
     except Exception as exc:
         logger.exception("Fallo inesperado al listar usuarios para %s: %s", company_id, exc)
-        return users_from_roles_snapshot(company_id, roles)
+        return users_from_roles_snapshot(company_id, roles, normalized)
     role_lookup: Dict[str, str] = {}
+    lookup_plants = plant_lookup(normalized.get("plants", []) or [])
     for role_name, key in ROLE_KEY_MAP.items():
         for email in roles.get(key, []):
             lower = email.lower()
@@ -1367,6 +1583,9 @@ def list_company_users(company_id: str) -> List[Dict[str, Any]]:
             if not role and email:
                 role = role_lookup.get(email.lower(), "operador")
             role = role or "operador"
+            plant_ids = resolve_user_plant_ids(normalized, email, role, False)
+            plant_serials = [lookup_plants[pid]["serialCode"] for pid in plant_ids if pid in lookup_plants]
+            plant_names = [lookup_plants[pid]["name"] for pid in plant_ids if pid in lookup_plants]
             metadata = getattr(user, "user_metadata", None)
             created_at = firebase_timestamp_to_iso(getattr(metadata, "creation_timestamp", None)) if metadata else None
             last_login = firebase_timestamp_to_iso(getattr(metadata, "last_sign_in_timestamp", None)) if metadata else None
@@ -1381,6 +1600,9 @@ def list_company_users(company_id: str) -> List[Dict[str, Any]]:
                 "createdAt": created_at,
                 "lastLoginAt": last_login,
                 "isMasterAdmin": bool(custom_claims.get("isMasterAdmin") or custom_claims.get("masterAdmin") or custom_claims.get("superAdmin") or custom_claims.get("isSuperUser")),
+                "plantIds": plant_ids,
+                "plantSerials": plant_serials,
+                "plantNames": plant_names,
             })
         page = page.get_next_page() if hasattr(page, "get_next_page") else None
     results.sort(key=lambda item: item.get("email", "").lower())
@@ -1404,7 +1626,10 @@ def validate_config_payload(data: Dict[str, Any]) -> Dict[str, Any]:
             topic = obj.get("topic")
             if topic is not None and not isinstance(topic, str):
                 raise HTTPException(status_code=400, detail=f"El topic del objeto {o_idx} del contenedor {c_idx} debe ser texto")
-    return normalize_config(data)
+    try:
+        return normalize_config(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ---- WebSocket connection manager ----
@@ -1563,15 +1788,40 @@ def resolve_company_access(decoded: Dict[str, Any], requested_empresa: Optional[
             return requested
         raise HTTPException(status_code=403, detail="Usuario no autorizado para la empresa solicitada")
     return extract_company_id(decoded)
-def allowed_prefixes_for_user(uid: str, company_id: Optional[str]) -> List[str]:
+def allowed_prefixes_for_user(
+    uid: str,
+    company_id: Optional[str],
+    decoded: Optional[Dict[str, Any]] = None,
+    cfg: Optional[Dict[str, Any]] = None,
+) -> List[str]:
     base = TOPIC_BASE.rstrip("/")
-    if company_id:
-        scoped = f"{base}/{company_id}"
+    if not company_id:
+        combined = [f"{base}/{uid}"]
+        combined.extend(PUBLIC_ALLOWED_PREFIXES)
+        return combined
+    config = cfg or load_scada_config(company_id)
+    email = decoded.get("email") if decoded else None
+    is_master = is_master_admin(decoded) if decoded else False
+    role = "admin" if is_master else role_for_email(config, email)
+    allowed_ids = resolve_user_plant_ids(config, email, role, is_master)
+    scoped_prefixes: List[str] = []
+    if is_master or role == "admin":
+        scoped_prefixes.append(f"{base}/{company_id}")
     else:
-        scoped = f"{base}/{uid}"
-    prefixes = [scoped]
-    prefixes.extend(PUBLIC_ALLOWED_PREFIXES)
-    return prefixes
+        lookup = plant_lookup(config.get("plants", []) or [])
+        for plant_id in allowed_ids:
+            plant = lookup.get(plant_id)
+            if not plant:
+                continue
+            serial = plant.get("serialCode")
+            if not serial:
+                continue
+            scoped_prefixes.append(f"{base}/{company_id}/{serial}")
+    if not scoped_prefixes and not (is_master or role == "admin"):
+        return []
+    combined = list(scoped_prefixes)
+    combined.extend(PUBLIC_ALLOWED_PREFIXES)
+    return combined
 
 def ensure_mqtt_connected(broker_key: Optional[str]):
     broker_manager.ensure_connected(broker_key)
@@ -1597,12 +1847,26 @@ def get_config_endpoint(authorization: Optional[str] = Header(None), empresa_id:
     role = "admin" if is_master else role_for_email(cfg, email)
     lower_email = email.lower() if isinstance(email, str) else None
     can_access_cotizador = bool(lower_email and lower_email in ADMIN_EMAILS_LOWER)
+    allowed_plant_ids = resolve_user_plant_ids(cfg, email, role, is_master)
+    allowed_set = set(allowed_plant_ids)
+    if is_master or role == "admin":
+        visible_cfg = cfg
+    else:
+        visible_cfg = copy.deepcopy(cfg)
+        visible_cfg["containers"] = [
+            container for container in visible_cfg.get("containers", []) if container.get("plantId") in allowed_set
+        ]
+        visible_cfg["plants"] = [plant for plant in visible_cfg.get("plants", []) if plant.get("id") in allowed_set]
+        visible_cfg["plantAssignments"] = {}
+    accessible_plants = [plant for plant in cfg.get("plants", []) if plant.get("id") in allowed_set] if allowed_set else []
     return {
-        "config": cfg,
+        "config": visible_cfg,
         "role": role,
         "empresaId": company_id,
         "isMaster": is_master,
         "canAccessCotizador": can_access_cotizador,
+        "accessiblePlants": allowed_plant_ids,
+        "plants": accessible_plants,
     }
 
 
@@ -2340,6 +2604,7 @@ class UserCreate(BaseModel):
     empresaId: Optional[str] = None
     role: Optional[str] = "operador"
     sendInvite: bool = True
+    plantIds: Optional[List[str]] = None
 
 
 class UserResetRequest(BaseModel):
@@ -2482,6 +2747,7 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
         raise HTTPException(status_code=400, detail="empresaId requerido")
     company_id = ensure_company_admin(decoded, target)
     role = sanitize_user_role(payload.role)
+    requested_plants = payload.plantIds
     email = payload.email.strip().lower()
     if not email:
         raise HTTPException(status_code=400, detail="email requerido")
@@ -2513,7 +2779,7 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
             logger.exception("No se pudo revertir usuario creado %s", email)
         raise HTTPException(status_code=502, detail=f"No se pudo asignar claims al usuario: {exc}") from exc
     try:
-        apply_role_to_config(company_id, email, role, actor_email)
+        apply_role_to_config(company_id, email, role, actor_email, plant_ids=requested_plants)
     except Exception as exc:
         logger.exception("No se pudo actualizar roles para %s: %s", email, exc)
         try:
@@ -2533,6 +2799,11 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
     invite_sent = False
     if payload.sendInvite and reset_link:
         invite_sent = send_password_reset_email(email, None)
+    cfg_after = load_scada_config(company_id)
+    assigned_plant_ids = resolve_user_plant_ids(cfg_after, email, role, False)
+    plants_lookup = plant_lookup(cfg_after.get("plants", []) or [])
+    plant_serials = [plants_lookup[pid]["serialCode"] for pid in assigned_plant_ids if pid in plants_lookup]
+    plant_names = [plants_lookup[pid]["name"] for pid in assigned_plant_ids if pid in plants_lookup]
     logger.info("Usuario %s creado en empresa %s por %s role=%s", email, company_id, actor_email, role)
     return {
         "user": {
@@ -2544,6 +2815,9 @@ def create_user_endpoint(payload: UserCreate, authorization: Optional[str] = Hea
             "disabled": bool(user_record.disabled),
             "createdAt": created_at,
             "lastLoginAt": last_login,
+            "plantIds": assigned_plant_ids,
+            "plantSerials": plant_serials,
+            "plantNames": plant_names,
         },
         "resetLink": reset_link,
         "inviteSent": invite_sent,
@@ -2618,8 +2892,12 @@ def publish(p: PublishIn, authorization: Optional[str] = Header(None)):
     uid = decoded["uid"]
     company_id = extract_company_id(decoded)
     broker_key = broker_key_for_company(company_id)
-    allowed = [x.rstrip("/") + "/" for x in allowed_prefixes_for_user(uid, company_id)]
-    if not any(p.topic.startswith(pref) for pref in allowed):
+    cfg = load_scada_config(company_id)
+    prefixes = allowed_prefixes_for_user(uid, company_id, decoded=decoded, cfg=cfg)
+    normalized_prefixes = [x.rstrip("/") + "/" for x in prefixes]
+    if not normalized_prefixes:
+        raise HTTPException(status_code=403, detail="Usuario sin plantas asignadas")
+    if not any(p.topic.startswith(pref) for pref in normalized_prefixes):
         raise HTTPException(status_code=403, detail=f"Topic not allowed for user {uid} en empresa {company_id}")
     ensure_mqtt_connected(broker_key)
     payload = p.payload
@@ -2652,7 +2930,12 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
     uid = decoded["uid"]
     company_id = extract_company_id(decoded)
     broker_key = broker_key_for_company(company_id)
-    prefixes = allowed_prefixes_for_user(uid, company_id)
+    cfg = load_scada_config(company_id)
+    prefixes = allowed_prefixes_for_user(uid, company_id, decoded=decoded, cfg=cfg)
+    if not prefixes:
+        await websocket.send_json({"type": "error", "error": "Usuario sin plantas asignadas"})
+        await websocket.close(code=4403)
+        return
     try:
         ensure_mqtt_connected(broker_key)
     except HTTPException as exc:

@@ -167,6 +167,7 @@ const state = {
   alarmLoading: false,
   alarmSaving: false,
   config: createEmptyConfig(),
+  plantAccessEntries: [],
 };
 
 const dom = {
@@ -208,6 +209,14 @@ const dom = {
   alarmResetBtn: document.getElementById("alarm-reset-btn"),
   alarmTableBody: document.getElementById("alarm-table-body"),
   alarmEmpty: document.getElementById("alarm-empty"),
+  addPlantBtn: document.getElementById("add-plant"),
+  plantsList: document.getElementById("plants-list"),
+  plantsEmpty: document.getElementById("plants-empty"),
+  plantTemplate: document.getElementById("plant-template"),
+  addPlantAccessBtn: document.getElementById("add-plant-access"),
+  plantAccessList: document.getElementById("plant-access-list"),
+  plantAccessEmpty: document.getElementById("plant-access-empty"),
+  plantAccessTemplate: document.getElementById("plant-access-template"),
   addContainer: document.getElementById("add-container"),
   expandCollapse: document.getElementById("expand-collapse"),
   containersList: document.getElementById("containers-list"),
@@ -229,6 +238,7 @@ const dom = {
   userEmail: document.getElementById("user-email"),
   userRole: document.getElementById("user-role"),
   userSendInvite: document.getElementById("user-send-invite"),
+  userPlants: document.getElementById("user-plants"),
   userFormStatus: document.getElementById("user-form-status"),
   userSubmitBtn: document.getElementById("user-submit-btn"),
   cancelUserForm: document.getElementById("cancel-user-form"),
@@ -268,6 +278,16 @@ function attachStaticHandlers() {
     setDirty(true);
   });
   dom.expandCollapse?.addEventListener("click", toggleAllContainers);
+  dom.addPlantBtn?.addEventListener("click", () => {
+    addPlant();
+    setDirty(true);
+  });
+  dom.plantsList?.addEventListener("input", handlePlantListInput);
+  dom.plantsList?.addEventListener("click", handlePlantListClick);
+  dom.addPlantAccessBtn?.addEventListener("click", addPlantAccessEntry);
+  dom.plantAccessList?.addEventListener("input", handlePlantAccessChange);
+  dom.plantAccessList?.addEventListener("change", handlePlantAccessChange);
+  dom.plantAccessList?.addEventListener("click", handlePlantAccessClick);
   dom.mainTitle?.addEventListener("input", (event) => {
     state.config.mainTitle = event.target.value;
     setDirty(true);
@@ -318,6 +338,7 @@ function attachStaticHandlers() {
   dom.toggleUserForm?.addEventListener("click", () => toggleUserForm());
   dom.cancelUserForm?.addEventListener("click", () => toggleUserForm(false));
   dom.userForm?.addEventListener("submit", submitUserForm);
+  dom.userRole?.addEventListener("change", handleUserRoleChange);
   dom.userList?.addEventListener("click", handleUserListClick);
   dom.refreshUsersBtn?.addEventListener("click", () => loadUsers(true));
   dom.alarmForm?.addEventListener("submit", handleAlarmFormSubmit);
@@ -614,6 +635,9 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     }
     state.config = config;
     state.config.empresaId = state.empresaId;
+    if (!state.config.plantAssignments || typeof state.config.plantAssignments !== "object") {
+      state.config.plantAssignments = {};
+    }
     containerUiState = new WeakMap();
     objectUiState = new WeakMap();
     setDirty(false);
@@ -1083,6 +1107,8 @@ function renderAll() {
   renderGeneralSection();
   renderRolesSection();
   renderAlarmSection();
+  renderPlants();
+  renderPlantAccess();
   renderContainers();
   renderUserList();
 }
@@ -1108,6 +1134,319 @@ function renderRolesSection() {
     dom.rolesViewers.value = (roles.viewers || []).join("\n");
     dom.rolesViewers.disabled = !state.canEdit;
   }
+}
+
+function ensurePlantCollection() {
+  if (!Array.isArray(state.config.plants)) {
+    state.config.plants = [];
+  }
+  if (!state.config.plants.length) {
+    const fallbackId = slugifyPlantId(`${state.empresaId || "planta"}_general`, "planta_general");
+    state.config.plants.push({
+      id: fallbackId,
+      name: "Planta General",
+      serialCode: (state.empresaId || "general").toLowerCase(),
+      description: "",
+      active: true,
+    });
+  }
+  return state.config.plants;
+}
+
+function getPlantList() {
+  return ensurePlantCollection();
+}
+
+function getDefaultPlantId() {
+  const plants = ensurePlantCollection();
+  return plants[0]?.id || "planta_general";
+}
+
+function populatePlantSelect(selectNode, selectedId) {
+  if (!selectNode) return;
+  const plants = getPlantList();
+  selectNode.innerHTML = "";
+  plants.forEach((plant) => {
+    const option = document.createElement("option");
+    option.value = plant.id;
+    option.textContent = plant.serialCode ? `${plant.name} (${plant.serialCode})` : plant.name;
+    option.selected = plant.id === selectedId;
+    selectNode.appendChild(option);
+  });
+  if (!plants.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Sin plantas";
+    selectNode.appendChild(option);
+  }
+}
+
+function populatePlantMultiSelect(selectNode, selectedIds) {
+  if (!selectNode) return;
+  const normalized = Array.isArray(selectedIds)
+    ? selectedIds.map((item) => String(item).toLowerCase())
+    : [];
+  populatePlantSelect(selectNode, null);
+  Array.from(selectNode.options).forEach((option) => {
+    option.selected = normalized.includes(option.value);
+  });
+}
+
+function populateUserPlantsOptions(selectedIds = []) {
+  if (!dom.userPlants) return;
+  populatePlantMultiSelect(dom.userPlants, selectedIds);
+  handleUserRoleChange();
+}
+
+function addPlant() {
+  const plants = getPlantList();
+  const prefix = slugifyPlantId(state.empresaId || "planta", "planta");
+  let counter = plants.length + 1;
+  let candidate = slugifyPlantId(`${prefix}_${counter}`, `${prefix}_${Date.now()}`);
+  const ids = new Set(plants.map((plant) => plant.id));
+  while (ids.has(candidate)) {
+    counter += 1;
+    candidate = slugifyPlantId(`${prefix}_${counter}`);
+  }
+  plants.push({
+    id: candidate,
+    name: `Planta ${plants.length + 1}`,
+    serialCode: `${prefix}_${counter}`,
+    description: "",
+    active: true,
+  });
+  renderPlants();
+  renderPlantAccess();
+  renderContainers();
+  populateUserPlantsOptions();
+  setDirty(true);
+}
+
+function plantInUse(plantId) {
+  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
+  const assignments = state.config.plantAssignments || {};
+  const usedInContainers = containers.some(
+    (container) => (container.plantId || "").toLowerCase() === plantId
+  );
+  const usedInAssignments = Object.values(assignments).some((list) =>
+    Array.isArray(list) && list.includes(plantId)
+  );
+  return usedInContainers || usedInAssignments;
+}
+
+function updatePlantReferences(oldId, newId) {
+  if (!oldId || oldId === newId) return;
+  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
+  containers.forEach((container) => {
+    if ((container.plantId || "").toLowerCase() === oldId) {
+      container.plantId = newId;
+    }
+  });
+  const assignments = state.config.plantAssignments || {};
+  Object.keys(assignments).forEach((email) => {
+    assignments[email] = assignments[email].map((pid) => (pid === oldId ? newId : pid));
+  });
+}
+
+function removePlant(index) {
+  const plants = getPlantList();
+  if (plants.length <= 1) {
+    alert("Debes mantener al menos una planta.");
+    return;
+  }
+  const target = plants[index];
+  if (!target) return;
+  if (plantInUse(target.id)) {
+    alert("No puedes eliminar una planta que esta en uso por contenedores o usuarios.");
+    return;
+  }
+  plants.splice(index, 1);
+  const fallbackId = getDefaultPlantId();
+  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
+  containers.forEach((container) => {
+    if ((container.plantId || "").toLowerCase() === target.id) {
+      container.plantId = fallbackId;
+    }
+  });
+  renderPlants();
+  renderPlantAccess();
+  renderContainers();
+  populateUserPlantsOptions();
+  setDirty(true);
+}
+
+function renderPlants() {
+  if (!dom.plantsList || !dom.plantTemplate) return;
+  const plants = getPlantList();
+  dom.plantsList.innerHTML = "";
+  if (!plants.length) {
+    dom.plantsEmpty.hidden = false;
+    return;
+  }
+  dom.plantsEmpty.hidden = true;
+  plants.forEach((plant, index) => {
+    const node = dom.plantTemplate.content.firstElementChild.cloneNode(true);
+    node.dataset.plantIndex = String(index);
+    node.querySelector('[data-field="name"]').value = plant.name || "";
+    node.querySelector('[data-field="id"]').value = plant.id;
+    node.querySelector('[data-field="serialCode"]').value = plant.serialCode || "";
+    node.querySelector('[data-field="description"]').value = plant.description || "";
+    if (!state.canEdit) {
+      node.querySelectorAll("input, textarea, button").forEach((el) => el.setAttribute("disabled", ""));
+    } else if (plants.length <= 1) {
+      const removeBtn = node.querySelector('[data-action="remove-plant"]');
+      removeBtn?.setAttribute("disabled", "");
+    }
+    dom.plantsList.appendChild(node);
+  });
+  populateUserPlantsOptions();
+}
+
+function handlePlantListInput(event) {
+  const target = event.target;
+  const card = target?.closest("[data-plant-index]");
+  if (!card) return;
+  const index = Number(card.dataset.plantIndex);
+  const plants = getPlantList();
+  const plant = plants[index];
+  if (!plant || !state.canEdit) return;
+  const field = target.dataset.field;
+  if (field === "name") {
+    plant.name = target.value || "";
+  } else if (field === "id") {
+    const nextId = slugifyPlantId(target.value, plant.id);
+    if (!nextId) {
+      target.value = plant.id;
+      return;
+    }
+    if (plants.some((item, idx) => idx !== index && item.id === nextId)) {
+      alert("Ya existe una planta con ese identificador.");
+      target.value = plant.id;
+      return;
+    }
+    updatePlantReferences(plant.id, nextId);
+    plant.id = nextId;
+    target.value = nextId;
+  } else if (field === "serialCode") {
+    plant.serialCode = target.value.trim();
+  } else if (field === "description") {
+    plant.description = target.value || "";
+  }
+  setDirty(true);
+  renderPlantAccess();
+  renderContainers();
+  populateUserPlantsOptions();
+}
+
+function handlePlantListClick(event) {
+  const button = event.target.closest("[data-action]");
+  if (!button || !state.canEdit) return;
+  const card = button.closest("[data-plant-index]");
+  if (!card) return;
+  const index = Number(card.dataset.plantIndex);
+  if (button.dataset.action === "remove-plant") {
+    removePlant(index);
+  }
+}
+
+function sanitizeAssignmentsPlaceholders(assignments) {
+  const cleaned = {};
+  Object.entries(assignments || {}).forEach(([email, ids]) => {
+    if (email.startsWith("__temp_")) return;
+    cleaned[email] = Array.isArray(ids) ? ids : [];
+  });
+  return cleaned;
+}
+
+function renderPlantAccess() {
+  if (!dom.plantAccessList || !dom.plantAccessTemplate) return;
+  const assignments = state.config.plantAssignments || {};
+  const entries = Object.entries(assignments);
+  dom.plantAccessList.innerHTML = "";
+  if (!entries.length) {
+    dom.plantAccessEmpty.hidden = false;
+    return;
+  }
+  dom.plantAccessEmpty.hidden = true;
+  entries
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([email, plantIds], index) => {
+      const node = dom.plantAccessTemplate.content.firstElementChild.cloneNode(true);
+      node.dataset.accessIndex = String(index);
+      node.dataset.emailKey = email;
+      const emailInput = node.querySelector('[data-field="email"]');
+      if (emailInput) {
+        emailInput.value = email.startsWith("__temp_") ? "" : email;
+        emailInput.disabled = !state.canEdit;
+      }
+      const selectNode = node.querySelector('[data-field="plantIds"]');
+      if (selectNode) {
+        populatePlantMultiSelect(selectNode, Array.isArray(plantIds) ? plantIds : []);
+        selectNode.disabled = !state.canEdit;
+      }
+      const removeBtn = node.querySelector('[data-action="remove-access"]');
+      if (!state.canEdit) {
+        removeBtn?.setAttribute("disabled", "");
+      }
+      dom.plantAccessList.appendChild(node);
+    });
+}
+
+function addPlantAccessEntry() {
+  if (!state.canEdit) return;
+  const assignments = { ...(state.config.plantAssignments || {}) };
+  const tempKey = `__temp_${Date.now()}`;
+  assignments[tempKey] = [];
+  state.config.plantAssignments = assignments;
+  setDirty(true);
+  renderPlantAccess();
+}
+
+function handlePlantAccessChange(event) {
+  const target = event.target;
+  const card = target?.closest("[data-access-index]");
+  if (!card || !state.canEdit) return;
+  const assignments = { ...(state.config.plantAssignments || {}) };
+  const currentKey = card.dataset.emailKey;
+  if (!currentKey) return;
+  if (target.dataset.field === "email") {
+    const nextKey = target.value.trim().toLowerCase();
+    const existing = assignments[currentKey] || [];
+    delete assignments[currentKey];
+    if (nextKey) {
+      assignments[nextKey] = existing;
+      card.dataset.emailKey = nextKey;
+    } else {
+      const tempKey = `__temp_${Date.now()}`;
+      assignments[tempKey] = existing;
+      card.dataset.emailKey = tempKey;
+      target.value = "";
+    }
+    state.config.plantAssignments = assignments;
+    setDirty(true);
+    renderPlantAccess();
+    return;
+  }
+  if (target.dataset.field === "plantIds") {
+    const values = Array.from(target.selectedOptions).map((option) => option.value);
+    assignments[currentKey] = values;
+    state.config.plantAssignments = assignments;
+    setDirty(true);
+  }
+}
+
+function handlePlantAccessClick(event) {
+  const button = event.target.closest("[data-action]");
+  if (!button || !state.canEdit) return;
+  if (button.dataset.action !== "remove-access") return;
+  const card = button.closest("[data-access-index]");
+  if (!card) return;
+  const key = card.dataset.emailKey;
+  const assignments = { ...(state.config.plantAssignments || {}) };
+  delete assignments[key];
+  state.config.plantAssignments = assignments;
+  setDirty(true);
+  renderPlantAccess();
 }
 
 
@@ -1137,6 +1476,16 @@ function renderContainers() {
       });
     }
     heading.textContent = formatContainerTitle(container.title, index);
+    const plantSelect = card.querySelector('[data-field="plantId"]');
+    if (plantSelect) {
+      populatePlantSelect(plantSelect, container.plantId || getDefaultPlantId());
+      plantSelect.disabled = !state.canEdit;
+      plantSelect.addEventListener("change", (event) => {
+        const value = (event.target.value || "").trim().toLowerCase();
+        state.config.containers[index].plantId = value || getDefaultPlantId();
+        setDirty(true);
+      });
+    }
     const collapsed = isContainerCollapsed(container);
     card.classList.toggle('collapsed', collapsed);
     updateContainerToggleState(card, collapsed);
@@ -1684,7 +2033,15 @@ function applyPermissions() {
   if (typeof document !== 'undefined') {
     document.body?.classList.toggle('readonly', !canEdit);
   }
-  const editableButtons = [dom.saveBtn, dom.importBtn, dom.downloadBtn, dom.addContainer, dom.expandCollapse];
+  const editableButtons = [
+    dom.saveBtn,
+    dom.importBtn,
+    dom.downloadBtn,
+    dom.addContainer,
+    dom.expandCollapse,
+    dom.addPlantBtn,
+    dom.addPlantAccessBtn,
+  ];
   editableButtons.forEach((element) => {
     if (!element) return;
     if (canEdit) {
@@ -1769,6 +2126,75 @@ function handleImportFile(event) {
   reader.readAsText(file, "utf-8");
   event.target.value = "";
 }
+function slugifyPlantId(value, fallback = "") {
+  const source = typeof value === "string" ? value : fallback;
+  return source
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "") || fallback;
+}
+
+function normalizePlantList(raw, empresaId) {
+  const items = Array.isArray(raw) ? raw : [];
+  const normalized = [];
+  const seenIds = new Set();
+  const seenSerials = new Set();
+  items.forEach((entry, index) => {
+    if (!entry || typeof entry !== "object") return;
+    const idCandidate = entry.id || entry.plantId || entry.name || `planta_${index + 1}`;
+    let plantId = slugifyPlantId(idCandidate, `planta_${index + 1}`);
+    while (seenIds.has(plantId)) {
+      plantId = slugifyPlantId(`${plantId}_${normalized.length + 1}`);
+    }
+    let serial = typeof entry.serialCode === "string" ? entry.serialCode : entry.serial || entry.serie || plantId;
+    serial = (serial || plantId).trim();
+    let serialKey = serial.toLowerCase();
+    while (seenSerials.has(serialKey)) {
+      serial = `${serial}-${normalized.length + 1}`;
+      serialKey = serial.toLowerCase();
+    }
+    seenIds.add(plantId);
+    seenSerials.add(serialKey);
+    normalized.push({
+      id: plantId,
+      name: typeof entry.name === "string" && entry.name.trim() ? entry.name.trim() : plantId,
+      serialCode: serial,
+      description: typeof entry.description === "string" ? entry.description : "",
+      active: entry.active !== false,
+    });
+  });
+  if (!normalized.length) {
+    const fallbackId = slugifyPlantId(`${empresaId || "planta"}_general`, "planta_general");
+    normalized.push({
+      id: fallbackId,
+      name: "Planta General",
+      serialCode: empresaId ? empresaId.toLowerCase() : "general",
+      description: "",
+      active: true,
+    });
+  }
+  return normalized;
+}
+
+function normalizePlantAssignments(raw, plants) {
+  const assignments = typeof raw === "object" && raw ? raw : {};
+  const lookup = new Set(plants.map((plant) => plant.id));
+  const result = {};
+  Object.entries(assignments).forEach(([email, value]) => {
+    const key = typeof email === "string" ? email.trim().toLowerCase() : "";
+    if (!key) return;
+    const list = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+    const normalizedIds = list
+      .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
+      .filter((item) => item && lookup.has(item));
+    if (normalizedIds.length) {
+      result[key] = Array.from(new Set(normalizedIds));
+    }
+  });
+  return result;
+}
+
 function normalizeConfig(raw) {
   const base = createEmptyConfig();
   if (!raw || typeof raw !== "object") {
@@ -1788,8 +2214,16 @@ function normalizeConfig(raw) {
     operators: emailsFrom(roles.operators),
     viewers: emailsFrom(roles.viewers),
   };
+  base.plants = normalizePlantList(raw.plants, base.empresaId);
+  base.plantAssignments = normalizePlantAssignments(raw.plantAssignments, base.plants);
   if (Array.isArray(raw.containers)) {
-    base.containers = raw.containers.map((container) => normalizeContainer(container));
+    const defaultPlantId = base.plants[0]?.id || "";
+    base.containers = raw.containers.map((container) => {
+      const normalized = normalizeContainer(container);
+      const currentId = typeof normalized.plantId === "string" ? normalized.plantId.trim().toLowerCase() : "";
+      normalized.plantId = base.plants.some((plant) => plant.id === currentId) ? currentId : defaultPlantId;
+      return normalized;
+    });
   }
   return base;
 }
@@ -1797,6 +2231,7 @@ function normalizeConfig(raw) {
 function normalizeContainer(raw) {
   const result = {
     title: typeof raw?.title === "string" ? raw.title : "",
+    plantId: typeof raw?.plantId === "string" ? raw.plantId.trim().toLowerCase() : "",
     objects: [],
   };
   if (Array.isArray(raw?.objects)) {
@@ -1828,6 +2263,8 @@ function createEmptyConfig() {
       operators: [],
       viewers: [],
     },
+    plants: [],
+    plantAssignments: {},
     containers: [],
   };
 }
@@ -1936,6 +2373,12 @@ function resetUserForm() {
   if (dom.userSendInvite) {
     dom.userSendInvite.checked = true;
   }
+  if (dom.userPlants) {
+    Array.from(dom.userPlants.options || []).forEach((option) => {
+      option.selected = false;
+    });
+  }
+  handleUserRoleChange();
   setUserFormStatus("");
 }
 
@@ -1949,6 +2392,18 @@ function toggleUserForm(force) {
     resetUserForm();
   } else if (dom.userEmail) {
     dom.userEmail.focus();
+  }
+}
+
+function handleUserRoleChange() {
+  if (!dom.userRole || !dom.userPlants) return;
+  const role = dom.userRole.value || "operador";
+  const disablePlants = role === "admin" || !state.canManageUsers;
+  dom.userPlants.disabled = disablePlants;
+  if (disablePlants) {
+    Array.from(dom.userPlants.options || []).forEach((option) => {
+      option.selected = false;
+    });
   }
 }
 
@@ -1979,6 +2434,11 @@ function renderUserList() {
       const uid = hasUid ? escapeHtml(String(user.uid)) : "";
       const isSelf = hasUid && currentUid && user.uid === currentUid;
       const inviteLabel = user.lastLoginAt ? "Reenviar enlace" : "Enviar invitacion";
+      const plantNames = Array.isArray(user.plantNames) && user.plantNames.length
+        ? user.plantNames.join(", ")
+        : Array.isArray(user.plantIds) && user.plantIds.length
+          ? user.plantIds.join(", ")
+          : "";
       const actions = hasUid
         ? `<div class="user-item__actions">
           <button type="button" class="btn btn-link" data-action="invite" data-uid="${uid}" data-email="${email}">${inviteLabel}</button>
@@ -1994,6 +2454,7 @@ function renderUserList() {
         <div class="user-item__meta">${escapeHtml(status)}</div>
         <div class="user-item__meta">${escapeHtml(lastLogin)}</div>
         ${createdAt ? `<div class="user-item__meta">${escapeHtml(createdAt)}</div>` : ""}
+        ${plantNames ? `<div class="user-item__meta">Plantas: ${escapeHtml(plantNames)}</div>` : ""}
         ${actions}
       </li>`;
     })
@@ -2047,6 +2508,7 @@ async function submitUserForm(event) {
   const email = dom.userEmail?.value.trim();
   const role = dom.userRole?.value || "operador";
   const sendInvite = Boolean(dom.userSendInvite?.checked);
+  const plantIds = Array.from(dom.userPlants?.selectedOptions || []).map((option) => option.value);
   if (!email) {
     setUserFormStatus("Ingresa un email valido", "warning");
     dom.userEmail?.focus();
@@ -2060,6 +2522,7 @@ async function submitUserForm(event) {
       role,
       sendInvite,
       empresaId: state.empresaId,
+      plantIds: role === "admin" ? [] : plantIds,
     };
     const response = await fetch(`${BACKEND_HTTP}/users`, {
       method: "POST",
@@ -2444,9 +2907,18 @@ function prepareConfigForSave() {
     operators: splitLines(dom.rolesOperators?.value),
     viewers: splitLines(dom.rolesViewers?.value),
   };
+  cloneConfig.plants = normalizePlantList(cloneConfig.plants, cloneConfig.empresaId);
+  cloneConfig.plantAssignments = normalizePlantAssignments(
+    sanitizeAssignmentsPlaceholders(cloneConfig.plantAssignments),
+    cloneConfig.plants
+  );
+  const validPlantIds = new Set(cloneConfig.plants.map((plant) => plant.id));
+  const defaultPlantId = cloneConfig.plants[0]?.id || "";
   cloneConfig.containers = (cloneConfig.containers || []).map((container) => {
+    const plantId = typeof container.plantId === "string" ? container.plantId.trim().toLowerCase() : "";
     const cleanContainer = {
       title: container.title || "",
+      plantId: validPlantIds.has(plantId) ? plantId : defaultPlantId,
       objects: [],
     };
     if (Array.isArray(container.objects)) {

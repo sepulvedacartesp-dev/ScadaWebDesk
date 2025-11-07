@@ -219,6 +219,46 @@ body {
   align-items: center;
 }
 
+.plant-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.plant-selector select {
+  min-width: 220px;
+}
+
+.container-plant {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.plants-list,
+.plant-access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.plant-card,
+.plant-access-card {
+  border: 1px solid rgba(112, 138, 255, 0.2);
+  border-radius: 18px;
+  padding: 1rem 1.25rem;
+  background: rgba(9, 18, 32, 0.65);
+  box-shadow: var(--shadow-soft);
+}
+
+.plant-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
 .btn-link {
   display: inline-flex;
   align-items: center;

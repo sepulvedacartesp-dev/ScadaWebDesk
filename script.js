@@ -2,6 +2,7 @@
 const BACKEND_WS = "wss://scadawebdesk.onrender.com/ws";
 const DEFAULT_MAIN_TITLE = "SurNex SCADA Web";
 const MAIN_TITLE_STORAGE_KEY = "scada-main-title";
+const PLANT_SELECTION_STORAGE_KEY = "scada-plant-selection";
 
 let ws = null;
 let uid = null;
@@ -34,6 +35,10 @@ const scadaContainer = document.getElementById("scada-container");
 const viewMatrixBtn = document.getElementById("view-matrix");
 const viewSidebarBtn = document.getElementById("view-sidebar");
 const sidebarMenu = document.getElementById("sidebar-menu");
+const currentPlantLabel = document.getElementById("current-plant");
+const plantSelectorSection = document.getElementById("plant-selector");
+const plantSelect = document.getElementById("plant-select");
+const plantEmptyMessage = document.getElementById("plant-empty");
 
 
 const topicElementMap = new Map();
@@ -46,6 +51,9 @@ let selectedContainerIndex = 0;
 let currentLogoEmpresa = null;
 let currentLogoVersion = 0;
 let canAccessCotizador = false;
+let availablePlants = [];
+let accessiblePlantIds = [];
+let selectedPlantId = null;
 
 function persistMainTitle(value) {
   const nextTitle = (value || "").trim() || DEFAULT_MAIN_TITLE;
@@ -73,6 +81,137 @@ function clearStoredMainTitle() {
   } catch (_) {
     /* ignore storage errors */
   }
+}
+
+function normalizePlant(raw) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const id = typeof raw.id === "string" ? raw.id.trim().toLowerCase() : "";
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : id,
+    serialCode: typeof raw.serialCode === "string" ? raw.serialCode.trim() : "",
+    description: typeof raw.description === "string" ? raw.description : "",
+    active: raw.active !== false,
+  };
+}
+
+function plantStorageKey(companyId) {
+  return `${PLANT_SELECTION_STORAGE_KEY}-${companyId || "default"}`;
+}
+
+function persistPlantSelection(companyId, plantId) {
+  if (!companyId || !plantId) return;
+  const normalizedId = plantId.toLowerCase();
+  try {
+    localStorage.setItem(plantStorageKey(companyId), normalizedId);
+  } catch (_) {
+    /* ignore storage issues */
+  }
+}
+
+function loadStoredPlant(companyId) {
+  if (!companyId) return null;
+  try {
+    return localStorage.getItem(plantStorageKey(companyId));
+  } catch (_) {
+    return null;
+  }
+}
+
+function setAvailablePlants(plants, allowedIds, empresaId) {
+  const normalizedPlants = Array.isArray(plants)
+    ? plants.map((item) => normalizePlant(item)).filter(Boolean)
+    : [];
+  let allowedList = Array.isArray(allowedIds) ? allowedIds.map((item) => String(item).toLowerCase()) : [];
+  if (!allowedList.length) {
+    allowedList = normalizedPlants.map((plant) => plant.id);
+  }
+  availablePlants = normalizedPlants.filter((plant) => allowedList.includes(plant.id));
+  accessiblePlantIds = availablePlants.map((plant) => plant.id);
+  const stored = loadStoredPlant(empresaId);
+  const normalizedStored = typeof stored === "string" ? stored.toLowerCase() : null;
+  if (normalizedStored && accessiblePlantIds.includes(normalizedStored)) {
+    selectedPlantId = normalizedStored;
+  } else if (!selectedPlantId || !accessiblePlantIds.includes(selectedPlantId)) {
+    selectedPlantId = accessiblePlantIds[0] || null;
+  }
+  if (selectedPlantId) {
+    persistPlantSelection(empresaId, selectedPlantId);
+  }
+  updatePlantSelectorUI();
+  updatePlantBadge();
+}
+
+function getCurrentPlant() {
+  if (!selectedPlantId) return availablePlants[0] || null;
+  return availablePlants.find((plant) => plant.id === selectedPlantId) || availablePlants[0] || null;
+}
+
+function updatePlantSelectorUI() {
+  if (!plantSelect) return;
+  plantSelect.innerHTML = "";
+  if (!accessiblePlantIds.length) {
+    if (plantSelectorSection) plantSelectorSection.hidden = true;
+    if (plantEmptyMessage) plantEmptyMessage.hidden = false;
+    return;
+  }
+  if (plantSelectorSection) plantSelectorSection.hidden = false;
+  if (plantEmptyMessage) plantEmptyMessage.hidden = true;
+  availablePlants.forEach((plant) => {
+    const option = document.createElement("option");
+    option.value = plant.id;
+    option.textContent = plant.name || plant.id;
+    option.selected = plant.id === selectedPlantId;
+    plantSelect.appendChild(option);
+  });
+  plantSelect.disabled = accessiblePlantIds.length <= 1;
+}
+
+function updatePlantBadge() {
+  if (!currentPlantLabel) return;
+  const plant = getCurrentPlant();
+  if (plant) {
+    currentPlantLabel.hidden = false;
+    currentPlantLabel.textContent = `Planta: ${plant.name}`;
+  } else {
+    currentPlantLabel.hidden = true;
+    currentPlantLabel.textContent = "";
+  }
+}
+
+function handlePlantChange(event) {
+  const nextId = event?.target?.value || null;
+  if (!nextId || nextId === selectedPlantId) {
+    return;
+  }
+  const normalizedId = nextId.toLowerCase();
+  if (!accessiblePlantIds.includes(normalizedId)) {
+    return;
+  }
+  selectedPlantId = normalizedId;
+  persistPlantSelection(currentCompanyId, selectedPlantId);
+  clearDashboard();
+  renderDashboard();
+  applyScopedTopics();
+  updatePlantBadge();
+}
+
+function getVisibleContainers() {
+  if (!scadaConfig || !Array.isArray(scadaConfig.containers)) {
+    return [];
+  }
+  if (!selectedPlantId) {
+    return scadaConfig.containers.slice();
+  }
+  return scadaConfig.containers.filter((container) => {
+    const plantId = typeof container?.plantId === "string" ? container.plantId.trim().toLowerCase() : "";
+    return plantId ? plantId === selectedPlantId : false;
+  });
 }
 
 function setStatus(text) {
@@ -159,8 +298,9 @@ function normalizeRelativePath(relPath) {
 
 function scopedTopic(relative) {
   const empresa = currentCompanyId || scadaConfig?.empresaId || null;
-  if (!empresa) return null;
-  const base = `scada/customers/${empresa}`;
+  const plant = getCurrentPlant();
+  if (!empresa || !plant || !plant.serialCode) return null;
+  const base = `scada/customers/${empresa}/${plant.serialCode}`;
   return `${base}/${normalizeRelativePath(relative)}`;
 }
 
@@ -356,6 +496,7 @@ function setCurrentUser(email, empresaId) {
       currentCompanyLabel.textContent = '';
     }
   }
+  updatePlantBadge();
 }
 
 
@@ -393,7 +534,16 @@ async function fetchScadaConfig(user, forceRefresh = false) {
   const email = user.email || "";
   currentRole = payload.role || determineRole(email) || "operador";
   canAccessCotizador = Boolean(payload.canAccessCotizador);
-  return { config: scadaConfig, role: currentRole, empresaId: currentCompanyId, canAccessCotizador };
+  const plants = Array.isArray(payload.plants) ? payload.plants : (scadaConfig.plants || []);
+  const accessible = Array.isArray(payload.accessiblePlants) ? payload.accessiblePlants : [];
+  return {
+    config: scadaConfig,
+    role: currentRole,
+    empresaId: currentCompanyId,
+    canAccessCotizador,
+    plants,
+    accessiblePlants: accessible,
+  };
 }
 function clearDashboard() {
   widgetBindings.length = 0;
@@ -411,17 +561,34 @@ function clearDashboard() {
 
 function renderDashboard() {
   if (!scadaConfig || !Array.isArray(scadaConfig.containers)) {
-    scadaContainer.innerHTML = "<p>No hay configuraciÃ³n disponible.</p>";
+    scadaContainer.innerHTML = "<p>No hay configuración disponible.</p>";
+    if (sidebarMenu) sidebarMenu.hidden = true;
+    return;
+  }
+  const visibleContainers = getVisibleContainers();
+  if (!visibleContainers.length) {
+    scadaContainer.innerHTML = "<p>No hay contenedores para la planta seleccionada.</p>";
+    if (sidebarMenu) sidebarMenu.hidden = true;
     return;
   }
 
   const template = document.getElementById("container-template");
   scadaContainer.classList.toggle("sidebar-view", currentView === "sidebar");
-  scadaConfig.containers.forEach((container, index) => {
+  visibleContainers.forEach((container, index) => {
     const node = template.content.firstElementChild.cloneNode(true);
     const titleEl = node.querySelector(".container-title");
     const bodyEl = node.querySelector(".container-body");
     if (titleEl) titleEl.textContent = container.title || `Contenedor ${index + 1}`;
+    const plantBadge = node.querySelector(".container-plant");
+    if (plantBadge) {
+      const plant = getCurrentPlant();
+      if (plant) {
+        plantBadge.hidden = false;
+        plantBadge.textContent = plant.name;
+      } else {
+        plantBadge.hidden = true;
+      }
+    }
 
     if (sidebarMenu) {
       const navButton = document.createElement("button");
@@ -1233,16 +1400,17 @@ async function hydrateDashboard(user, { forceRefresh = false } = {}) {
     return;
   }
   try {
-    const { config, role, empresaId } = await fetchScadaConfig(user, forceRefresh);
+    const { config, role, empresaId, plants, accessiblePlants: allowedPlants } = await fetchScadaConfig(user, forceRefresh);
     const resolvedTitle = persistMainTitle(config.mainTitle || DEFAULT_MAIN_TITLE);
     if (mainTitleNode) {
       mainTitleNode.textContent = resolvedTitle;
     }
     document.title = resolvedTitle;
     currentRole = role || "operador";
+    const resolvedEmpresa = empresaId || currentCompanyId;
+    setAvailablePlants(plants && plants.length ? plants : config.plants || [], allowedPlants || [], resolvedEmpresa);
     clearDashboard();
     renderDashboard();
-    const resolvedEmpresa = empresaId || currentCompanyId;
     updateBrandLogo(resolvedEmpresa, { forceRefresh, title: resolvedTitle });
     setCurrentUser(user.email, resolvedEmpresa);
     if (resolvedEmpresa) {
@@ -1262,6 +1430,9 @@ function resetSessionState() {
   currentRole = "viewer";
   canAccessCotizador = false;
   uid = null;
+  availablePlants = [];
+  accessiblePlantIds = [];
+  selectedPlantId = null;
   clearDashboard();
   scadaContainer.innerHTML = '<p class="empty-state">Inicia sesion para cargar tu tablero SCADA.</p>';
   if (sidebarMenu) {
@@ -1276,6 +1447,7 @@ function resetSessionState() {
   updateConnectionChip(false);
   setCurrentUser();
   updateRoleUI();
+  updatePlantSelectorUI();
   if (configLink) {
     configLink.hidden = true;
   }
@@ -1289,6 +1461,7 @@ function resetSessionState() {
 
 handleViewToggle();
 setupLoginDialog();
+plantSelect?.addEventListener("change", handlePlantChange);
 
 if (loginForm) {
   loginForm.addEventListener("submit", async (event) => {

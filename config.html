@@ -892,6 +892,11 @@
                   <option value="visualizacion">Solo lectura</option>
                 </select>
               </div>
+              <div class="form-group">
+                <label for="user-plants">Plantas asignadas</label>
+                <select id="user-plants" class="select-input" multiple></select>
+                <p class="helper-text">Selecciona una o mas plantas para operadores y usuarios de visualizacion.</p>
+              </div>
               <div class="form-group checkbox-inline">
                 <label class="checkbox">
                   <input type="checkbox" id="user-send-invite" checked>
@@ -908,6 +913,32 @@
             </div>
           </form>
           <ul id="user-list" class="user-list"></ul>
+        </section>
+
+        <section class="config-card" id="plants-card">
+          <div class="container-header">
+            <h2>Plantas</h2>
+            <div class="button-row align-start">
+              <button id="add-plant" type="button" class="btn btn-editable">Agregar planta</button>
+            </div>
+          </div>
+          <p class="helper-text">Cada planta representa un subconjunto de equipos dentro de la empresa y requiere un c�digo de serie para diferenciar los topicos MQTT.</p>
+          <div id="plants-list" class="plants-list">
+            <div id="plants-empty" class="empty-state">No hay plantas configuradas.</div>
+          </div>
+        </section>
+
+        <section class="config-card" id="plant-access-card">
+          <div class="container-header">
+            <h2>Accesos por planta</h2>
+            <div class="button-row align-start">
+              <button id="add-plant-access" type="button" class="btn btn-editable">Agregar acceso</button>
+            </div>
+          </div>
+          <p class="helper-text">Relaciona los correos autorizados con las plantas que pueden visualizar.</p>
+          <div id="plant-access-list" class="plant-access-list">
+            <div id="plant-access-empty" class="empty-state">Aun no hay asignaciones registradas.</div>
+          </div>
         </section>
 
         <section class="config-card">
@@ -1007,12 +1038,60 @@
         <label>Nombre del contenedor</label>
         <input type="text" class="text-input" data-field="title" placeholder="Linea de produccion">
       </div>
+      <div class="form-group">
+        <label>Planta</label>
+        <select class="text-input" data-field="plantId"></select>
+      </div>
       <div class="tags-strip">
         <span class="pill" data-summary="widgets">0 widgets</span>
         <span class="pill" data-summary="topics">0 topics</span>
       </div>
       <p class="capacity-hint" data-capacity-message hidden>Ya alcanzaste el limite de 6 widgets en este contenedor.</p>
       <div class="objects-wrap"></div>
+    </article>
+  </template>
+
+  <template id="plant-template">
+    <article class="plant-card" data-plant-index>
+      <div class="form-grid plant-form-grid">
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" class="text-input" data-field="name" placeholder="Planta Norte">
+        </div>
+        <div class="form-group">
+          <label>Identificador</label>
+          <input type="text" class="text-input" data-field="id" placeholder="planta_norte">
+        </div>
+        <div class="form-group">
+          <label>Codigo de serie</label>
+          <input type="text" class="text-input" data-field="serialCode" placeholder="SN-00123">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Descripcion</label>
+        <textarea class="text-input" data-field="description" rows="2" placeholder="Uso interno"></textarea>
+      </div>
+      <div class="button-row align-start">
+        <button type="button" class="btn btn-danger btn-editable" data-action="remove-plant">Eliminar</button>
+      </div>
+    </article>
+  </template>
+
+  <template id="plant-access-template">
+    <article class="plant-access-card" data-access-index>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Correo</label>
+          <input type="email" class="text-input" data-field="email" placeholder="usuario@cliente.com">
+        </div>
+        <div class="form-group">
+          <label>Plantas habilitadas</label>
+          <select class="text-input" data-field="plantIds" multiple></select>
+        </div>
+      </div>
+      <div class="button-row align-start">
+        <button type="button" class="btn btn-danger btn-editable" data-action="remove-access">Eliminar</button>
+      </div>
     </article>
   </template>
 
