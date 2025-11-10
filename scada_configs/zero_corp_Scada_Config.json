@@ -104,21 +104,21 @@
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "Planta1/PartirAB2",
+          "topic": "snp0025010/PartirAB2",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "Planta1/PararAB2",
+          "topic": "snp0025010/PararAB2",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "Planta1/RuningAB2",
+          "topic": "snp0025010/stsAB2",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
