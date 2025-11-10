@@ -68,7 +68,7 @@
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "snp0025010/RuningAB1",
+          "topic": "snp0025010/stsAB1",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
