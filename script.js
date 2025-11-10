@@ -637,7 +637,6 @@ function renderDashboard() {
 
   renderView(currentView);
   applyScopedTopics();
-  updateRoleUI();
 }
 
 function selectContainer(index) {
@@ -1411,6 +1410,7 @@ async function hydrateDashboard(user, { forceRefresh = false } = {}) {
     setAvailablePlants(plants && plants.length ? plants : config.plants || [], allowedPlants || [], resolvedEmpresa);
     clearDashboard();
     renderDashboard();
+    updateRoleUI();
     updateBrandLogo(resolvedEmpresa, { forceRefresh, title: resolvedTitle });
     setCurrentUser(user.email, resolvedEmpresa);
     if (resolvedEmpresa) {
