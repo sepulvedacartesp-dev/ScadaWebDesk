@@ -41,7 +41,17 @@ function wrapText(doc, text, maxWidth) {
   return lines;
 }
 
-export function downloadQuotePdf(payload) {
+function loadImageElement(src) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+export async function downloadQuotePdf(payload) {
   const jsPDF = ensureJsPdf();
   const data = payload || {};
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -49,6 +59,25 @@ export function downloadQuotePdf(payload) {
   let cursorY = 60;
   const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = doc.internal.pageSize.getWidth() - marginX * 2;
+  const logoImage = await loadImageElement("/imagen/surnex_logo.png");
+
+  if (logoImage) {
+    const maxLogoWidth = 140;
+    const naturalWidth = logoImage.naturalWidth || maxLogoWidth;
+    const naturalHeight = logoImage.naturalHeight || maxLogoWidth * 0.5;
+    const logoWidth = Math.min(maxLogoWidth, naturalWidth);
+    const aspectRatio = naturalHeight / naturalWidth;
+    const logoHeight = logoWidth * aspectRatio;
+    const logoX = doc.internal.pageSize.getWidth() - marginX - logoWidth;
+    const logoY = 30;
+    try {
+      doc.addImage(logoImage, "PNG", logoX, logoY, logoWidth, logoHeight);
+    } catch (error) {
+      console.warn("No se pudo insertar el logo en el PDF", error);
+    }
+  } else {
+    console.warn("No se encontro el logo en /imagen/surnex_logo.png");
+  }
 
   const cliente = data.cliente || {};
   const info = data.info || {};

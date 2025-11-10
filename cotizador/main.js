@@ -669,7 +669,7 @@ async function downloadCurrentQuote() {
   }
   try {
     const data = buildPdfPayload();
-    downloadQuotePdf(data);
+    await downloadQuotePdf(data);
     await logQuotePdfDownload(state.selectedQuoteId);
   } catch (error) {
     console.error("Error generando PDF", error);
