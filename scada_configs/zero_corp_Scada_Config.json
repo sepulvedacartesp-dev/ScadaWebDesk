@@ -48,35 +48,35 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "Planta1/Temp_fdbk",
+          "topic": "snp0025010/Temp_fdbk",
           "unit": "°C"
         },
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "Planta1/PartirAB1",
+          "topic": "snp0025010/PartirAB1",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "Planta1/PararAB1",
+          "topic": "snp0025010/PararAB1",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "Planta1/RuningAB1",
+          "topic": "snp0025010/RuningAB1",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
         {
           "type": "slide",
           "label": "Control Manual/Auto",
-          "topic": "Planta1/LocRemAB1",
-          "feedbackTopic": "Planta1/LocRemfdbkAB1",
+          "topic": "snp0025010/LocRemAB1",
+          "feedbackTopic": "snp0025010/LocRemfdbkAB1",
           "onText": "Manual",
           "offText": "Automatico"
         }
