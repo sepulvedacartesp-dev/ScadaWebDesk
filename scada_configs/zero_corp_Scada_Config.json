@@ -76,7 +76,7 @@
           "type": "slide",
           "label": "Control Manual/Auto",
           "topic": "snp0025010/LocRemAB1",
-          "feedbackTopic": "snp0025010/LocRemfdbkAB1",
+          "feedbackTopic": "snp0025010/LocRemfbdkAB1",
           "onText": "Automatico",
           "offText": "Manual"
         }
