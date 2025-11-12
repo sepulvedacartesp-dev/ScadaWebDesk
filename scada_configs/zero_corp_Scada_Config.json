@@ -125,7 +125,7 @@
         {
           "type": "slide",
           "label": "Control Manual/Auto",
-          "topic": "Planta1/LocRemAB2",
+          "topic": "snp0025010/LocRemAB2",
           "feedbackTopic": "snp0025010/LocRemfdbkAB2",
           "onText": "Automatico",
           "offText": "Manual"
