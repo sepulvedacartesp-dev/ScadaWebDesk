@@ -133,6 +133,56 @@
       ]
     },
     {
+      "title": "Planta 1 - ABox 003",
+      "plantId": "zero_corp1",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C",
+          "color": "#00b4d8",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "number",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "snp0025010/PartirAB3",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "snp0025010/PararAB3",
+          "color": "#ef476f",
+          "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Ventilador",
+          "topic": "snp0025010/stsAB3",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
+        },
+        {
+          "type": "slide",
+          "label": "Control Manual/Auto",
+          "topic": "snp0025010/LocRemAB3",
+          "feedbackTopic": "snp0025010/LocRemfdbkAB3",
+          "onText": "Automatico",
+          "offText": "Manual"
+        }
+      ]
+    },
+    {
       "title": "Ajuste de Parametros",
       "plantId": "zero_corp_2",
       "objects": [
