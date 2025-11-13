@@ -183,6 +183,156 @@
       ]
     },
     {
+      "title": "Planta 1 - ABox 004",
+      "plantId": "zero_corp1",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C",
+          "color": "#00b4d8",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "number",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "snp0025010/PartirAB4",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "snp0025010/PararAB4",
+          "color": "#ef476f",
+          "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Ventilador",
+          "topic": "snp0025010/stsAB4",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
+        },
+        {
+          "type": "slide",
+          "label": "Control Manual/Auto",
+          "topic": "snp0025010/LocRemAB4",
+          "feedbackTopic": "snp0025010/LocRemfdbkAB4",
+          "onText": "Automatico",
+          "offText": "Manual"
+        }
+      ]
+    },
+    {
+      "title": "Planta 1 - ABox 005",
+      "plantId": "zero_corp1",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C",
+          "color": "#00b4d8",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "number",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "snp0025010/PartirAB5",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "snp0025010/PararAB5",
+          "color": "#ef476f",
+          "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Ventilador",
+          "topic": "snp0025010/stsAB5",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
+        },
+        {
+          "type": "slide",
+          "label": "Control Manual/Auto",
+          "topic": "snp0025010/LocRemAB5",
+          "feedbackTopic": "snp0025010/LocRemfdbkAB5",
+          "onText": "Automatico",
+          "offText": "Manual"
+        }
+      ]
+    },
+    {
+      "title": "Planta 1 - ABox 006",
+      "plantId": "zero_corp1",
+      "objects": [
+        {
+          "type": "gauge",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C",
+          "color": "#00b4d8",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "type": "number",
+          "label": "Temperatura",
+          "topic": "Planta1/Temp_fdbk",
+          "unit": "°C"
+        },
+        {
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "snp0025010/PartirAB6",
+          "color": "#00b4d8",
+          "payload": "1"
+        },
+        {
+          "type": "stopBtn",
+          "label": "Parar",
+          "topic": "snp0025010/PararAB6",
+          "color": "#ef476f",
+          "payload": "0"
+        },
+        {
+          "type": "pumpStatus",
+          "label": "Ventilador",
+          "topic": "snp0025010/stsAB6",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
+        },
+        {
+          "type": "slide",
+          "label": "Control Manual/Auto",
+          "topic": "snp0025010/LocRemAB6",
+          "feedbackTopic": "snp0025010/LocRemfdbkAB6",
+          "onText": "Automatico",
+          "offText": "Manual"
+        }
+      ]
+    },
+    {
       "title": "Ajuste de Parametros",
       "plantId": "zero_corp_2",
       "objects": [
