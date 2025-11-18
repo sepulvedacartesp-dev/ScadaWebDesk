@@ -80,7 +80,7 @@ export async function downloadQuotePdf(payload) {
   const logoResult = await loadLogoImage();
 
   if (logoResult?.image) {
-    const LOGO_WIDTH_OVERRIDE = 120; // Ajusta este valor para forzar ancho fijo del logo.
+    const LOGO_WIDTH_OVERRIDE = 80; // Ajusta este valor para forzar ancho fijo del logo.
     const maxLogoWidth = 140;
     const naturalWidth = logoResult.image.naturalWidth || maxLogoWidth;
     const naturalHeight = logoResult.image.naturalHeight || maxLogoWidth * 0.5;
