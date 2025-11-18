@@ -53,12 +53,12 @@ function loadImageElement(src) {
 
 async function loadLogoImage() {
   const logoCandidates = [
-    //"/Imagenes/Logo_Surnex.png",
+    "/Imagenes/Logo_Surnex.png",
     "/Imagenes/Surnex Logo.png",
-   // "/Imagenes/Surnex Logo y Slogan.png",
-   // "/imagen/surnex_logo.png",
-   // "Imagenes/Logo_Surnex.png",
-   // "Imagenes/Surnex Logo.png",
+    "/Imagenes/Surnex Logo y Slogan.png",
+    "/imagen/surnex_logo.png",
+    "Imagenes/Logo_Surnex.png",
+    "Imagenes/Surnex Logo.png",
   ];
   for (const src of logoCandidates) {
     const image = await loadImageElement(src);
@@ -81,7 +81,7 @@ export async function downloadQuotePdf(payload) {
 
   if (logoResult?.image) {
     const LOGO_WIDTH_OVERRIDE = 80; // Ajusta este valor para forzar ancho fijo del logo.
-    const maxLogoWidth = 140;
+    const maxLogoWidth = 80; //140
     const naturalWidth = logoResult.image.naturalWidth || maxLogoWidth;
     const naturalHeight = logoResult.image.naturalHeight || maxLogoWidth * 0.5;
     const computedWidth = Math.min(maxLogoWidth, naturalWidth);
