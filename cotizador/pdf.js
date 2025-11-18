@@ -47,16 +47,18 @@ function loadImageElement(src) {
     image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
     image.onerror = () => resolve(null);
-    image.src = src;
+    image.src = encodeURI(src);
   });
 }
 
 async function loadLogoImage() {
   const logoCandidates = [
+    "/Imagenes/Logo_Surnex.png",
+    "/Imagenes/Surnex Logo.png",
+    "/Imagenes/Surnex Logo y Slogan.png",
+    "/imagen/surnex_logo.png",
     "Imagenes/Logo_Surnex.png",
     "Imagenes/Surnex Logo.png",
-    "Imagenes/Surnex Logo y Slogan.png",
-    "/imagen/surnex_logo.png",
   ];
   for (const src of logoCandidates) {
     const image = await loadImageElement(src);
