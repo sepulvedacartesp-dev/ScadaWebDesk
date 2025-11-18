@@ -51,6 +51,22 @@ function loadImageElement(src) {
   });
 }
 
+async function loadLogoImage() {
+  const logoCandidates = [
+    "Imagenes/Logo_Surnex.png",
+    "Imagenes/Surnex Logo.png",
+    "Imagenes/Surnex Logo y Slogan.png",
+    "/imagen/surnex_logo.png",
+  ];
+  for (const src of logoCandidates) {
+    const image = await loadImageElement(src);
+    if (image) {
+      return { image, src };
+    }
+  }
+  return null;
+}
+
 export async function downloadQuotePdf(payload) {
   const jsPDF = ensureJsPdf();
   const data = payload || {};
@@ -59,24 +75,25 @@ export async function downloadQuotePdf(payload) {
   let cursorY = 60;
   const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = doc.internal.pageSize.getWidth() - marginX * 2;
-  const logoImage = await loadImageElement("/imagen/surnex_logo.png");
+  const logoResult = await loadLogoImage();
 
-  if (logoImage) {
+  if (logoResult?.image) {
     const maxLogoWidth = 140;
-    const naturalWidth = logoImage.naturalWidth || maxLogoWidth;
-    const naturalHeight = logoImage.naturalHeight || maxLogoWidth * 0.5;
+    const naturalWidth = logoResult.image.naturalWidth || maxLogoWidth;
+    const naturalHeight = logoResult.image.naturalHeight || maxLogoWidth * 0.5;
     const logoWidth = Math.min(maxLogoWidth, naturalWidth);
-    const aspectRatio = naturalHeight / naturalWidth;
+    const aspectRatio = naturalHeight && naturalWidth ? naturalHeight / naturalWidth : 1;
     const logoHeight = logoWidth * aspectRatio;
-    const logoX = doc.internal.pageSize.getWidth() - marginX - logoWidth;
-    const logoY = 30;
+    const logoX = marginX;
+    const logoY = 26;
     try {
-      doc.addImage(logoImage, "PNG", logoX, logoY, logoWidth, logoHeight);
+      doc.addImage(logoResult.image, "PNG", logoX, logoY, logoWidth, logoHeight);
+      cursorY = Math.max(cursorY, logoY + logoHeight + 22);
     } catch (error) {
       console.warn("No se pudo insertar el logo en el PDF", error);
     }
   } else {
-    console.warn("No se encontro el logo en /imagen/surnex_logo.png");
+    console.warn("No se encontro el logo en Imagenes/Logo_Surnex.png ni en rutas de respaldo.");
   }
 
   const cliente = data.cliente || {};
