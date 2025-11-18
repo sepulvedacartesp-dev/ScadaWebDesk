@@ -86,7 +86,8 @@ export async function downloadQuotePdf(payload) {
     const logoWidth = Math.min(maxLogoWidth, naturalWidth);
     const aspectRatio = naturalHeight && naturalWidth ? naturalHeight / naturalWidth : 1;
     const logoHeight = logoWidth * aspectRatio;
-    const logoX = marginX;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const logoX = pageWidth - marginX - logoWidth;
     const logoY = 26;
     try {
       doc.addImage(logoResult.image, "PNG", logoX, logoY, logoWidth, logoHeight);
