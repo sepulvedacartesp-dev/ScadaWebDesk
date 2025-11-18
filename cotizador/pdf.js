@@ -80,12 +80,14 @@ export async function downloadQuotePdf(payload) {
   const logoResult = await loadLogoImage();
 
   if (logoResult?.image) {
-    const LOGO_WIDTH_OVERRIDE = 80; // Ajusta este valor para forzar ancho fijo del logo.
-    const maxLogoWidth = 80; //140
+    const LOGO_WIDTH_OVERRIDE = 120; // Ajusta este valor para forzar ancho fijo del logo.
+    const LOGO_SCALE = 0.5; // Escala global del logo (0.5 = 50% mas pequeno).
+    const maxLogoWidth = 140;
     const naturalWidth = logoResult.image.naturalWidth || maxLogoWidth;
     const naturalHeight = logoResult.image.naturalHeight || maxLogoWidth * 0.5;
     const computedWidth = Math.min(maxLogoWidth, naturalWidth);
-    const logoWidth = LOGO_WIDTH_OVERRIDE || computedWidth;
+    const baseWidth = LOGO_WIDTH_OVERRIDE || computedWidth;
+    const logoWidth = baseWidth * LOGO_SCALE;
     const aspectRatio = naturalHeight && naturalWidth ? naturalHeight / naturalWidth : 1;
     const logoHeight = logoWidth * aspectRatio;
     const pageWidth = doc.internal.pageSize.getWidth();
