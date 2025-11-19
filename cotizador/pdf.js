@@ -11,7 +11,7 @@ const COMPANY_PAYMENT_INFO = {
   rut: "77.123.456-7",
   banco: "Banco Santander",
   cuentaCorriente: "0000000000",
-  correo: "pagos@surnex.cl",
+  modo: "Transferencia electrónica",
   correoPagos: "pagos@surnex.cl",
 };
 
@@ -90,7 +90,7 @@ export async function downloadQuotePdf(payload) {
 
   if (logoResult?.image) {
     const LOGO_WIDTH_OVERRIDE = 100; // 120 Ajusta este valor para forzar ancho fijo del logo.
-    const LOGO_SCALE = 0.2; // Escala global del logo (0.5 = 50% mas pequeno).
+    const LOGO_SCALE = 0.35; // Escala global del logo (0.5 = 50% mas pequeno).
     const maxLogoWidth = 100;
     const naturalWidth = logoResult.image.naturalWidth || maxLogoWidth;
     const naturalHeight = logoResult.image.naturalHeight || maxLogoWidth * 0.5;
@@ -272,7 +272,7 @@ function renderCompanyPaymentInfo(doc, startY, marginX, contentWidth, pageHeight
     `RUT: ${COMPANY_PAYMENT_INFO.rut}`,
     `Banco: ${COMPANY_PAYMENT_INFO.banco}`,
     `Cuenta corriente: ${COMPANY_PAYMENT_INFO.cuentaCorriente}`,
-    `Correo: ${COMPANY_PAYMENT_INFO.correo}`,
+    `metodo de pago: ${COMPANY_PAYMENT_INFO.modo}`,
     `Correo electrónico pagos: ${COMPANY_PAYMENT_INFO.correoPagos}`,
   ];
   doc.setFont("helvetica", "normal");
