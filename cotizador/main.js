@@ -327,8 +327,8 @@ function renderQuoteDetail(detail) {
   dom.clientName.value = detail.cliente_nombre || "";
   dom.clientRut.value = detail.cliente_rut || "";
   dom.clientContact.value = detail.cliente_contacto || detail.contacto || "";
-  dom.clientEmail.value = detail.correo || detail.clientEmail || "";
-  dom.clientPhone.value = detail.telefono || detail.clientPhone || "";
+  dom.clientEmail.value = detail.cliente_correo || detail.correo || detail.clientEmail || "";
+  dom.clientPhone.value = detail.cliente_telefono || detail.telefono || detail.clientPhone || "";
   dom.preparedBy.value = detail.prepared_by || detail.preparedBy || "";
   dom.preparedEmail.value = detail.prepared_email || detail.preparedEmail || "";
   dom.discountPercent.value = Number(detail.descuento_pct ?? detail.descuentoPct ?? 0);
