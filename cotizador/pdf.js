@@ -8,7 +8,7 @@ function ensureJsPdf() {
 
 const COMPANY_PAYMENT_INFO = {
   nombre: "SurNex Control y Desarrollo Tecnológico SpA",
-  rut: "77.123.456-7",
+  rut: "78.299.434-4",
   banco: "Banco Santander",
   cuentaCorriente: "0000000000",
   modo: "Transferencia electrónica",
