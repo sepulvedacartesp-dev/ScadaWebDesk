@@ -574,7 +574,6 @@ function setDetailLoading(isLoading) {
 
 async function saveQuote() {
   if (!validateForm()) {
-    alert("Completa los campos obligatorios y al menos un servicio.");
     return;
   }
   const payload = collectPayload();
@@ -601,10 +600,39 @@ async function saveQuote() {
 }
 
 function validateForm() {
-  if (!dom.clientName.value.trim()) return false;
-  if (!state.editingItems.length) return false;
-  const validItems = state.editingItems.every((item) => Number(item.cantidad) >= 0 && Number(item.precioUF) >= 0);
-  return validItems;
+  if (!dom.clientName.value.trim()) {
+    alert("Falta el nombre del cliente.");
+    return false;
+  }
+  if (!dom.clientRut.value.trim()) {
+    alert("Falta el RUT del cliente.");
+    return false;
+  }
+  const email = dom.clientEmail.value.trim();
+  if (!email) {
+    alert("Falta el correo del cliente.");
+    return false;
+  }
+  if (!isValidEmail(email)) {
+    alert("El correo del cliente no es valido.");
+    return false;
+  }
+  if (!state.editingItems.length) {
+    alert("Debes agregar al menos un servicio.");
+    return false;
+  }
+  const invalidItem = state.editingItems.some(
+    (item) => Number(item.cantidad) < 0 || Number(item.precioUF) < 0
+  );
+  if (invalidItem) {
+    alert("Los servicios deben tener cantidad y precio en UF validos.");
+    return false;
+  }
+  return true;
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function collectPayload() {

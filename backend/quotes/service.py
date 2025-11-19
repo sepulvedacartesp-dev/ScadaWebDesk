@@ -7,6 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import asyncpg
+import re
 
 from . import db as quote_db
 from .enums import FINAL_STATUSES, QuoteEventType, QuoteStatus, STATUS_TRANSITIONS
@@ -68,6 +69,14 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _client_prefix(nombre: str) -> str:
+    normalized = (nombre or "").strip().upper()
+    normalized = re.sub(r"[^A-Z0-9]", "", normalized)
+    if not normalized:
+        return "CLIENTE"
+    return normalized[:12]
+
+
 async def _catalog_id_map(conn: asyncpg.Connection, slugs: Iterable[str]) -> Dict[str, uuid.UUID]:
     cleaned = [slug for slug in slugs if slug]
     if not cleaned:
@@ -79,9 +88,10 @@ async def _catalog_id_map(conn: asyncpg.Connection, slugs: Iterable[str]) -> Dic
     return {row["slug"]: row["id"] for row in rows}
 
 
-async def _next_quote_number(conn: asyncpg.Connection, empresa_id: str) -> str:
+async def _next_quote_number(conn: asyncpg.Connection, empresa_id: str, cliente_nombre: str) -> str:
     current_year = _now_utc().year
-    prefix = f"SN-{empresa_id}-{current_year}-"
+    client_segment = _client_prefix(cliente_nombre)
+    prefix = f"SN-{client_segment}-{current_year}-"
     row = await conn.fetchrow(
         """
         SELECT quote_number
@@ -157,7 +167,7 @@ async def create_quote(
             catalog_map = await _catalog_id_map(conn, [item.catalog_slug for item in payload.items if item.catalog_slug])
             while attempts < 10:
                 attempts += 1
-                quote_number = await _next_quote_number(conn, empresa_id)
+                quote_number = await _next_quote_number(conn, empresa_id, payload.cliente.nombre)
                 quote_id = uuid.uuid4()
                 try:
                     quote_record = await insert_quote(
