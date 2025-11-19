@@ -6,6 +6,15 @@ function ensureJsPdf() {
   return jsPdfNamespace.jsPDF;
 }
 
+const COMPANY_PAYMENT_INFO = {
+  nombre: "SurNex Control y Desarrollo Tecnológico SpA",
+  rut: "77.123.456-7",
+  banco: "Banco Santander",
+  cuentaCorriente: "0000000000",
+  correo: "pagos@surnex.cl",
+  correoPagos: "pagos@surnex.cl",
+};
+
 function formatUF(value) {
   return new Intl.NumberFormat("es-CL", {
     minimumFractionDigits: 2,
@@ -237,6 +246,8 @@ export async function downloadQuotePdf(payload) {
     });
   }
 
+  cursorY = renderCompanyPaymentInfo(doc, cursorY + 16, marginX, contentWidth, pageHeight);
+
   const fileNameParts = [
     "Cotizacion",
     data.folio || "",
@@ -244,4 +255,41 @@ export async function downloadQuotePdf(payload) {
   ].filter(Boolean);
   const fileName = fileNameParts.join("_") || "Cotizacion";
   doc.save(`${fileName}.pdf`);
+}
+
+function renderCompanyPaymentInfo(doc, startY, marginX, contentWidth, pageHeight) {
+  let cursorY = startY;
+  if (cursorY > pageHeight - 80) {
+    doc.addPage();
+    cursorY = 60;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text("Datos para pago", marginX, cursorY);
+  cursorY += 16;
+  const infoLines = [
+    `Nombre: ${COMPANY_PAYMENT_INFO.nombre}`,
+    `RUT: ${COMPANY_PAYMENT_INFO.rut}`,
+    `Banco: ${COMPANY_PAYMENT_INFO.banco}`,
+    `Cuenta corriente: ${COMPANY_PAYMENT_INFO.cuentaCorriente}`,
+    `Correo: ${COMPANY_PAYMENT_INFO.correo}`,
+    `Correo electrónico pagos: ${COMPANY_PAYMENT_INFO.correoPagos}`,
+  ];
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  infoLines.forEach((line) => {
+    if (cursorY > pageHeight - 60) {
+      doc.addPage();
+      cursorY = 60;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("Datos para pago (cont.)", marginX, cursorY);
+      cursorY += 16;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+    }
+    doc.text(line, marginX, cursorY, { maxWidth: contentWidth });
+    cursorY += 14;
+  });
+  return cursorY;
 }
