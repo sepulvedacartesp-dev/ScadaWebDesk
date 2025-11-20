@@ -353,6 +353,7 @@ function renderItemsTable() {
               ${buildServiceOptions(item.optionValue)}
             </select>
             <input class="item-desc" type="text" placeholder="Descripcion" value="${escapeHtml(item.descripcion || "")}">
+            <textarea class="item-note" rows="2" placeholder="Nota sugerida (puedes editarla)">${escapeHtml(item.nota || "")}</textarea>
           </td>
           <td>
             <input class="item-qty" type="number" min="0" step="1" value="${Number(item.cantidad ?? 0)}">
@@ -396,6 +397,8 @@ function handleItemInput(event) {
   if (!item) return;
   if (event.target.classList.contains("item-desc")) {
     item.descripcion = event.target.value;
+  } else if (event.target.classList.contains("item-note")) {
+    item.nota = event.target.value;
   } else if (event.target.classList.contains("item-qty")) {
     item.cantidad = Math.max(0, Number(event.target.value));
   } else if (event.target.classList.contains("item-unit")) {
@@ -419,6 +422,7 @@ function handleItemChange(event) {
       item.optionValue = "";
       item.descripcion = "Servicio personalizado";
       item.precioUF = Number(item.precioUF ?? 0);
+      item.nota = "";
     } else {
       const selected = state.catalogItems.find((catalogItem) => value === catalogItem.optionValue);
       if (selected) {
@@ -460,6 +464,10 @@ function renderRowTotals(index) {
   const descInput = row.querySelector(".item-desc");
   if (descInput && descInput !== document.activeElement) {
     descInput.value = item.descripcion || "";
+  }
+  const noteInput = row.querySelector(".item-note");
+  if (noteInput && noteInput !== document.activeElement) {
+    noteInput.value = item.nota || "";
   }
   const qtyInput = row.querySelector(".item-qty");
   if (qtyInput) {
