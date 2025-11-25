@@ -78,8 +78,7 @@ class EmailNotifier:
         msg["Date"] = format_datetime(triggered_at.astimezone(timezone.utc))
         if self._settings.reply_to:
             msg["Reply-To"] = self._settings.reply_to
-        msg.set_content("
-".join(body_lines))
+        msg.set_content("\n".join(body_lines))
         return msg
 
     async def send_alarm(
