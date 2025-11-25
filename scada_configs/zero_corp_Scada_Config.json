@@ -39,7 +39,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB1",
+          "topic": "snp0025010/trend/TempAB1",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -89,7 +89,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB2",
+          "topic": "snp0025010/trend/TempAB2",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -139,7 +139,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB3",
+          "topic": "snp0025010/trend/TempAB3",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -189,7 +189,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB4",
+          "topic": "snp0025010/trend/TempAB4",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -239,7 +239,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB5",
+          "topic": "snp0025010/trend/TempAB5",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -289,7 +289,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB6",
+          "topic": "snp0025010/trend/TempAB6",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
