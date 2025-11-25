@@ -390,23 +390,39 @@ async def update_rule_last_triggered(
 
 async def load_active_rules_for_worker(pool: Pool) -> List[asyncpg.Record]:
     has_planta = await _table_has_column(pool, "alarm_rules", "planta_id")
-    select_clause = """
-        SELECT
-            id,
-            empresa_id,
-            {planta},
-            tag,
-            operator,
-            threshold_value,
-            value_type,
-            notify_email,
-            cooldown_seconds,
-            active,
-            last_triggered_at
-        FROM alarm_rules
-        WHERE active = TRUE
-    """
-    rows: List[asyncpg.Record] = await pool.fetch(
-        select_clause.format(planta="planta_id," if has_planta else "NULL AS planta_id,")
-    )
+    if has_planta:
+        query = """
+            SELECT
+                id,
+                empresa_id,
+                planta_id,
+                tag,
+                operator,
+                threshold_value,
+                value_type,
+                notify_email,
+                cooldown_seconds,
+                active,
+                last_triggered_at
+            FROM alarm_rules
+            WHERE active = TRUE
+        """
+    else:
+        query = """
+            SELECT
+                id,
+                empresa_id,
+                NULL AS planta_id,
+                tag,
+                operator,
+                threshold_value,
+                value_type,
+                notify_email,
+                cooldown_seconds,
+                active,
+                last_triggered_at
+            FROM alarm_rules
+            WHERE active = TRUE
+        """
+    rows: List[asyncpg.Record] = await pool.fetch(query)
     return rows
