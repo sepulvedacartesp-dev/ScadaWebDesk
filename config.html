@@ -887,6 +887,12 @@
               </header>
               <div class="alarm-form-grid">
                 <div class="form-group">
+                  <label for="alarm-plant">Planta</label>
+                  <select id="alarm-plant" class="select-input">
+                    <option value="">default</option>
+                  </select>
+                </div>
+                <div class="form-group">
                   <label for="alarm-tag">Topico</label>
                   <input id="alarm-tag" type="text" class="text-input" placeholder="equipo/tag">
                 </div>
@@ -933,6 +939,7 @@
               <table class="alarm-table">
                 <thead>
                   <tr>
+                    <th>Planta</th>
                     <th>Topic</th>
                     <th>Comparacion</th>
                     <th>Tipo</th>

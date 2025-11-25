@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal, Optional
@@ -14,6 +14,7 @@ class AlarmRuleBase(BaseModel):
     model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
 
     tag: str = Field(..., min_length=1, max_length=255)
+    planta_id: str = Field("default", alias="plantaId", min_length=0, max_length=255)
     operator: AlarmOperator
     threshold: float = Field(..., alias="threshold")
     value_type: AlarmValueType = Field(..., alias="valueType")
@@ -34,8 +35,14 @@ class AlarmRuleBase(BaseModel):
     def normalize_tag(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("El tag no puede ser vacío")
+            raise ValueError("El tag no puede ser vacio")
         return normalized
+
+    @field_validator("planta_id")
+    @classmethod
+    def normalize_planta(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        return normalized or "default"
 
 
 class AlarmRuleCreate(AlarmRuleBase):
@@ -46,6 +53,7 @@ class AlarmRuleUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
 
     tag: Optional[str] = Field(None, min_length=1, max_length=255)
+    planta_id: Optional[str] = Field(None, alias="plantaId", min_length=0, max_length=255)
     operator: Optional[AlarmOperator] = None
     threshold: Optional[float] = Field(None, alias="threshold")
     value_type: Optional[AlarmValueType] = Field(None, alias="valueType")
@@ -67,8 +75,16 @@ class AlarmRuleUpdate(BaseModel):
             return value
         normalized = value.strip()
         if not normalized:
-            raise ValueError("El tag no puede ser vacío")
+            raise ValueError("El tag no puede ser vacio")
         return normalized
+
+    @field_validator("planta_id")
+    @classmethod
+    def normalize_planta(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        normalized = value.strip().lower()
+        return normalized or "default"
 
 
 class AlarmRuleOut(BaseModel):
@@ -76,6 +92,7 @@ class AlarmRuleOut(BaseModel):
 
     id: int
     empresa_id: str = Field(alias="empresaId")
+    planta_id: str = Field(alias="plantaId")
     tag: str
     operator: AlarmOperator
     threshold: float
@@ -94,6 +111,7 @@ class AlarmEventOut(BaseModel):
     id: int
     rule_id: int = Field(alias="ruleId")
     empresa_id: str = Field(alias="empresaId")
+    planta_id: str = Field(alias="plantaId")
     tag: str
     observed_value: float = Field(alias="observedValue")
     operator: AlarmOperator
@@ -102,4 +120,3 @@ class AlarmEventOut(BaseModel):
     email_error: Optional[str] = Field(None, alias="emailError")
     triggered_at: datetime = Field(alias="triggeredAt")
     notified_at: Optional[datetime] = Field(None, alias="notifiedAt")
-

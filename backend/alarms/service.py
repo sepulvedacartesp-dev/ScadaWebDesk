@@ -45,19 +45,26 @@ def _utcnow() -> datetime:
 
 
 def _record_to_rule(record: asyncpg.Record) -> AlarmRuleOut:
-    return AlarmRuleOut.model_validate(dict(record))
+    data = dict(record)
+    if not data.get("planta_id"):
+        data["planta_id"] = DEFAULT_PLANTA_ID
+    return AlarmRuleOut.model_validate(data)
 
 
 def _record_to_event(record: asyncpg.Record) -> AlarmEventOut:
-    return AlarmEventOut.model_validate(dict(record))
+    data = dict(record)
+    if not data.get("planta_id"):
+        data["planta_id"] = DEFAULT_PLANTA_ID
+    return AlarmEventOut.model_validate(data)
 
 
 async def list_rules(pool: Pool, empresa_id: str) -> List[AlarmRuleOut]:
-    rows = await pool.fetch(
-        """
+    has_planta = await _table_has_column(pool, "alarm_rules", "planta_id")
+    query = f"""
         SELECT
             id,
             empresa_id,
+            {"planta_id," if has_planta else "NULL AS planta_id,"}
             tag,
             operator,
             threshold_value AS threshold,
@@ -71,18 +78,18 @@ async def list_rules(pool: Pool, empresa_id: str) -> List[AlarmRuleOut]:
         FROM alarm_rules
         WHERE empresa_id = $1
         ORDER BY tag ASC, id ASC
-        """,
-        empresa_id,
-    )
+        """
+    rows = await pool.fetch(query, empresa_id)
     return [_record_to_rule(row) for row in rows]
 
 
 async def get_rule(pool: Pool, empresa_id: str, rule_id: int) -> Optional[AlarmRuleOut]:
-    row = await pool.fetchrow(
-        """
+    has_planta = await _table_has_column(pool, "alarm_rules", "planta_id")
+    query = f"""
         SELECT
             id,
             empresa_id,
+            {"planta_id," if has_planta else "NULL AS planta_id,"}
             tag,
             operator,
             threshold_value AS threshold,
@@ -96,10 +103,8 @@ async def get_rule(pool: Pool, empresa_id: str, rule_id: int) -> Optional[AlarmR
         FROM alarm_rules
         WHERE empresa_id = $1
           AND id = $2
-        """,
-        empresa_id,
-        rule_id,
-    )
+        """
+    row = await pool.fetchrow(query, empresa_id, rule_id)
     if not row:
         return None
     return _record_to_rule(row)
@@ -111,44 +116,88 @@ async def create_rule(pool: Pool, empresa_id: str, payload: AlarmRuleCreate) -> 
     if payload.value_type not in ALLOWED_VALUE_TYPES:
         raise ValueError("Tipo de valor no soportado")
     now = _utcnow()
-    row = await pool.fetchrow(
-        """
-        INSERT INTO alarm_rules (
+    has_planta = await _table_has_column(pool, "alarm_rules", "planta_id")
+    if has_planta:
+        row = await pool.fetchrow(
+            """
+            INSERT INTO alarm_rules (
+                empresa_id,
+                planta_id,
+                tag,
+                operator,
+                threshold_value,
+                value_type,
+                notify_email,
+                cooldown_seconds,
+                active,
+                created_at,
+                updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+            RETURNING
+                id,
+                empresa_id,
+                planta_id,
+                tag,
+                operator,
+                threshold_value AS threshold,
+                value_type,
+                notify_email,
+                cooldown_seconds,
+                active,
+                created_at,
+                updated_at,
+                last_triggered_at
+            """,
             empresa_id,
-            tag,
-            operator,
-            threshold_value,
-            value_type,
-            notify_email,
-            cooldown_seconds,
-            active,
-            created_at,
-            updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-        RETURNING
-            id,
+            payload.planta_id,
+            payload.tag,
+            payload.operator,
+            payload.threshold,
+            payload.value_type,
+            str(payload.notify_email),
+            payload.cooldown_seconds,
+            payload.active,
+            now,
+        )
+    else:
+        row = await pool.fetchrow(
+            """
+            INSERT INTO alarm_rules (
+                empresa_id,
+                tag,
+                operator,
+                threshold_value,
+                value_type,
+                notify_email,
+                cooldown_seconds,
+                active,
+                created_at,
+                updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+            RETURNING
+                id,
+                empresa_id,
+                tag,
+                operator,
+                threshold_value AS threshold,
+                value_type,
+                notify_email,
+                cooldown_seconds,
+                active,
+                created_at,
+                updated_at,
+                last_triggered_at
+            """,
             empresa_id,
-            tag,
-            operator,
-            threshold_value AS threshold,
-            value_type,
-            notify_email,
-            cooldown_seconds,
-            active,
-            created_at,
-            updated_at,
-            last_triggered_at
-        """,
-        empresa_id,
-        payload.tag,
-        payload.operator,
-        payload.threshold,
-        payload.value_type,
-        str(payload.notify_email),
-        payload.cooldown_seconds,
-        payload.active,
-        now,
-    )
+            payload.tag,
+            payload.operator,
+            payload.threshold,
+            payload.value_type,
+            str(payload.notify_email),
+            payload.cooldown_seconds,
+            payload.active,
+            now,
+        )
     return _record_to_rule(row)
 
 
@@ -158,12 +207,16 @@ async def update_rule(
     rule_id: int,
     payload: AlarmRuleUpdate,
 ) -> Optional[AlarmRuleOut]:
+    has_planta = await _table_has_column(pool, "alarm_rules", "planta_id")
     assignments: List[str] = []
     values: List[object] = [empresa_id, rule_id]
 
     if payload.tag is not None:
         assignments.append(f"tag = ${len(values) + 1}")
         values.append(payload.tag)
+    if payload.planta_id is not None and has_planta:
+        assignments.append(f"planta_id = ${len(values) + 1}")
+        values.append(payload.planta_id)
     if payload.operator is not None:
         if payload.operator not in ALLOWED_OPERATORS:
             raise ValueError("Operador no soportado")
@@ -238,6 +291,7 @@ async def list_events(
     limit: int = 100,
     tag: Optional[str] = None,
 ) -> List[AlarmEventOut]:
+    has_planta = await _table_has_column(pool, "alarm_events", "planta_id")
     clauses = ["empresa_id = $1"]
     values: List[object] = [empresa_id]
 
@@ -252,6 +306,7 @@ async def list_events(
             id,
             rule_id,
             empresa_id,
+            {"planta_id," if has_planta else "NULL AS planta_id,"}
             tag,
             observed_value,
             operator,

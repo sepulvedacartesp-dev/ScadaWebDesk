@@ -199,6 +199,7 @@ const dom = {
   alarmForm: document.getElementById("alarm-form"),
   alarmFormTitle: document.getElementById("alarm-form-title"),
   alarmId: document.getElementById("alarm-id"),
+  alarmPlant: document.getElementById("alarm-plant"),
   alarmTag: document.getElementById("alarm-tag"),
   alarmOperator: document.getElementById("alarm-operator"),
   alarmValueType: document.getElementById("alarm-value-type"),
@@ -730,6 +731,9 @@ function updateAlarmThresholdInput() {
 function resetAlarmForm() {
   state.alarmSelectedId = null;
   dom.alarmForm?.reset();
+  if (dom.alarmPlant) {
+    populatePlantSelect(dom.alarmPlant, getDefaultPlantId());
+  }
   if (dom.alarmOperator) {
     const fallback = dom.alarmOperator.getAttribute("data-default") || "gte";
     dom.alarmOperator.value = fallback;
@@ -767,6 +771,10 @@ function fillAlarmForm(rule) {
   state.alarmSelectedId = rule.id !== undefined ? Number(rule.id) : null;
   if (dom.alarmId) {
     dom.alarmId.value = rule.id !== undefined ? String(rule.id) : "";
+  }
+  if (dom.alarmPlant) {
+    const targetPlant = typeof rule.plantaId === "string" ? rule.plantaId : "";
+    populatePlantSelect(dom.alarmPlant, targetPlant || getDefaultPlantId());
   }
   if (dom.alarmTag) {
     dom.alarmTag.value = rule.tag || "";
@@ -827,6 +835,7 @@ function upsertAlarmRuleState(rule) {
     id: rule.id !== undefined ? Number(rule.id) : rule.id,
     cooldownSeconds: rule.cooldownSeconds !== undefined ? Number(rule.cooldownSeconds) : rule.cooldownSeconds,
     threshold: rule.threshold ?? rule.thresholdValue,
+    plantaId: typeof rule.plantaId === "string" ? rule.plantaId : getDefaultPlantId(),
   };
   const index = state.alarmRules.findIndex((item) => item.id === entry.id);
   if (index >= 0) {
@@ -884,6 +893,10 @@ async function loadAlarmRules(force = false) {
 }
 
 function renderAlarmSection() {
+  if (dom.alarmPlant) {
+    const current = dom.alarmPlant.value || getDefaultPlantId();
+    populatePlantSelect(dom.alarmPlant, current);
+  }
   if (!dom.alarmCard) return;
   const rules = Array.isArray(state.alarmRules) ? [...state.alarmRules] : [];
   rules.sort((a, b) => {
@@ -902,6 +915,8 @@ function renderAlarmSection() {
         const thresholdValue = rule.threshold ?? rule.thresholdValue;
         const thresholdLabel =
           thresholdValue === undefined || thresholdValue === null ? "-" : Number.isFinite(Number(thresholdValue)) ? Number(thresholdValue) : thresholdValue;
+        const plantId = typeof rule.plantaId === "string" ? rule.plantaId : getDefaultPlantId();
+        const plantLabel = getPlantDisplayName(plantId);
         const statusLabel = rule.active ? "Activa" : "Pausada";
         const statusClass = rule.active ? "alarm-status-pill--active" : "alarm-status-pill--inactive";
         const actions = state.canEdit
@@ -913,6 +928,7 @@ function renderAlarmSection() {
           : "";
         return `
           <tr data-rule-id="${escapeHtml(id)}">
+            <td>${escapeHtml(plantLabel)}</td>
             <td>${escapeHtml(rule.tag || "")}</td>
             <td>${escapeHtml(operator)} ${escapeHtml(String(thresholdLabel))}</td>
             <td>${escapeHtml(formatAlarmValueType(rule.valueType))}</td>
@@ -967,6 +983,7 @@ async function handleAlarmFormSubmit(event) {
   const notifyEmail = dom.alarmEmail?.value.trim();
   const cooldownRaw = dom.alarmCooldown?.value;
   const active = dom.alarmActive ? Boolean(dom.alarmActive.checked) : true;
+  const plantaId = (dom.alarmPlant?.value || "").trim().toLowerCase() || getDefaultPlantId();
   if (!tag) {
     setAlarmStatus("El topic es obligatorio.", "warning");
     return;
@@ -993,6 +1010,7 @@ async function handleAlarmFormSubmit(event) {
     notifyEmail,
     cooldownSeconds,
     active,
+    plantaId,
   };
   const query = buildEmpresaQuery();
   const url = state.alarmSelectedId
