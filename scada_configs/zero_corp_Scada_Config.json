@@ -39,7 +39,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB1",
+          "topic": "trend/TempAB1",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -48,7 +48,7 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB1",
+          "topic": "trend/TempAB1",
           "unit": "°C"
         },
         {
