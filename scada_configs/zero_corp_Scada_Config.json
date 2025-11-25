@@ -189,7 +189,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/trend/TempAB4",
+          "topic": "trend/snp0025010/TempAB4",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -198,7 +198,7 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB4",
+          "topic": "trend/snp0025010/TempAB4",
           "unit": "°C"
         },
         {
@@ -239,7 +239,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/trend/TempAB5",
+          "topic": "trend/snp0025010/TempAB5",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -248,7 +248,7 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB5",
+          "topic": "trend/snp0025010/TempAB5",
           "unit": "°C"
         },
         {
@@ -289,7 +289,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "snp0025010/trend/TempAB6",
+          "topic": "trend/snp0025010/TempAB6",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -298,7 +298,7 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "snp0025010/TempAB6",
+          "topic": "trend/snp0025010/TempAB6",
           "unit": "°C"
         },
         {
