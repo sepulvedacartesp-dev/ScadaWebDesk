@@ -48,7 +48,7 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "trend/TempAB1",
+          "topic": "snp0025010/trend/TempAB1",
           "unit": "°C"
         },
         {
