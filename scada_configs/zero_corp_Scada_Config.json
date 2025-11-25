@@ -54,29 +54,29 @@
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "snp0025010/PartirAB1",
+          "topic": "PartirAB1",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "snp0025010/PararAB1",
+          "topic": "PararAB1",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "snp0025010/stsAB1",
+          "topic": "stsAB1",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
         {
           "type": "slide",
           "label": "Control Manual/Auto",
-          "topic": "snp0025010/LocRemAB1",
-          "feedbackTopic": "snp0025010/LocRemfdbkAB1",
+          "topic": "LocRemAB1",
+          "feedbackTopic": "LocRemfdbkAB1",
           "onText": "Automatico",
           "offText": "Manual"
         }
