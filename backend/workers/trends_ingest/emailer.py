@@ -47,6 +47,7 @@ class EmailNotifier:
         self,
         *,
         empresa_id: str,
+        planta_id: Optional[str],
         tag: str,
         operator: AlarmOperator,
         threshold_value: float,
@@ -56,11 +57,12 @@ class EmailNotifier:
         symbol = OPERATOR_SYMBOLS.get(operator, operator)
         subject = (
             f"{self._settings.subject_prefix} "
-            f"{empresa_id} • {tag} {symbol} {threshold_value:g}"
+            f"{empresa_id}/{planta_id or 'default'} - {tag} {symbol} {threshold_value:g}"
         )
         timestamp_display = format_datetime(triggered_at.astimezone(timezone.utc))
         body_lines = [
             f"Se ha disparado una alarma para la empresa {empresa_id}.",
+            f"Planta: {planta_id or 'default'}",
             "",
             f"Tag: {tag}",
             f"Comparador: {symbol}",
@@ -68,7 +70,7 @@ class EmailNotifier:
             f"Valor observado: {observed_value}",
             f"Fecha (UTC): {timestamp_display}",
             "",
-            "Este correo es generado automáticamente por el sistema SCADA SurNex.",
+            "Este correo es generado automaticamente por el sistema SCADA SurNex.",
         ]
         msg = EmailMessage()
         msg["From"] = self._format_from()
@@ -76,13 +78,15 @@ class EmailNotifier:
         msg["Date"] = format_datetime(triggered_at.astimezone(timezone.utc))
         if self._settings.reply_to:
             msg["Reply-To"] = self._settings.reply_to
-        msg.set_content("\n".join(body_lines))
+        msg.set_content("
+".join(body_lines))
         return msg
 
     async def send_alarm(
         self,
         *,
         empresa_id: str,
+        planta_id: Optional[str],
         tag: str,
         operator: AlarmOperator,
         threshold_value: float,
@@ -93,6 +97,7 @@ class EmailNotifier:
         try:
             message = self.build_message(
                 empresa_id=empresa_id,
+                planta_id=planta_id,
                 tag=tag,
                 operator=operator,
                 threshold_value=threshold_value,

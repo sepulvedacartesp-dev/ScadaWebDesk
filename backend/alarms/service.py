@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import asyncpg
 from asyncpg.pool import Pool
@@ -18,6 +18,26 @@ from .schemas import (
 
 ALLOWED_OPERATORS: set[AlarmOperator] = {"lte", "gte", "eq"}
 ALLOWED_VALUE_TYPES: set[AlarmValueType] = {"number", "boolean"}
+DEFAULT_PLANTA_ID = "default"
+
+_COLUMN_CACHE: Dict[Tuple[str, str], bool] = {}
+
+
+async def _table_has_column(pool: Pool, table: str, column: str) -> bool:
+    key = (table, column)
+    if key in _COLUMN_CACHE:
+        return _COLUMN_CACHE[key]
+    query = """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = $1
+          AND column_name = $2
+        LIMIT 1
+    """
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval(query, table, column)
+    _COLUMN_CACHE[key] = bool(exists)
+    return _COLUMN_CACHE[key]
 
 
 def _utcnow() -> datetime:
@@ -255,6 +275,7 @@ async def insert_event(
     *,
     rule_id: int,
     empresa_id: str,
+    planta_id: Optional[str] = None,
     tag: str,
     observed_value: float,
     operator: AlarmOperator,
@@ -263,9 +284,77 @@ async def insert_event(
     email_error: Optional[str] = None,
     notified_at: Optional[datetime] = None,
 ) -> AlarmEventOut:
-    row = await pool.fetchrow(
+    has_planta = await _table_has_column(pool, "alarm_events", "planta_id")
+    if has_planta:
+        query = """
+            INSERT INTO alarm_events (
+                rule_id,
+                empresa_id,
+                planta_id,
+                tag,
+                observed_value,
+                operator,
+                threshold_value,
+                email_sent,
+                email_error,
+                triggered_at,
+                notified_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING
+                id,
+                rule_id,
+                empresa_id,
+                planta_id,
+                tag,
+                observed_value,
+                operator,
+                threshold_value,
+                email_sent,
+                email_error,
+                triggered_at,
+                notified_at
         """
-        INSERT INTO alarm_events (
+        values = (
+            rule_id,
+            empresa_id,
+            planta_id or DEFAULT_PLANTA_ID,
+            tag,
+            observed_value,
+            operator,
+            threshold_value,
+            email_sent,
+            email_error,
+            _utcnow(),
+            notified_at,
+        )
+    else:
+        query = """
+            INSERT INTO alarm_events (
+                rule_id,
+                empresa_id,
+                tag,
+                observed_value,
+                operator,
+                threshold_value,
+                email_sent,
+                email_error,
+                triggered_at,
+                notified_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING
+                id,
+                rule_id,
+                empresa_id,
+                tag,
+                observed_value,
+                operator,
+                threshold_value,
+                email_sent,
+                email_error,
+                triggered_at,
+                notified_at
+        """
+        values = (
             rule_id,
             empresa_id,
             tag,
@@ -274,33 +363,11 @@ async def insert_event(
             threshold_value,
             email_sent,
             email_error,
-            triggered_at,
-            notified_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        RETURNING
-            id,
-            rule_id,
-            empresa_id,
-            tag,
-            observed_value,
-            operator,
-            threshold_value,
-            email_sent,
-            email_error,
-            triggered_at,
-            notified_at
-        """,
-        rule_id,
-        empresa_id,
-        tag,
-        observed_value,
-        operator,
-        threshold_value,
-        email_sent,
-        email_error,
-        _utcnow(),
-        notified_at,
-    )
+            _utcnow(),
+            notified_at,
+        )
+
+    row = await pool.fetchrow(query, *values)
     return _record_to_event(row)
 
 
@@ -322,11 +389,12 @@ async def update_rule_last_triggered(
 
 
 async def load_active_rules_for_worker(pool: Pool) -> List[asyncpg.Record]:
-    rows: List[asyncpg.Record] = await pool.fetch(
-        """
+    has_planta = await _table_has_column(pool, "alarm_rules", "planta_id")
+    select_clause = """
         SELECT
             id,
             empresa_id,
+            {planta},
             tag,
             operator,
             threshold_value,
@@ -337,6 +405,8 @@ async def load_active_rules_for_worker(pool: Pool) -> List[asyncpg.Record]:
             last_triggered_at
         FROM alarm_rules
         WHERE active = TRUE
-        """
+    """
+    rows: List[asyncpg.Record] = await pool.fetch(
+        select_clause.format(planta="planta_id," if has_planta else "NULL AS planta_id,")
     )
     return rows

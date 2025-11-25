@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -18,9 +19,13 @@ except ImportError:
     from emailer import EmailNotifier  # type: ignore
 
 
+DEFAULT_PLANTA_ID = os.environ.get("DEFAULT_PLANTA_ID", "default")
+
+
 @dataclass(slots=True)
 class TrendPoint:
     empresa_id: str
+    planta_id: str
     tag: str
     value: float
     timestamp: datetime
@@ -30,6 +35,7 @@ class TrendPoint:
 class AlarmRuleState:
     id: int
     empresa_id: str
+    planta_id: str
     tag: str
     operator: AlarmOperator
     threshold_value: float
@@ -76,7 +82,7 @@ class AlarmEngine:
         self._queue: asyncio.Queue[TrendPoint] = asyncio.Queue(maxsize=queue_maxsize)
         self._logger = logger or logging.getLogger("alarm-engine")
         self._rules: Dict[int, AlarmRuleState] = {}
-        self._rules_by_topic: Dict[Tuple[str, str], List[AlarmRuleState]] = defaultdict(list)
+        self._rules_by_topic: Dict[Tuple[str, str, str], List[AlarmRuleState]] = defaultdict(list)
         self._consumer_task: Optional[asyncio.Task] = None
         self._refresh_task: Optional[asyncio.Task] = None
         self._pending_triggers: set[asyncio.Task] = set()
@@ -148,15 +154,17 @@ class AlarmEngine:
         async with self._lock:
             records = await alarm_service.load_active_rules_for_worker(self._pool)
             new_rules: Dict[int, AlarmRuleState] = {}
-            new_rules_by_topic: Dict[Tuple[str, str], List[AlarmRuleState]] = defaultdict(list)
+            new_rules_by_topic: Dict[Tuple[str, str, str], List[AlarmRuleState]] = defaultdict(list)
 
             for record in records:
                 data = dict(record)
                 rule_id = int(data["id"])
                 existing = self._rules.get(rule_id)
+                planta_id = str(data.get("planta_id") or DEFAULT_PLANTA_ID)
                 state = AlarmRuleState(
                     id=rule_id,
                     empresa_id=str(data["empresa_id"]),
+                    planta_id=planta_id,
                     tag=str(data["tag"]),
                     operator=str(data["operator"]),
                     threshold_value=float(data["threshold_value"]),
@@ -168,7 +176,7 @@ class AlarmEngine:
                     last_notified_at=existing.last_notified_at if existing else None,
                 )
                 new_rules[rule_id] = state
-                new_rules_by_topic[(state.empresa_id, state.tag)].append(state)
+                new_rules_by_topic[(state.empresa_id, state.planta_id, state.tag)].append(state)
 
             self._rules = new_rules
             self._rules_by_topic = new_rules_by_topic
@@ -192,7 +200,7 @@ class AlarmEngine:
             return
 
     async def _process_point(self, point: TrendPoint) -> None:
-        key = (point.empresa_id, point.tag)
+        key = (point.empresa_id, point.planta_id or DEFAULT_PLANTA_ID, point.tag)
         rules = self._rules_by_topic.get(key)
         if not rules:
             return
@@ -217,6 +225,7 @@ class AlarmEngine:
         else:
             email_sent, email_error = await self._notifier.send_alarm(
                 empresa_id=rule.empresa_id,
+                planta_id=rule.planta_id,
                 tag=rule.tag,
                 operator=rule.operator,
                 threshold_value=rule.threshold_value,
@@ -233,6 +242,7 @@ class AlarmEngine:
                 self._pool,
                 rule_id=rule.id,
                 empresa_id=rule.empresa_id,
+                planta_id=rule.planta_id,
                 tag=rule.tag,
                 observed_value=point.value,
                 operator=rule.operator,

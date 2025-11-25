@@ -30,6 +30,8 @@ logger = logging.getLogger("trend-worker")
 DATABASE_URL = os.environ["DATABASE_URL"]
 MQTT_TOPICS = [t.strip() for t in os.environ["MQTT_TOPICS"].split(",") if t.strip()]
 DEFAULT_EMPRESA_ID = os.environ.get("DEFAULT_EMPRESA_ID", "default")
+DEFAULT_PLANTA_ID = os.environ.get("DEFAULT_PLANTA_ID", "default")
+TRENDS_SUPPORTS_PLANTA_ID: Optional[bool] = None
 
 
 def ensure_table_sql() -> str:
@@ -37,13 +39,16 @@ def ensure_table_sql() -> str:
     CREATE TABLE IF NOT EXISTS trends (
         id BIGSERIAL PRIMARY KEY,
         empresa_id TEXT NOT NULL,
+        planta_id TEXT NOT NULL DEFAULT 'default',
         tag TEXT NOT NULL,
         timestamp TIMESTAMPTZ NOT NULL,
         valor DOUBLE PRECISION NOT NULL,
         ingested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    CREATE INDEX IF NOT EXISTS trends_empresa_tag_ts_idx
-        ON trends (empresa_id, tag, timestamp DESC);
+    ALTER TABLE trends
+        ADD COLUMN IF NOT EXISTS planta_id TEXT NOT NULL DEFAULT 'default';
+    CREATE INDEX IF NOT EXISTS trends_empresa_planta_tag_ts_idx
+        ON trends (empresa_id, planta_id, tag, timestamp DESC);
     """
 
 
@@ -52,7 +57,12 @@ async def create_pool() -> asyncpg.pool.Pool:
     pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
     async with pool.acquire() as conn:
         await conn.execute(ensure_table_sql())
-    logger.info("Tabla trends verificada.")
+    global TRENDS_SUPPORTS_PLANTA_ID
+    TRENDS_SUPPORTS_PLANTA_ID = await _table_has_column(pool, "trends", "planta_id")
+    logger.info(
+        "Tabla trends verificada (planta_id %s).",
+        "habilitado" if TRENDS_SUPPORTS_PLANTA_ID else "no disponible",
+    )
     return pool
 
 
@@ -81,6 +91,18 @@ def coerce_float(value: Any, default: float) -> float:
 ENABLE_ALARM_MONITOR = coerce_bool(os.environ.get("ENABLE_ALARM_MONITOR"), True)
 ALARM_RULES_REFRESH_SECONDS = coerce_int(os.environ.get("ALARM_RULES_REFRESH_SECONDS"), 60)
 ALARM_QUEUE_MAXSIZE = coerce_int(os.environ.get("ALARM_QUEUE_MAXSIZE"), 2048)
+COLUMN_CHECK_QUERY = """
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = $1 AND column_name = $2
+    LIMIT 1
+"""
+
+
+async def _table_has_column(pool: asyncpg.pool.Pool, table: str, column: str) -> bool:
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval(COLUMN_CHECK_QUERY, table, column)
+    return bool(exists)
 
 
 def load_broker_profiles() -> Dict[str, Dict[str, Any]]:
@@ -162,9 +184,20 @@ def parse_payload(raw_payload: bytes, topic: str) -> Dict[str, Any]:
     text = raw_payload.decode("utf-8").strip()
 
     empresa_id = DEFAULT_EMPRESA_ID
+    planta_id = DEFAULT_PLANTA_ID
     tag = topic
+
     parts = topic.split("/")
-    if len(parts) >= 4 and parts[0] == "scada" and parts[1] == "customers":
+    if len(parts) >= 5 and parts[0] == "scada" and parts[1] == "customers":
+        # Nuevo formato: scada/customers/<empresa>/<planta>/trend/<tag...>
+        empresa_id = parts[2] or DEFAULT_EMPRESA_ID
+        planta_id = parts[3] or DEFAULT_PLANTA_ID
+        if len(parts) >= 6 and parts[4] == "trend":
+            tag = "/".join(parts[5:]) or topic
+        else:
+            tag = "/".join(parts[4:]) or topic
+    elif len(parts) >= 4 and parts[0] == "scada" and parts[1] == "customers":
+        # Formato legado: scada/customers/<empresa>/trend/<tag...>
         empresa_id = parts[2] or DEFAULT_EMPRESA_ID
         if len(parts) >= 5 and parts[3] == "trend":
             tag = "/".join(parts[4:]) or topic
@@ -184,6 +217,8 @@ def parse_payload(raw_payload: bytes, topic: str) -> Dict[str, Any]:
     if isinstance(parsed, dict):
         if parsed.get("empresaId"):
             empresa_id = str(parsed["empresaId"])
+        if parsed.get("plantaId"):
+            planta_id = str(parsed["plantaId"])
         if parsed.get("tag"):
             tag = str(parsed["tag"])
         raw_value = parsed.get("value")
@@ -211,6 +246,7 @@ def parse_payload(raw_payload: bytes, topic: str) -> Dict[str, Any]:
 
     return {
         "empresa_id": empresa_id or DEFAULT_EMPRESA_ID,
+        "planta_id": planta_id or DEFAULT_PLANTA_ID,
         "tag": tag,
         "value": value,
         "timestamp": timestamp,
@@ -218,17 +254,45 @@ def parse_payload(raw_payload: bytes, topic: str) -> Dict[str, Any]:
 
 
 async def insert_point(pool: asyncpg.pool.Pool, point: Dict[str, Any]) -> None:
+    global TRENDS_SUPPORTS_PLANTA_ID
     async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO trends (empresa_id, tag, timestamp, valor)
-            VALUES ($1, $2, $3, $4)
-            """,
-            point["empresa_id"],
-            point["tag"],
-            point["timestamp"],
-            point["value"],
-        )
+        try:
+            if TRENDS_SUPPORTS_PLANTA_ID:
+                await conn.execute(
+                    """
+                    INSERT INTO trends (empresa_id, planta_id, tag, timestamp, valor)
+                    VALUES ($1, $2, $3, $4, $5)
+                    """,
+                    point["empresa_id"],
+                    point["planta_id"],
+                    point["tag"],
+                    point["timestamp"],
+                    point["value"],
+                )
+            else:
+                await conn.execute(
+                    """
+                    INSERT INTO trends (empresa_id, tag, timestamp, valor)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    point["empresa_id"],
+                    point["tag"],
+                    point["timestamp"],
+                    point["value"],
+                )
+        except asyncpg.UndefinedColumnError:
+            # Si la tabla no tiene planta_id, reintentar en modo compatibilidad
+            TRENDS_SUPPORTS_PLANTA_ID = False
+            await conn.execute(
+                """
+                INSERT INTO trends (empresa_id, tag, timestamp, valor)
+                VALUES ($1, $2, $3, $4)
+                """,
+                point["empresa_id"],
+                point["tag"],
+                point["timestamp"],
+                point["value"],
+            )
 
 
 async def main() -> None:
@@ -269,6 +333,7 @@ async def main() -> None:
             if alarm_engine:
                 trend_point = TrendPoint(
                     empresa_id=point["empresa_id"],
+                    planta_id=point["planta_id"],
                     tag=point["tag"],
                     value=point["value"],
                     timestamp=point["timestamp"],
