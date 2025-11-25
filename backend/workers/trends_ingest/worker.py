@@ -52,6 +52,14 @@ def ensure_table_sql() -> str:
     """
 
 
+def normalize_planta(value: Optional[str]) -> str:
+    if not value:
+        return DEFAULT_PLANTA_ID
+    normalized = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(value))
+    normalized = normalized.strip("_").lower()
+    return normalized or DEFAULT_PLANTA_ID
+
+
 async def create_pool() -> asyncpg.pool.Pool:
     logger.info("Conectando a PostgreSQL...")
     pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
@@ -191,7 +199,7 @@ def parse_payload(raw_payload: bytes, topic: str) -> Dict[str, Any]:
     if len(parts) >= 5 and parts[0] == "scada" and parts[1] == "customers":
         # Nuevo formato: scada/customers/<empresa>/<planta>/trend/<tag...>
         empresa_id = parts[2] or DEFAULT_EMPRESA_ID
-        planta_id = parts[3] or DEFAULT_PLANTA_ID
+        planta_id = normalize_planta(parts[3] or DEFAULT_PLANTA_ID)
         if len(parts) >= 6 and parts[4] == "trend":
             tag = "/".join(parts[5:]) or topic
         else:
@@ -218,7 +226,7 @@ def parse_payload(raw_payload: bytes, topic: str) -> Dict[str, Any]:
         if parsed.get("empresaId"):
             empresa_id = str(parsed["empresaId"])
         if parsed.get("plantaId"):
-            planta_id = str(parsed["plantaId"])
+            planta_id = normalize_planta(parsed["plantaId"])
         if parsed.get("tag"):
             tag = str(parsed["tag"])
         raw_value = parsed.get("value")

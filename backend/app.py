@@ -37,6 +37,13 @@ import asyncpg
 from quotes import db as quote_db
 from quotes import service as quote_service
 from quotes.enums import QuoteStatus
+
+# Normaliza identificadores de planta para consultas/DB
+def normalize_plant_id(value: Optional[str]) -> str:
+    if not value:
+        return DEFAULT_PLANTA_ID
+    normalized = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(value)).strip().strip("_")
+    return normalized.lower() or DEFAULT_PLANTA_ID
 from quotes.exceptions import (
     CatalogError,
     ClientExistsError,
@@ -2384,12 +2391,12 @@ async def list_trend_tags(
     config = load_scada_config(company_id)
     email = decoded.get("email") if decoded else None
     role = "admin" if is_master else role_for_email(config, email)
-    allowed_plants = resolve_user_plant_ids(config, email, role, is_master)
+    allowed_plants = [normalize_plant_id(pid) for pid in resolve_user_plant_ids(config, email, role, is_master)]
     plants_list = config.get("plants") or []
     # Normaliza planta solicitada
     selected_plants: Optional[List[str]] = None
     if planta_id:
-        plant_candidate = str(planta_id).strip().lower()
+        plant_candidate = normalize_plant_id(planta_id)
         if allowed_plants and plant_candidate not in allowed_plants:
             raise HTTPException(status_code=403, detail="Planta no autorizada")
         selected_plants = [plant_candidate]
@@ -2420,11 +2427,13 @@ async def list_trend_tags(
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
     tags = [row["tag"] for row in rows if row["tag"]]
-    visible_plants = [
-        {"id": str(item.get("id") or "").strip().lower(), "name": item.get("name") or item.get("id")}
-        for item in plants_list
-        if not allowed_plants or str(item.get("id") or "").strip().lower() in allowed_plants
-    ]
+    visible_plants = []
+    for item in plants_list:
+        raw_id = item.get("id") or item.get("serialCode") or item.get("name") or ""
+        norm_id = normalize_plant_id(raw_id)
+        if allowed_plants and norm_id not in allowed_plants:
+            continue
+        visible_plants.append({"id": norm_id, "name": item.get("name") or raw_id})
     return {
         "empresaId": company_id,
         "tags": tags,
@@ -2480,10 +2489,10 @@ async def read_trend_series(
     config = load_scada_config(company_id)
     email = decoded.get("email") if decoded else None
     role = "admin" if is_master else role_for_email(config, email)
-    allowed_plants = resolve_user_plant_ids(config, email, role, is_master)
+    allowed_plants = [normalize_plant_id(pid) for pid in resolve_user_plant_ids(config, email, role, is_master)]
     selected_plants: Optional[List[str]] = None
     if planta_id:
-        plant_candidate = str(planta_id).strip().lower()
+        plant_candidate = normalize_plant_id(planta_id)
         if allowed_plants and plant_candidate not in allowed_plants:
             raise HTTPException(status_code=403, detail="Planta no autorizada")
         selected_plants = [plant_candidate]
