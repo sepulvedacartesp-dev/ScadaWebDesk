@@ -20,6 +20,7 @@ depends_on: tuple[str, ...] | None = None
 def upgrade() -> None:
     # trends: add planta_id and rebuild index
     op.execute("ALTER TABLE trends ADD COLUMN IF NOT EXISTS planta_id TEXT NOT NULL DEFAULT 'default'")
+    op.execute("DROP INDEX IF EXISTS trends_empresa_planta_tag_ts_idx")
     op.execute("DROP INDEX IF EXISTS trends_empresa_tag_ts_idx")
     op.create_index(
         "trends_empresa_planta_tag_ts_idx",
@@ -29,6 +30,7 @@ def upgrade() -> None:
 
     # alarm_rules: add planta_id and adjust index
     op.execute("ALTER TABLE alarm_rules ADD COLUMN IF NOT EXISTS planta_id TEXT NOT NULL DEFAULT 'default'")
+    op.execute("DROP INDEX IF EXISTS ix_alarm_rules_empresa_planta_tag_active")
     op.execute("DROP INDEX IF EXISTS ix_alarm_rules_empresa_tag_active")
     op.create_index(
         "ix_alarm_rules_empresa_planta_tag_active",
@@ -38,6 +40,7 @@ def upgrade() -> None:
 
     # alarm_events: add planta_id and adjust index
     op.execute("ALTER TABLE alarm_events ADD COLUMN IF NOT EXISTS planta_id TEXT NOT NULL DEFAULT 'default'")
+    op.execute("DROP INDEX IF EXISTS ix_alarm_events_empresa_planta_tag_triggered_at")
     op.execute("DROP INDEX IF EXISTS ix_alarm_events_empresa_tag_triggered_at")
     op.create_index(
         "ix_alarm_events_empresa_planta_tag_triggered_at",
