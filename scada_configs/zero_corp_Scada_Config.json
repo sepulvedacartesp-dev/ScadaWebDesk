@@ -13,7 +13,7 @@
   "plants": [
     {
       "id": "zero_corp1",
-      "name": "Zona_4",
+      "name": "zona_4",
       "serialCode": "snp0025010",
       "description": "Planta Zero Corp cliente Zona_4",
       "active": true
