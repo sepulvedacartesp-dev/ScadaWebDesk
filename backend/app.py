@@ -2366,6 +2366,7 @@ def get_trend_page():
 async def list_trend_tags(
     authorization: Optional[str] = Header(None),
     empresa_id: Optional[str] = Query(None),
+    planta_id: Optional[str] = Query(None, alias="plantaId"),
     limit: int = Query(200, ge=1, le=1000),
 ):
     decoded = verify_bearer_token(authorization)
@@ -2380,19 +2381,57 @@ async def list_trend_tags(
     else:
         company_id = extract_company_id(decoded)
 
+    config = load_scada_config(company_id)
+    email = decoded.get("email") if decoded else None
+    role = "admin" if is_master else role_for_email(config, email)
+    allowed_plants = resolve_user_plant_ids(config, email, role, is_master)
+    plants_list = config.get("plants") or []
+    # Normaliza planta solicitada
+    selected_plants: Optional[List[str]] = None
+    if planta_id:
+        plant_candidate = str(planta_id).strip().lower()
+        if allowed_plants and plant_candidate not in allowed_plants:
+            raise HTTPException(status_code=403, detail="Planta no autorizada")
+        selected_plants = [plant_candidate]
+    elif allowed_plants:
+        selected_plants = allowed_plants
+
     pool = require_trend_pool()
     effective_limit = max(1, min(int(limit), 1000))
-    query = """
-        SELECT DISTINCT tag
-        FROM trends
-        WHERE empresa_id = $1
-        ORDER BY tag ASC
-        LIMIT $2
-    """
+    if selected_plants is not None:
+        query = """
+            SELECT DISTINCT tag
+            FROM trends
+            WHERE empresa_id = $1
+              AND planta_id = ANY($2)
+            ORDER BY tag ASC
+            LIMIT $3
+        """
+        params = (company_id, selected_plants, effective_limit)
+    else:
+        query = """
+            SELECT DISTINCT tag
+            FROM trends
+            WHERE empresa_id = $1
+            ORDER BY tag ASC
+            LIMIT $2
+        """
+        params = (company_id, effective_limit)
     async with pool.acquire() as conn:
-        rows = await conn.fetch(query, company_id, effective_limit)
+        rows = await conn.fetch(query, *params)
     tags = [row["tag"] for row in rows if row["tag"]]
-    return {"empresaId": company_id, "tags": tags, "count": len(tags)}
+    visible_plants = [
+        {"id": str(item.get("id") or "").strip().lower(), "name": item.get("name") or item.get("id")}
+        for item in plants_list
+        if not allowed_plants or str(item.get("id") or "").strip().lower() in allowed_plants
+    ]
+    return {
+        "empresaId": company_id,
+        "tags": tags,
+        "count": len(tags),
+        "plants": visible_plants,
+        "selectedPlantas": selected_plants or [],
+    }
 
 
 @app.get("/api/tendencias")
@@ -2400,6 +2439,7 @@ async def read_trend_series(
     tags: List[str] = Query(..., alias="tag"),
     authorization: Optional[str] = Header(None),
     empresa_id: Optional[str] = Query(None),
+    planta_id: Optional[str] = Query(None, alias="plantaId"),
     from_ts: Optional[str] = Query(None, alias="from"),
     to_ts: Optional[str] = Query(None, alias="to"),
     resolution: str = Query("raw"),
@@ -2437,6 +2477,19 @@ async def read_trend_series(
     else:
         company_id = extract_company_id(decoded)
 
+    config = load_scada_config(company_id)
+    email = decoded.get("email") if decoded else None
+    role = "admin" if is_master else role_for_email(config, email)
+    allowed_plants = resolve_user_plant_ids(config, email, role, is_master)
+    selected_plants: Optional[List[str]] = None
+    if planta_id:
+        plant_candidate = str(planta_id).strip().lower()
+        if allowed_plants and plant_candidate not in allowed_plants:
+            raise HTTPException(status_code=403, detail="Planta no autorizada")
+        selected_plants = [plant_candidate]
+    elif allowed_plants:
+        selected_plants = allowed_plants
+
     resolution_key = (resolution or "raw").strip().lower()
     if resolution_key not in TRENDS_RESOLUTION_SECONDS:
         raise HTTPException(status_code=400, detail=f"Resolucion no soportada: {resolution}")
@@ -2461,8 +2514,7 @@ async def read_trend_series(
 
     async with pool.acquire() as conn:
         for normalized_tag in normalized_tags:
-            stats_row = await conn.fetchrow(
-                """
+            stats_query = """
                 SELECT
                     COUNT(*) OVER () AS count,
                     MIN(valor) OVER () AS min_value,
@@ -2473,15 +2525,15 @@ async def read_trend_series(
                 FROM trends
                 WHERE empresa_id = $1
                   AND tag = $2
+                  {planta_filter}
                   AND timestamp BETWEEN $3 AND $4
                 ORDER BY timestamp DESC
                 LIMIT 1
-                """,
-                company_id,
-                normalized_tag,
-                start_dt,
-                end_dt,
-            )
+            """.format(planta_filter="AND planta_id = ANY($5)" if selected_plants is not None else "")
+            stats_params = [company_id, normalized_tag, start_dt, end_dt]
+            if selected_plants is not None:
+                stats_params.append(selected_plants)
+            stats_row = await conn.fetchrow(stats_query, *stats_params)
 
             if stats_row is None or not stats_row["count"]:
                 series_collection.append(
@@ -2500,11 +2552,17 @@ async def read_trend_series(
                     FROM trends
                     WHERE empresa_id = $1
                       AND tag = $2
+                      {planta_filter}
                       AND timestamp BETWEEN $3 AND $4
                     ORDER BY timestamp ASC
                     LIMIT $5
-                """
-                rows = await conn.fetch(data_query, company_id, normalized_tag, start_dt, end_dt, fetch_limit)
+                """.format(
+                    planta_filter="AND planta_id = ANY($6)" if selected_plants is not None else ""
+                )
+                params = [company_id, normalized_tag, start_dt, end_dt, fetch_limit]
+                if selected_plants is not None:
+                    params.append(selected_plants)
+                rows = await conn.fetch(data_query, *params)
                 points = [
                     {"timestamp": isoformat_utc(row["timestamp"]), "value": float(row["valor"])}  # type: ignore[arg-type]
                     for row in rows
@@ -2516,19 +2574,27 @@ async def read_trend_series(
                     FROM trends
                     WHERE empresa_id = $1
                       AND tag = $2
+                      {planta_filter}
                       AND timestamp BETWEEN $3 AND $4
                     GROUP BY bucket
                     ORDER BY bucket ASC
                     LIMIT $6
-                """
-                rows = await conn.fetch(
-                    data_query,
+                """.format(
+                    planta_filter="AND planta_id = ANY($7)" if selected_plants is not None else ""
+                )
+                params = [
                     company_id,
                     normalized_tag,
                     start_dt,
                     end_dt,
                     interval_seconds,
                     fetch_limit,
+                ]
+                if selected_plants is not None:
+                    params.append(selected_plants)
+                rows = await conn.fetch(
+                    data_query,
+                    *params,
                 )
                 points = [
                     {"timestamp": isoformat_utc(row["bucket"]), "value": float(row["value"])}  # type: ignore[arg-type]

@@ -43,7 +43,7 @@ const mainTitleNode = document.getElementById("main-title");
 
 
 const trendForm = document.getElementById("trend-form");
-
+const plantSelect = document.getElementById("trend-plant");
 const tagSelect = document.getElementById("trend-tag");
 
 const rangeSelect = document.getElementById("trend-range");
@@ -96,6 +96,9 @@ const state = {
   token: null,
 
   empresaId: null,
+
+  plantId: null,
+  plants: [],
 
 };
 
@@ -153,6 +156,36 @@ function updateHoverReadout(message) {
 
   }
 
+}
+
+function populatePlantSelect(plants, selectedId) {
+  if (!plantSelect) return;
+  plantSelect.innerHTML = "";
+  const normalized = Array.isArray(plants)
+    ? plants
+        .map((p) => ({ id: (p.id || "").trim().toLowerCase(), name: p.name || p.id }))
+        .filter((p) => p.id)
+    : [];
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = normalized.length ? "Selecciona una planta" : "Sin plantas";
+  plantSelect.appendChild(defaultOption);
+  normalized.forEach((plant) => {
+    const opt = document.createElement("option");
+    opt.value = plant.id;
+    opt.textContent = plant.name || plant.id;
+    opt.selected = plant.id === selectedId;
+    plantSelect.appendChild(opt);
+  });
+  const resolved = normalized.find((p) => p.id === selectedId) || normalized[0];
+  if (resolved) {
+    plantSelect.value = resolved.id;
+    state.plantId = resolved.id;
+  } else {
+    plantSelect.value = "";
+    state.plantId = null;
+  }
+  plantSelect.disabled = normalized.length === 0;
 }
 
 function computeInitials(title) {
@@ -810,100 +843,75 @@ function computeRange(rangeValue) {
 
 
 
-async function loadTags() {
-
+async function loadTags(selectedPlantId) {
   try {
-
     setApiStatus("Consultando tags...", false);
-
     setFormEnabled(false);
-
     showFeedback("Cargando variables disponibles...", "info");
 
-
-
-    const payload = await fetchJson(TAGS_ENDPOINT);
-
+    const params = new URLSearchParams();
+    const nextPlant = typeof selectedPlantId === "string" ? selectedPlantId : state.plantId;
+    if (nextPlant) {
+      params.set("plantaId", nextPlant);
+    }
+    const payload = await fetchJson(`${TAGS_ENDPOINT}${params.toString() ? `?${params.toString()}` : ""}`);
+    const plants = Array.isArray(payload?.plants) ? payload.plants : [];
     const tags = Array.isArray(payload?.tags) ? payload.tags : [];
-
     state.empresaId = payload?.empresaId || null;
+    state.plants = plants;
 
-
+    const plantIds = plants.map((p) => (p.id || "").trim().toLowerCase()).filter(Boolean);
+    const apiSelected = Array.isArray(payload?.selectedPlantas) ? payload.selectedPlantas.filter(Boolean) : [];
+    let resolvedPlant = nextPlant && plantIds.includes(nextPlant) ? nextPlant : null;
+    if (!resolvedPlant && apiSelected.length && (!plantIds.length || plantIds.includes(apiSelected[0]))) {
+      resolvedPlant = apiSelected[0];
+    }
+    if (!resolvedPlant && plantIds.length) {
+      resolvedPlant = plantIds[0];
+    }
+    state.plantId = resolvedPlant || null;
+    populatePlantSelect(plants, state.plantId);
 
     const title = hydrateMainTitle();
-
     updateBrandLogo(state.empresaId, title);
 
-
-
     tagSelect.innerHTML = "";
-
     if (!tags.length) {
-
       setApiStatus("Sin tags configurados", true);
-
       showFeedback("No hay tendencias configuradas para la empresa seleccionada.", "warning");
-
       updateHoverReadout(defaultHoverMessage);
-
       return;
-
     }
 
-
-
     tags.forEach((tag) => {
-
       const option = document.createElement("option");
-
       option.value = tag;
-
       option.textContent = tag;
-
       tagSelect.appendChild(option);
-
     });
-
-
 
     tagSelect.multiple = true;
-
     tagSelect.size = Math.min(Math.max(tags.length, 4), 10);
-
     Array.from(tagSelect.options).forEach((option, index) => {
-
       option.selected = index === 0;
-
     });
 
-
-
+    if (plantSelect) {
+      plantSelect.disabled = plantIds.length === 0;
+    }
     tagSelect.disabled = false;
-
     rangeSelect.disabled = false;
-
     resolutionSelect.disabled = false;
-
     runButton.disabled = false;
 
-
-
     setApiStatus("Tags disponibles", true);
-
     showFeedback("Selecciona una o varias variables y haz clic en Actualizar.", "info");
-
   } catch (error) {
-
     console.error("No se pudieron obtener los tags", error);
-
     setApiStatus("Error al consultar", false);
-
     showFeedback("No fue posible obtener la lista de tags. Intenta nuevamente.", "error");
-
     updateHoverReadout(defaultHoverMessage);
-
   }
-
 }
 
 
@@ -945,6 +953,9 @@ async function loadTrendData(event) {
 
 
   const params = new URLSearchParams({ resolution });
+  if (state.plantId) {
+    params.set("plantaId", state.plantId);
+  }
 
   tags.forEach((tag) => params.append("tag", tag));
 
@@ -1085,7 +1096,7 @@ function toggleCustomRange() {
 
 function setFormEnabled(enabled) {
 
-  const controls = [tagSelect, rangeSelect, resolutionSelect, runButton, downloadCsvBtn];
+  const controls = [plantSelect, tagSelect, rangeSelect, resolutionSelect, runButton, downloadCsvBtn];
 
   controls.forEach((control) => {
 
@@ -1180,6 +1191,11 @@ function attachEventHandlers() {
 
 
   rangeSelect?.addEventListener("change", toggleCustomRange);
+  plantSelect?.addEventListener("change", () => {
+    const selected = (plantSelect.value || "").trim().toLowerCase();
+    state.plantId = selected || null;
+    loadTags(state.plantId);
+  });
 
   trendForm?.addEventListener("submit", loadTrendData);
 
