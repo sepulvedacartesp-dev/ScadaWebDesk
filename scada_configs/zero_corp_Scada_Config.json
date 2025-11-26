@@ -89,7 +89,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB2",
+          "topic": "trend/TempAB2",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -98,35 +98,35 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB2",
+          "topic": "trend/TempAB2",
           "unit": "°C"
         },
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "snp0025010/PartirAB2",
+          "topic": "PartirAB2",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "snp0025010/PararAB2",
+          "topic": "PararAB2",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "snp0025010/stsAB2",
+          "topic": "stsAB2",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
         {
           "type": "slide",
           "label": "Control Manual/Auto",
-          "topic": "snp0025010/LocRemAB2",
-          "feedbackTopic": "snp0025010/LocRemfdbkAB2",
+          "topic": "LocRemAB2",
+          "feedbackTopic": "LocRemfdbkAB2",
           "onText": "Automatico",
           "offText": "Manual"
         }
@@ -139,7 +139,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB3",
+          "topic": "trend/TempAB3",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -148,35 +148,35 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB3",
+          "topic": "trend/TempAB3",
           "unit": "°C"
         },
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "snp0025010/PartirAB3",
+          "topic": "PartirAB3",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "snp0025010/PararAB3",
+          "topic": "PararAB3",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "snp0025010/stsAB3",
+          "topic": "stsAB3",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
         {
           "type": "slide",
           "label": "Control Manual/Auto",
-          "topic": "snp0025010/LocRemAB3",
-          "feedbackTopic": "snp0025010/LocRemfdbkAB3",
+          "topic": "LocRemAB3",
+          "feedbackTopic": "LocRemfdbkAB3",
           "onText": "Automatico",
           "offText": "Manual"
         }
