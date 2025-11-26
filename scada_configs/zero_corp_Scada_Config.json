@@ -35,6 +35,7 @@
     {
       "title": "ABox 001",
       "plantId": "zona_4_snp0025010",
+      "isGeneral": false,
       "objects": [
         {
           "type": "gauge",
@@ -80,12 +81,12 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ],
-      "isGeneral": false
+      ]
     },
     {
       "title": "ABox 002",
       "plantId": "zona_4_snp0025010",
+      "isGeneral": false,
       "objects": [
         {
           "type": "gauge",
@@ -131,12 +132,12 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ],
-      "isGeneral": false
+      ]
     },
     {
       "title": "ABox 003",
       "plantId": "zona_4_snp0025010",
+      "isGeneral": false,
       "objects": [
         {
           "type": "gauge",
@@ -182,12 +183,12 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ],
-      "isGeneral": false
+      ]
     },
     {
       "title": "ABox 004",
       "plantId": "zona_4_snp0025010",
+      "isGeneral": false,
       "objects": [
         {
           "type": "gauge",
@@ -233,12 +234,12 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ],
-      "isGeneral": false
+      ]
     },
     {
       "title": " ABox 005",
       "plantId": "zona_4_snp0025010",
+      "isGeneral": false,
       "objects": [
         {
           "type": "gauge",
@@ -284,12 +285,12 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ],
-      "isGeneral": false
+      ]
     },
     {
       "title": "ABox 006",
       "plantId": "zona_4_snp0025010",
+      "isGeneral": false,
       "objects": [
         {
           "type": "gauge",
@@ -335,12 +336,12 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ],
-      "isGeneral": false
+      ]
     },
     {
       "title": "ABox 001",
       "plantId": "purranque_sn00ab2511",
+      "isGeneral": false,
       "objects": [
         {
           "type": "gauge",
@@ -379,12 +380,12 @@
           "onText": "Auto",
           "offText": "Manual"
         }
-      ],
-      "isGeneral": false
+      ]
     },
     {
       "title": "Parametros y configuracion",
       "plantId": "zona_4_snp0025010",
+      "isGeneral": true,
       "objects": [
         {
           "type": "slide",
@@ -402,8 +403,7 @@
           "label": "Temperatura OFF",
           "unit": "°C"
         }
-      ],
-      "isGeneral": false
+      ]
     }
   ]
 }
