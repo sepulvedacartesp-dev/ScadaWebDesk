@@ -390,6 +390,8 @@
         {
           "type": "slide",
           "label": "Modo de control",
+          "topic": "LocRem",
+          "feedbackTopic": "LocRemfdbk",
           "onText": "Remoto",
           "offText": "Local"
         },
