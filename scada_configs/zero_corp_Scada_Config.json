@@ -33,7 +33,7 @@
   },
   "containers": [
     {
-      "title": "Planta 1 - ABox 001",
+      "title": "ABox 001",
       "plantId": "zona_4_snp0025010",
       "objects": [
         {
@@ -83,7 +83,7 @@
       ]
     },
     {
-      "title": "Planta 1 - ABox 002",
+      "title": "ABox 002",
       "plantId": "zona_4_snp0025010",
       "objects": [
         {
@@ -133,7 +133,7 @@
       ]
     },
     {
-      "title": "Planta 1 - ABox 003",
+      "title": "ABox 003",
       "plantId": "zona_4_snp0025010",
       "objects": [
         {
@@ -183,7 +183,7 @@
       ]
     },
     {
-      "title": "Planta 1 - ABox 004",
+      "title": "ABox 004",
       "plantId": "zona_4_snp0025010",
       "objects": [
         {
@@ -233,7 +233,7 @@
       ]
     },
     {
-      "title": "Planta 1 - ABox 005",
+      "title": " ABox 005",
       "plantId": "zona_4_snp0025010",
       "objects": [
         {
@@ -283,7 +283,7 @@
       ]
     },
     {
-      "title": "Planta 1 - ABox 006",
+      "title": "ABox 006",
       "plantId": "zona_4_snp0025010",
       "objects": [
         {
