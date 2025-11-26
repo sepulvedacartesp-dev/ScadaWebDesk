@@ -2492,6 +2492,7 @@ function normalizeContainer(raw) {
     title: typeof raw?.title === "string" ? raw.title : "",
     plantId: typeof raw?.plantId === "string" ? raw.plantId.trim().toLowerCase() : "",
     objects: [],
+    isGeneral: !!(raw && (raw.isGeneral || raw.general)),
   };
   if (Array.isArray(raw?.objects)) {
     result.objects = raw.objects.map((object) => normalizeObject(object));
