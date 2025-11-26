@@ -3179,6 +3179,7 @@ function prepareConfigForSave() {
     const cleanContainer = {
       title: container.title || "",
       plantId: validPlantIds.has(plantId) ? plantId : defaultPlantId,
+      isGeneral: !!container.isGeneral,
       objects: [],
     };
     if (Array.isArray(container.objects)) {
