@@ -80,7 +80,8 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ]
+      ],
+      "isGeneral": false
     },
     {
       "title": "ABox 002",
@@ -130,7 +131,8 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ]
+      ],
+      "isGeneral": false
     },
     {
       "title": "ABox 003",
@@ -180,7 +182,8 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ]
+      ],
+      "isGeneral": false
     },
     {
       "title": "ABox 004",
@@ -230,7 +233,8 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ]
+      ],
+      "isGeneral": false
     },
     {
       "title": " ABox 005",
@@ -280,7 +284,8 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ]
+      ],
+      "isGeneral": false
     },
     {
       "title": "ABox 006",
@@ -330,7 +335,8 @@
           "onText": "Automatico",
           "offText": "Manual"
         }
-      ]
+      ],
+      "isGeneral": false
     },
     {
       "title": "ABox 001",
@@ -373,7 +379,31 @@
           "onText": "Auto",
           "offText": "Manual"
         }
-      ]
+      ],
+      "isGeneral": false
+    },
+    {
+      "title": "Parametros y configuracion",
+      "plantId": "zona_4_snp0025010",
+      "objects": [
+        {
+          "type": "slide",
+          "label": "Modo de control",
+          "onText": "Remoto",
+          "offText": "Local"
+        },
+        {
+          "type": "valuePublisher",
+          "label": "Temperatura On",
+          "unit": "°C"
+        },
+        {
+          "type": "valuePublisher",
+          "label": "Temperatura OFF",
+          "unit": "°C"
+        }
+      ],
+      "isGeneral": false
     }
   ]
 }
