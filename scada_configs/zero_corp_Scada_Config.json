@@ -396,11 +396,15 @@
         {
           "type": "valuePublisher",
           "label": "Temperatura On",
+          "topic": "ton",
+          "feedbackTopic": "tonfdbk",
           "unit": "°C"
         },
         {
           "type": "valuePublisher",
           "label": "Temperatura OFF",
+          "topic": "toff",
+          "feedbackTopic": "tofffdbk",
           "unit": "°C"
         }
       ]
