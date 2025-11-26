@@ -425,12 +425,13 @@ body {
   display: none;
 }
 
-.system-group.sidebar-view .container-card.sidebar-active {
+.system-group.sidebar-view .container-card.container-general {
   display: flex;
+  order: -1;
 }
 
-.system-group.sidebar-view .container-general {
-  order: -1;
+.system-group.sidebar-view .container-card.sidebar-active {
+  display: flex;
 }
 
 .container-card {
