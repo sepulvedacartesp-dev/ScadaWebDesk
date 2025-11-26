@@ -19,16 +19,16 @@
       "active": true
     },
     {
-      "id": "zero_corp_2",
-      "name": "Purranque",
-      "serialCode": "ZC25001",
-      "description": "Planta Purranque Core norte",
+      "id": "purranque_sn00ab2511",
+      "name": "purranque_sn00ab2511",
+      "serialCode": "purranque_sn00ab2511",
+      "description": "Planta Purranque a-box x 1",
       "active": true
     }
   ],
   "plantAssignments": {
     "alt.f4-do41i4d7@yopmail.com": [
-      "zero_corp_2"
+      "purranque_sn00ab2511"
     ]
   },
   "containers": [
@@ -334,42 +334,45 @@
     },
     {
       "title": "Ajuste de Parametros",
-      "plantId": "zero_corp_2",
+      "plantId": "purranque_sn00ab2511",
       "objects": [
         {
-          "type": "valuePublisher",
-          "label": "Temperatura Minima",
-          "topic": "Planta1/Set_Min_Temp",
-          "feedbackTopic": "Planta1/Set_Min_Temp_fdbk",
-          "unit": "°C"
+          "type": "level",
+          "label": "Temperatura",
+          "topic": "TempAB1",
+          "unit": "°C",
+          "color": "#00b4d8",
+          "min": 0,
+          "max": 150
         },
         {
-          "type": "valuePublisher",
-          "label": "Temperatura Maxima",
-          "topic": "Planta1/Set_Max_Temp",
-          "feedbackTopic": "Planta1/Set_Max_Temp_fdbk",
-          "unit": "°C"
+          "type": "pumpStatus",
+          "label": "Estado",
+          "topic": "stsAB1",
+          "onColor": "#00ff9d",
+          "offColor": "#6c757d"
         },
         {
-          "type": "valuePublisher",
-          "label": "Simulador de Temperatura",
-          "topic": "Planta1/Temp",
-          "feedbackTopic": "Planta1/Temp_fdbk",
-          "unit": "°C"
+          "type": "startBtn",
+          "label": "Partir",
+          "topic": "PartirAB1",
+          "color": "#00b4d8",
+          "payload": "1"
         },
         {
-          "type": "number",
-          "label": "Temperatura Remota",
-          "topic": "Temp_MCU_001",
-          "unit": "°C"
+          "type": "startBtn",
+          "label": "Parar",
+          "topic": "PararAB1",
+          "color": "#d60000",
+          "payload": "1"
         },
         {
           "type": "slide",
-          "label": "Nivel",
-          "topic": "Planta1/SimuTemp",
-          "feedbackTopic": "Planta1/SimuTempfbdk",
-          "onText": "Valor Simulado",
-          "offText": "Valor Real"
+          "label": "Modo",
+          "topic": "LocRemAB1",
+          "feedbackTopic": "LocRemfdbkAB1",
+          "onText": "Auto",
+          "offText": "Manual"
         }
       ]
     }
