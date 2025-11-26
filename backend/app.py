@@ -11,7 +11,7 @@ import uuid
 import copy
 import requests
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any, Set, Tuple
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
@@ -291,6 +291,98 @@ def require_quote_pool() -> asyncpg.pool.Pool:
         raise HTTPException(status_code=503, detail="Servicio de cotizaciones no disponible") from exc
 
 
+# ---- Session helpers (WebSocket) ----
+async def ensure_session_table(pool: asyncpg.pool.Pool) -> None:
+    global session_table_ready
+    if session_table_ready:
+        return
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {SESSION_TABLE_NAME} (
+                    session_id UUID PRIMARY KEY,
+                    empresa_id TEXT NOT NULL,
+                    uid TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    last_seen TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                CREATE INDEX IF NOT EXISTS {SESSION_TABLE_NAME}_empresa_idx ON {SESSION_TABLE_NAME}(empresa_id);
+                """
+            )
+        session_table_ready = True
+    except Exception as exc:
+        logger.warning("No se pudo asegurar la tabla de sesiones %s: %s", SESSION_TABLE_NAME, exc)
+
+
+async def cleanup_expired_sessions(pool: asyncpg.pool.Pool) -> int:
+    if SESSION_TTL_SECONDS <= 0:
+        return 0
+    await ensure_session_table(pool)
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=SESSION_TTL_SECONDS)
+    try:
+        async with pool.acquire() as conn:
+            result = await conn.execute(f"DELETE FROM {SESSION_TABLE_NAME} WHERE last_seen < $1", cutoff)
+    except Exception as exc:
+        logger.warning("No se pudo limpiar sesiones vencidas: %s", exc)
+        return 0
+    try:
+        return int(result.split(" ")[-1])
+    except Exception:
+        return 0
+
+
+async def claim_session_slot(pool: asyncpg.pool.Pool, session_id: str, empresa_id: str, uid: str) -> Tuple[bool, Optional[str]]:
+    await ensure_session_table(pool)
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=SESSION_TTL_SECONDS) if SESSION_TTL_SECONDS > 0 else None
+    try:
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                if cutoff:
+                    await conn.execute(f"DELETE FROM {SESSION_TABLE_NAME} WHERE last_seen < $1", cutoff)
+                if MAX_ACTIVE_SESSIONS_PER_COMPANY > 0:
+                    count = await conn.fetchval(
+                        f"SELECT COUNT(*) FROM {SESSION_TABLE_NAME} WHERE empresa_id=$1",
+                        empresa_id,
+                    )
+                    if count >= MAX_ACTIVE_SESSIONS_PER_COMPANY:
+                        return False, "Limite de usuarios activos superado"
+                await conn.execute(
+                    f"""
+                    INSERT INTO {SESSION_TABLE_NAME} (session_id, empresa_id, uid, created_at, last_seen)
+                    VALUES ($1, $2, $3, now(), now())
+                    """,
+                    session_id,
+                    empresa_id,
+                    uid,
+                )
+    except Exception as exc:
+        logger.warning("No se pudo reclamar cupo de sesion para %s/%s: %s", empresa_id, uid, exc)
+        return False, "No se pudo registrar la sesion"
+    return True, None
+
+
+async def touch_session(pool: asyncpg.pool.Pool, session_id: str) -> None:
+    if SESSION_TTL_SECONDS <= 0:
+        return
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"UPDATE {SESSION_TABLE_NAME} SET last_seen = now() WHERE session_id = $1",
+                session_id,
+            )
+    except Exception as exc:
+        logger.debug("No se pudo refrescar la sesion %s: %s", session_id, exc)
+
+
+async def drop_session(pool: asyncpg.pool.Pool, session_id: str) -> None:
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(f"DELETE FROM {SESSION_TABLE_NAME} WHERE session_id = $1", session_id)
+    except Exception as exc:
+        logger.debug("No se pudo eliminar la sesion %s: %s", session_id, exc)
+
+
 def ensure_quote_admin_access(decoded: Dict[str, Any]) -> str:
     email = decoded.get("email")
     if not email:
@@ -530,6 +622,8 @@ FIREBASE_APP_NAME = "bridge-app"
 firebase_app = None
 event_loop: Optional[asyncio.AbstractEventLoop] = None
 trend_db_pool: Optional[asyncpg.pool.Pool] = None
+session_cleanup_task: Optional[asyncio.Task] = None
+session_table_ready = False
 # ---- Config ----
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*").strip()
@@ -557,6 +651,13 @@ MQTT_CA_CERT_PATH = os.getenv("MQTT_CA_CERT_PATH", "").strip()
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "webbridge-backend")
 MQTT_KEEPALIVE = int(os.getenv("MQTT_KEEPALIVE", "30"))
 MQTT_BROKER_PROFILES_RAW = os.getenv("MQTT_BROKER_PROFILES", "").strip()
+
+# ---- Session tracking (WebSocket) ----
+SESSION_TABLE_NAME_RAW = os.getenv("SESSION_TABLE_NAME", "active_sessions").strip() or "active_sessions"
+SESSION_TABLE_NAME = re.sub(r"[^A-Za-z0-9_]+", "", SESSION_TABLE_NAME_RAW) or "active_sessions"
+SESSION_TTL_SECONDS = coerce_int(os.getenv("SESSION_TTL_SECONDS"), 300)  # 0 desactiva expiracion por TTL
+SESSION_CLEANUP_INTERVAL_SECONDS = coerce_int(os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS"), 120)  # 0 desactiva tarea programada
+MAX_ACTIVE_SESSIONS_PER_COMPANY = coerce_int(os.getenv("MAX_ACTIVE_SESSIONS_PER_COMPANY"), 0)  # 0 = ilimitado
 
 TOPIC_BASE = os.getenv("TOPIC_BASE", "scada/customers").strip()
 PUBLIC_ALLOWED_PREFIXES = [p.strip() for p in os.getenv("PUBLIC_ALLOWED_PREFIXES", "").split(",") if p.strip()]
@@ -864,6 +965,29 @@ async def init_quote_database_pool():
         await quote_db.close_pool()
         logger.error("No se pudo inicializar el pool de cotizador: %s", exc)
 
+@app.on_event("startup")
+async def start_session_cleanup_task():
+    global session_cleanup_task
+    if SESSION_CLEANUP_INTERVAL_SECONDS <= 0 or SESSION_TTL_SECONDS <= 0:
+        return
+
+    async def _run_cleanup():
+        while True:
+            try:
+                pool = trend_db_pool
+                if pool is not None:
+                    await ensure_session_table(pool)
+                    deleted = await cleanup_expired_sessions(pool)
+                    if deleted:
+                        logger.info("Sesiones expiradas eliminadas: %d", deleted)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.warning("Error en tarea de limpieza de sesiones: %s", exc)
+            await asyncio.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
+
+    session_cleanup_task = asyncio.create_task(_run_cleanup())
+
 
 @app.on_event("shutdown")
 async def shutdown_trend_database_pool():
@@ -882,6 +1006,22 @@ async def shutdown_trend_database_pool():
 async def shutdown_quote_database_pool():
     await quote_db.close_pool()
     logger.info("Pool de base de datos para cotizador cerrado.")
+
+@app.on_event("shutdown")
+async def stop_session_cleanup_task():
+    global session_cleanup_task
+    task = session_cleanup_task
+    if task is None:
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        logger.debug("Error al detener tarea de limpieza de sesiones: %s", exc)
+    finally:
+        session_cleanup_task = None
 
 # CORS
 app.add_middleware(
@@ -3046,6 +3186,20 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
         await websocket.send_json({"type": "error", "error": exc.detail or "MQTT broker not connected"})
         await websocket.close(code=1013)
         return
+
+    session_pool = trend_db_pool
+    session_id = str(uuid.uuid4())
+    session_claimed = False
+    if session_pool is not None:
+        claimed, claim_error = await claim_session_slot(session_pool, session_id, company_id, uid)
+        if not claimed:
+            await websocket.send_json({"type": "error", "error": claim_error or "Limite de usuarios activos superado"})
+            await websocket.close(code=4403)
+            return
+        session_claimed = True
+    else:
+        logger.warning("Pool de base de datos no disponible; omitiendo control de sesiones para WS de %s", uid)
+
     client = WSClient(websocket, uid, company_id, prefixes, broker_key)
     ConnectionManager.add(client)
 
@@ -3062,6 +3216,8 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
     try:
         while True:
             data = await websocket.receive_json()
+            if session_pool is not None and session_claimed:
+                await touch_session(session_pool, session_id)
             if not isinstance(data, dict):
                 continue
             if data.get("type") == "publish":
@@ -3089,8 +3245,12 @@ async def ws_endpoint(websocket: WebSocket, token: Optional[str] = Query(default
             else:
                 await websocket.send_json({"type": "error", "error": "Unknown message type"})
     except WebSocketDisconnect:
-        ConnectionManager.remove(websocket)
+        pass
     except Exception:
+        logger.exception("Error en WS para uid=%s empresa=%s", uid, company_id)
+    finally:
+        if session_pool is not None and session_claimed:
+            await drop_session(session_pool, session_id)
         ConnectionManager.remove(websocket)
         try:
             await websocket.close()
