@@ -288,6 +288,10 @@ body {
   grid-column: 1 / -1;
 }
 
+.scada-grid > .container-general {
+  grid-column: 1 / -1;
+}
+
 .sidebar-nav-btn {
   font-size: 0.95rem;
 }
