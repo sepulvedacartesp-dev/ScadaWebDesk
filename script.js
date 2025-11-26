@@ -46,6 +46,8 @@ const topicStateCache = new Map();
 const controlElements = new Set();
 const widgetBindings = [];
 const containerNodes = [];
+const normalContainerNodes = [];
+const generalContainerNodes = [];
 const sidebarButtons = [];
 let selectedContainerIndex = 0;
 let currentLogoEmpresa = null;
@@ -212,6 +214,25 @@ function getVisibleContainers() {
     const plantId = typeof container?.plantId === "string" ? container.plantId.trim().toLowerCase() : "";
     return plantId ? plantId === selectedPlantId : false;
   });
+}
+
+function isGeneralContainer(container) {
+  return !!(container && container.isGeneral);
+}
+
+function orderContainersForView(containers) {
+  if (!Array.isArray(containers)) return { ordered: [], normal: [] };
+  const generalList = [];
+  const normalList = [];
+  containers.forEach((container) => {
+    if (isGeneralContainer(container) && !generalList.length) {
+      generalList.push(container);
+    } else {
+      normalList.push(container);
+    }
+  });
+  const ordered = generalList.length ? [...generalList, ...normalList] : normalList;
+  return { ordered, normal: normalList };
 }
 
 function setStatus(text) {
@@ -550,6 +571,8 @@ function clearDashboard() {
   controlElements.clear();
   topicElementMap.clear();
   containerNodes.length = 0;
+  normalContainerNodes.length = 0;
+  generalContainerNodes.length = 0;
   sidebarButtons.length = 0;
   selectedContainerIndex = 0;
   scadaContainer.innerHTML = "";
@@ -561,23 +584,37 @@ function clearDashboard() {
 
 function renderDashboard() {
   if (!scadaConfig || !Array.isArray(scadaConfig.containers)) {
-    scadaContainer.innerHTML = "<p>No hay configuración disponible.</p>";
+    scadaContainer.innerHTML = "<p>No hay configuracion disponible.</p>";
     if (sidebarMenu) sidebarMenu.hidden = true;
     return;
   }
   const visibleContainers = getVisibleContainers();
+  containerNodes.length = 0;
+  normalContainerNodes.length = 0;
+  generalContainerNodes.length = 0;
+  sidebarButtons.length = 0;
+  scadaContainer.innerHTML = "";
+  if (sidebarMenu) {
+    sidebarMenu.innerHTML = "";
+  }
   if (!visibleContainers.length) {
     scadaContainer.innerHTML = "<p>No hay contenedores para la planta seleccionada.</p>";
     if (sidebarMenu) sidebarMenu.hidden = true;
     return;
   }
 
+  const { ordered } = orderContainersForView(visibleContainers);
   const template = document.getElementById("container-template");
   scadaContainer.classList.toggle("sidebar-view", currentView === "sidebar");
-  visibleContainers.forEach((container, index) => {
+  let generalAssigned = false;
+  ordered.forEach((container, index) => {
     const node = template.content.firstElementChild.cloneNode(true);
     const titleEl = node.querySelector(".container-title");
     const bodyEl = node.querySelector(".container-body");
+    const isGeneral = isGeneralContainer(container) && !generalAssigned;
+    if (isGeneral) {
+      generalAssigned = true;
+    }
     if (titleEl) titleEl.textContent = container.title || `Contenedor ${index + 1}`;
     const plantBadge = node.querySelector(".container-plant");
     if (plantBadge) {
@@ -590,13 +627,21 @@ function renderDashboard() {
       }
     }
 
-    if (sidebarMenu) {
+    if (isGeneral) {
+      node.classList.add("container-general");
+      node.dataset.isGeneral = "true";
+    } else {
+      node.dataset.isGeneral = "false";
+    }
+
+    if (sidebarMenu && !isGeneral) {
+      const navIndex = normalContainerNodes.length;
       const navButton = document.createElement("button");
       navButton.type = "button";
       navButton.className = "sidebar-nav-btn";
       navButton.textContent = container.title || `Contenedor ${index + 1}`;
       navButton.addEventListener("click", () => {
-        selectContainer(index);
+        selectContainer(navIndex);
         if (currentView === "matrix") {
           node.scrollIntoView({ behavior: "smooth", block: "start" });
         }
@@ -626,13 +671,21 @@ function renderDashboard() {
     });
 
     containerNodes.push(node);
+    if (isGeneral) {
+      generalContainerNodes.push(node);
+    } else {
+      normalContainerNodes.push(node);
+    }
     scadaContainer.appendChild(node);
   });
 
-  if (containerNodes.length) {
-    selectContainer(Math.min(selectedContainerIndex, containerNodes.length - 1));
-  } else if (sidebarMenu) {
-    sidebarMenu.hidden = true;
+  if (normalContainerNodes.length) {
+    selectContainer(Math.min(selectedContainerIndex, normalContainerNodes.length - 1));
+  } else {
+    updateSidebarVisibility();
+    if (sidebarMenu) {
+      sidebarMenu.hidden = true;
+    }
   }
 
   renderView(currentView);
@@ -640,8 +693,13 @@ function renderDashboard() {
 }
 
 function selectContainer(index) {
-  if (!containerNodes.length) return;
-  const clamped = Math.max(0, Math.min(index, containerNodes.length - 1));
+  if (!normalContainerNodes.length) {
+    selectedContainerIndex = 0;
+    updateSidebarMenuState();
+    updateSidebarVisibility();
+    return;
+  }
+  const clamped = Math.max(0, Math.min(index, normalContainerNodes.length - 1));
   selectedContainerIndex = clamped;
   updateSidebarMenuState();
   updateSidebarVisibility();
@@ -655,61 +713,60 @@ function updateSidebarMenuState() {
 
 function updateSidebarVisibility() {
   const isSidebar = currentView === "sidebar";
-  const trackedNodes = containerNodes.length ? containerNodes : Array.from(scadaContainer.querySelectorAll(".container-card"));
-  if (!trackedNodes.length) {
-    const fallbackNodes = Array.from(scadaContainer.querySelectorAll(".container-card"));
-    fallbackNodes.forEach((node) => {
-      if (isSidebar) {
-        node.classList.remove("sidebar-active");
-        node.setAttribute("hidden", "");
-        node.style.display = "none";
-        node.setAttribute("aria-hidden", "true");
-      } else {
-        node.classList.remove("sidebar-active");
-        node.removeAttribute("hidden");
-        node.style.display = "";
-        node.removeAttribute("aria-hidden");
-      }
-    });
-    return;
-  }
+  const showNode = (node) => {
+    node.classList.remove("sidebar-active");
+    node.removeAttribute("hidden");
+    node.style.display = "";
+    node.removeAttribute("aria-hidden");
+  };
+  const hideNode = (node) => {
+    node.classList.remove("sidebar-active");
+    node.setAttribute("hidden", "");
+    node.style.display = "none";
+    node.setAttribute("aria-hidden", "true");
+  };
+  const trackedGeneral = generalContainerNodes.length
+    ? generalContainerNodes
+    : Array.from(scadaContainer.querySelectorAll('.container-card')).filter((node) => node.dataset.isGeneral === "true");
+  const trackedNormal = normalContainerNodes.length
+    ? normalContainerNodes
+    : Array.from(scadaContainer.querySelectorAll('.container-card')).filter((node) => node.dataset.isGeneral !== "true");
 
-  const activeIndex = Math.max(0, Math.min(selectedContainerIndex, trackedNodes.length - 1));
+  const activeIndex = trackedNormal.length
+    ? Math.max(0, Math.min(selectedContainerIndex, trackedNormal.length - 1))
+    : 0;
   selectedContainerIndex = activeIndex;
 
-  trackedNodes.forEach((node, idx) => {
-    const isActive = isSidebar && idx === activeIndex;
-    if (isSidebar) {
+  if (isSidebar) {
+    trackedGeneral.forEach((node) => {
+      node.classList.remove("sidebar-active");
+      showNode(node);
+    });
+    trackedNormal.forEach((node, idx) => {
+      const isActive = idx === activeIndex;
       node.classList.toggle("sidebar-active", isActive);
       if (isActive) {
-        node.removeAttribute("hidden");
-        node.style.display = "";
-        node.removeAttribute("aria-hidden");
+        showNode(node);
       } else {
-        node.setAttribute("hidden", "");
-        node.style.display = "none";
-        node.setAttribute("aria-hidden", "true");
+        hideNode(node);
       }
-    } else {
+    });
+  } else {
+    trackedGeneral.forEach(showNode);
+    trackedNormal.forEach((node) => {
       node.classList.remove("sidebar-active");
-      node.removeAttribute("hidden");
-      node.style.display = "";
-      node.removeAttribute("aria-hidden");
-    }
-  });
+      showNode(node);
+    });
+  }
 
-  const extras = Array.from(scadaContainer.querySelectorAll(".container-card")).filter((node) => !trackedNodes.includes(node));
+  const extras = Array.from(scadaContainer.querySelectorAll(".container-card")).filter(
+    (node) => !trackedGeneral.includes(node) && !trackedNormal.includes(node)
+  );
   extras.forEach((node) => {
     if (isSidebar) {
-      node.classList.remove("sidebar-active");
-      node.setAttribute("hidden", "");
-      node.style.display = "none";
-      node.setAttribute("aria-hidden", "true");
+      hideNode(node);
     } else {
-      node.classList.remove("sidebar-active");
-      node.removeAttribute("hidden");
-      node.style.display = "";
-      node.removeAttribute("aria-hidden");
+      showNode(node);
     }
   });
 }
@@ -1333,11 +1390,12 @@ function renderView(view) {
   scadaContainer.classList.toggle("sidebar-view", view === "sidebar");
   viewMatrixBtn.classList.toggle("active", view === "matrix");
   viewSidebarBtn.classList.toggle("active", view === "sidebar");
+  const hasNavigable = normalContainerNodes.length > 0;
   if (sidebarMenu) {
-    sidebarMenu.hidden = view !== "sidebar" || containerNodes.length === 0;
+    sidebarMenu.hidden = view !== "sidebar" || !hasNavigable;
   }
   if (view === "sidebar") {
-    if (containerNodes.length) {
+    if (hasNavigable) {
       selectContainer(selectedContainerIndex);
     } else {
       updateSidebarMenuState();

@@ -1504,14 +1504,44 @@ function renderContainers() {
     }
     heading.textContent = formatContainerTitle(container.title, index);
     const plantSelect = card.querySelector('[data-field="plantId"]');
+    const generalCheckbox = card.querySelector('[data-field="isGeneral"]');
+    const generalHint = card.querySelector('[data-general-hint]');
     if (plantSelect) {
       populatePlantSelect(plantSelect, container.plantId || getDefaultPlantId());
       plantSelect.disabled = !state.canEdit;
       plantSelect.addEventListener("change", (event) => {
         const value = (event.target.value || "").trim().toLowerCase();
+        const previous = resolveContainerPlantId(container);
+        if (containerIsGeneral(container) && plantHasGeneral(value, index)) {
+          setStatus('Ya existe un contenedor general en esta planta.', 'warning');
+          plantSelect.value = previous;
+          return;
+        }
         state.config.containers[index].plantId = value || getDefaultPlantId();
         setDirty(true);
         renderContainers();
+      });
+    }
+    if (generalCheckbox) {
+      generalCheckbox.checked = containerIsGeneral(container);
+      generalCheckbox.disabled =
+        !state.canEdit || (!containerIsGeneral(container) && plantHasGeneral(resolveContainerPlantId(container), index));
+      generalCheckbox.addEventListener('change', (event) => {
+        if (event.target.checked) {
+          const plantId = resolveContainerPlantId(container);
+          if (plantHasGeneral(plantId, index)) {
+            event.target.checked = false;
+            setStatus('Solo puedes tener un contenedor general por planta.', 'warning');
+            return;
+          }
+          state.config.containers[index].isGeneral = true;
+          setDirty(true);
+          renderContainers();
+        } else {
+          state.config.containers[index].isGeneral = false;
+          setDirty(true);
+          renderContainers();
+        }
       });
     }
     const collapsed = isContainerCollapsed(container);
@@ -1527,6 +1557,7 @@ function renderContainers() {
         btn.removeAttribute('disabled');
       }
     });
+    applyGeneralContainerState(card, container, index);
     applyContainerCapacityState(card, container);
     dom.containersList.appendChild(card);
   });
@@ -1625,6 +1656,38 @@ function resolveContainerPlantId(container) {
   }
   const raw = typeof container.plantId === "string" ? container.plantId.trim() : "";
   return raw ? raw.toLowerCase() : fallback;
+}
+
+function containerIsGeneral(container) {
+  return !!(container && container.isGeneral);
+}
+
+function plantHasGeneral(plantId, ignoreIndex = -1) {
+  const containers = Array.isArray(state.config.containers) ? state.config.containers : [];
+  const normalizedPlantId = (plantId || "").toLowerCase();
+  return containers.some(
+    (item, idx) =>
+      idx !== ignoreIndex && containerIsGeneral(item) && resolveContainerPlantId(item) === normalizedPlantId
+  );
+}
+
+function applyGeneralContainerState(card, container, containerIndex) {
+  if (!card || !container) return;
+  const hint = card.querySelector('[data-general-hint]');
+  const checkbox = card.querySelector('[data-field="isGeneral"]');
+  const plantId = resolveContainerPlantId(container);
+  const hasOtherGeneral = plantHasGeneral(plantId, containerIndex);
+  if (hint) {
+    hint.hidden = !hasOtherGeneral || containerIsGeneral(container);
+  }
+  if (checkbox) {
+    const shouldDisable = !state.canEdit || (!containerIsGeneral(container) && hasOtherGeneral);
+    if (shouldDisable) {
+      checkbox.setAttribute('disabled', '');
+    } else {
+      checkbox.removeAttribute('disabled');
+    }
+  }
 }
 
 function getPlantDisplayName(plantId) {
@@ -2008,7 +2071,7 @@ function addContainer() {
     setStatus('Selecciona una planta antes de agregar contenedores.', 'warning');
     return;
   }
-  const container = { title: '', objects: [], plantId: activePlantId };
+  const container = { title: '', objects: [], plantId: activePlantId, isGeneral: false };
   if (!Array.isArray(state.config.containers)) {
     state.config.containers = [];
   }
@@ -2105,6 +2168,10 @@ function removeContainer(containerIndex) {
 function duplicateContainer(containerIndex) {
   const container = state.config.containers?.[containerIndex];
   if (!container) return;
+  if (containerIsGeneral(container)) {
+    setStatus('No puedes duplicar un contenedor general. Desmarca la opcion antes de duplicar.', 'warning');
+    return;
+  }
   state.config.containers.splice(containerIndex + 1, 0, clone(container));
   setDirty(true);
   renderContainers();

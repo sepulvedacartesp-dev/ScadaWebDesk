@@ -444,6 +444,25 @@ body {
   margin: 0 auto;
 }
 
+.container-card.container-general {
+  max-width: none;
+  min-width: 100%;
+  grid-column: 1 / -1;
+  min-height: 280px;
+}
+
+.container-card.container-general .container-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.container-card.container-general .container-body > * {
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+
 .container-header {
   display: flex;
   justify-content: space-between;

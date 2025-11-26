@@ -1019,8 +1019,21 @@ def normalize_plant_assignments(raw_assignments: Any, plants: List[Dict[str, Any
 
 def normalize_container_plants(raw_containers: Any, plants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     containers = raw_containers if isinstance(raw_containers, list) else []
+    def as_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "1", "yes", "on", "si", "general"}
+        return bool(value)
     if not plants:
-        return [dict(container) for container in containers if isinstance(container, dict)]
+        normalized: List[Dict[str, Any]] = []
+        for container in containers:
+            if not isinstance(container, dict):
+                continue
+            normalized_container = dict(container)
+            normalized_container["isGeneral"] = as_bool(container.get("isGeneral") or container.get("general"))
+            normalized.append(normalized_container)
+        return normalized
     valid_ids = [plant["id"] for plant in plants]
     default_id = valid_ids[0]
     normalized: List[Dict[str, Any]] = []
@@ -1033,6 +1046,7 @@ def normalize_container_plants(raw_containers: Any, plants: List[Dict[str, Any]]
         if plant_id not in valid_ids:
             plant_id = default_id
         normalized_container["plantId"] = plant_id
+        normalized_container["isGeneral"] = as_bool(container.get("isGeneral") or container.get("general"))
         normalized.append(normalized_container)
     return normalized
 
@@ -1621,9 +1635,24 @@ def validate_config_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     containers = data.get("containers")
     if containers is None or not isinstance(containers, list):
         raise HTTPException(status_code=400, detail="El campo containers debe ser una lista")
+    general_per_plant: Dict[str, int] = {}
     for c_idx, container in enumerate(containers):
         if not isinstance(container, dict):
             raise HTTPException(status_code=400, detail=f"El contenedor {c_idx} debe ser un objeto")
+        raw_plant = container.get("plantId") or container.get("plant") or ""
+        plant_id = str(raw_plant).strip().lower() if raw_plant is not None else ""
+        raw_general = container.get("isGeneral") or container.get("general")
+        if isinstance(raw_general, str):
+            is_general = raw_general.strip().lower() in {"true", "1", "yes", "on", "si", "general"}
+        else:
+            is_general = bool(raw_general)
+        if is_general:
+            if plant_id in general_per_plant:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"La planta {plant_id or '(sin id)'} solo admite un contenedor general.",
+                )
+            general_per_plant[plant_id] = c_idx
         objects = container.get("objects", [])
         if not isinstance(objects, list):
             raise HTTPException(status_code=400, detail=f"El campo objects del contenedor {c_idx} debe ser una lista")
