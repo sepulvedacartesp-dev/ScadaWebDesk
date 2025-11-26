@@ -611,7 +611,6 @@ function renderDashboard() {
   const { ordered } = orderContainersForView(visibleContainers);
   const template = document.getElementById("container-template");
   scadaContainer.classList.toggle("sidebar-view", currentView === "sidebar");
-  const scadaGrid = scadaContainer?.parentElement;
   let generalAssigned = false;
   ordered.forEach((container, index) => {
     const node = template.content.firstElementChild.cloneNode(true);
@@ -682,12 +681,8 @@ function renderDashboard() {
     }
   });
 
-  // Colocar general al inicio del grid (ocupa todo el ancho), luego los normales dentro del contenedor
-  if (generalContainerNodes.length && scadaGrid) {
-    generalContainerNodes.forEach((node) => scadaGrid.insertBefore(node, scadaContainer));
-  } else {
-    generalContainerNodes.forEach((node) => scadaContainer.appendChild(node));
-  }
+  // Colocar general al inicio del contenedor; luego los normales
+  generalContainerNodes.forEach((node) => scadaContainer.appendChild(node));
   normalContainerNodes.forEach((node) => scadaContainer.appendChild(node));
 
   if (normalContainerNodes.length) {
