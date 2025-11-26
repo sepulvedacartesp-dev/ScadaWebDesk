@@ -714,7 +714,6 @@ function updateSidebarMenuState() {
 function updateSidebarVisibility() {
   const isSidebar = currentView === "sidebar";
   const showNode = (node) => {
-    node.classList.remove("sidebar-active");
     node.removeAttribute("hidden");
     node.style.display = "";
     node.removeAttribute("aria-hidden");
@@ -739,7 +738,7 @@ function updateSidebarVisibility() {
 
   if (isSidebar) {
     trackedGeneral.forEach((node) => {
-      node.classList.remove("sidebar-active");
+      node.classList.add("sidebar-active");
       showNode(node);
     });
     trackedNormal.forEach((node, idx) => {
