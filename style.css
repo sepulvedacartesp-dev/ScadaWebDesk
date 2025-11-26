@@ -406,6 +406,16 @@ body {
   border: 1px solid rgba(108, 132, 255, 0.18);
 }
 
+.general-container-area {
+  margin-bottom: 1.25rem;
+}
+
+.general-container-area .container-card {
+  max-width: none;
+  width: 100%;
+  min-height: 280px;
+}
+
 .system-group {
   display: grid;
   gap: 1.5rem;

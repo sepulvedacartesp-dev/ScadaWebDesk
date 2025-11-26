@@ -610,8 +610,13 @@ function renderDashboard() {
 
   const { ordered } = orderContainersForView(visibleContainers);
   const template = document.getElementById("container-template");
+  const generalArea = document.getElementById("general-container-area");
+  const generalSlot = document.getElementById("general-container-slot");
   scadaContainer.classList.toggle("sidebar-view", currentView === "sidebar");
   let generalAssigned = false;
+  if (generalSlot) {
+    generalSlot.innerHTML = "";
+  }
   ordered.forEach((container, index) => {
     const node = template.content.firstElementChild.cloneNode(true);
     const titleEl = node.querySelector(".container-title");
@@ -681,8 +686,14 @@ function renderDashboard() {
     }
   });
 
-  // Colocar general al inicio del contenedor; luego los normales
-  generalContainerNodes.forEach((node) => scadaContainer.appendChild(node));
+  // Colocar general en su slot dedicado (si existe), luego los normales
+  if (generalContainerNodes.length && generalSlot && generalArea) {
+    generalArea.hidden = false;
+    generalContainerNodes.forEach((node) => generalSlot.appendChild(node));
+  } else if (generalArea) {
+    generalArea.hidden = true;
+  }
+
   normalContainerNodes.forEach((node) => scadaContainer.appendChild(node));
 
   if (normalContainerNodes.length) {
@@ -732,7 +743,7 @@ function updateSidebarVisibility() {
   };
   const trackedGeneral = generalContainerNodes.length
     ? generalContainerNodes
-    : Array.from(scadaContainer.querySelectorAll('.container-card')).filter((node) => node.dataset.isGeneral === "true");
+    : Array.from(document.querySelectorAll('.container-card')).filter((node) => node.dataset.isGeneral === "true");
   const trackedNormal = normalContainerNodes.length
     ? normalContainerNodes
     : Array.from(scadaContainer.querySelectorAll('.container-card')).filter((node) => node.dataset.isGeneral !== "true");
