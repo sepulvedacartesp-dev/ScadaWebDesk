@@ -189,7 +189,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB4",
+          "topic": "trend/TempAB4",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -198,35 +198,35 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB4",
+          "topic": "trend/TempAB4",
           "unit": "°C"
         },
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "snp0025010/PartirAB4",
+          "topic": "PartirAB4",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "snp0025010/PararAB4",
+          "topic": "PararAB4",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "snp0025010/stsAB4",
+          "topic": "stsAB4",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
         {
           "type": "slide",
           "label": "Control Manual/Auto",
-          "topic": "snp0025010/LocRemAB4",
-          "feedbackTopic": "snp0025010/LocRemfdbkAB4",
+          "topic": "LocRemAB4",
+          "feedbackTopic": "LocRemfdbkAB4",
           "onText": "Automatico",
           "offText": "Manual"
         }
@@ -239,7 +239,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB5",
+          "topic": "trend/TempAB5",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -248,35 +248,35 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB5",
+          "topic": "trend/TempAB5",
           "unit": "°C"
         },
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "snp0025010/PartirAB5",
+          "topic": "PartirAB5",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "snp0025010/PararAB5",
+          "topic": "PararAB5",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "snp0025010/stsAB5",
+          "topic": "stsAB5",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
         {
           "type": "slide",
           "label": "Control Manual/Auto",
-          "topic": "snp0025010/LocRemAB5",
-          "feedbackTopic": "snp0025010/LocRemfdbkAB5",
+          "topic": "LocRemAB5",
+          "feedbackTopic": "LocRemfdbkAB5",
           "onText": "Automatico",
           "offText": "Manual"
         }
@@ -289,7 +289,7 @@
         {
           "type": "gauge",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB6",
+          "topic": "trend/TempAB6",
           "unit": "°C",
           "color": "#00b4d8",
           "min": 0,
@@ -298,35 +298,35 @@
         {
           "type": "number",
           "label": "Temperatura",
-          "topic": "trend/snp0025010/TempAB6",
+          "topic": "trend/TempAB6",
           "unit": "°C"
         },
         {
           "type": "startBtn",
           "label": "Partir",
-          "topic": "snp0025010/PartirAB6",
+          "topic": "PartirAB6",
           "color": "#00b4d8",
           "payload": "1"
         },
         {
           "type": "stopBtn",
           "label": "Parar",
-          "topic": "snp0025010/PararAB6",
+          "topic": "PararAB6",
           "color": "#ef476f",
           "payload": "0"
         },
         {
           "type": "pumpStatus",
           "label": "Ventilador",
-          "topic": "snp0025010/stsAB6",
+          "topic": "stsAB6",
           "onColor": "#00ff9d",
           "offColor": "#6c757d"
         },
         {
           "type": "slide",
           "label": "Control Manual/Auto",
-          "topic": "snp0025010/LocRemAB6",
-          "feedbackTopic": "snp0025010/LocRemfdbkAB6",
+          "topic": "LocRemAB6",
+          "feedbackTopic": "LocRemfdbkAB6",
           "onText": "Automatico",
           "offText": "Manual"
         }
