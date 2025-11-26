@@ -12,7 +12,7 @@
   },
   "plants": [
     {
-      "id": "zero_corp1",
+      "id": "zona_4_snp0025010",
       "name": "zona_4_snp0025010",
       "serialCode": "zona_4_snp0025010",
       "description": "Planta Zero Corp cliente Zona_4",
@@ -34,7 +34,7 @@
   "containers": [
     {
       "title": "Planta 1 - ABox 001",
-      "plantId": "zero_corp1",
+      "plantId": "zona_4_snp0025010",
       "objects": [
         {
           "type": "gauge",
@@ -84,7 +84,7 @@
     },
     {
       "title": "Planta 1 - ABox 002",
-      "plantId": "zero_corp1",
+      "plantId": "zona_4_snp0025010",
       "objects": [
         {
           "type": "gauge",
@@ -134,7 +134,7 @@
     },
     {
       "title": "Planta 1 - ABox 003",
-      "plantId": "zero_corp1",
+      "plantId": "zona_4_snp0025010",
       "objects": [
         {
           "type": "gauge",
@@ -184,7 +184,7 @@
     },
     {
       "title": "Planta 1 - ABox 004",
-      "plantId": "zero_corp1",
+      "plantId": "zona_4_snp0025010",
       "objects": [
         {
           "type": "gauge",
@@ -234,7 +234,7 @@
     },
     {
       "title": "Planta 1 - ABox 005",
-      "plantId": "zero_corp1",
+      "plantId": "zona_4_snp0025010",
       "objects": [
         {
           "type": "gauge",
@@ -284,7 +284,7 @@
     },
     {
       "title": "Planta 1 - ABox 006",
-      "plantId": "zero_corp1",
+      "plantId": "zona_4_snp0025010",
       "objects": [
         {
           "type": "gauge",
