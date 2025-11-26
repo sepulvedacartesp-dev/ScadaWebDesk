@@ -359,11 +359,11 @@
           "payload": "1"
         },
         {
-          "type": "startBtn",
+          "type": "stopBtn",
           "label": "Parar",
           "topic": "PararAB1",
-          "color": "#d60000",
-          "payload": "1"
+          "color": "#ef476f",
+          "payload": "0"
         },
         {
           "type": "slide",
