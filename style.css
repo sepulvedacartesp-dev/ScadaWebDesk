@@ -429,6 +429,10 @@ body {
   display: flex;
 }
 
+.system-group.sidebar-view .container-general {
+  order: -1;
+}
+
 .container-card {
   background: rgba(6, 15, 25, 0.75);
   border-radius: 18px;

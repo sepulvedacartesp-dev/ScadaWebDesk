@@ -570,6 +570,11 @@ function clearDashboard() {
   widgetBindings.length = 0;
   controlElements.clear();
   topicElementMap.clear();
+  generalContainerNodes.forEach((node) => {
+    if (node && node.remove) {
+      node.remove();
+    }
+  });
   containerNodes.length = 0;
   normalContainerNodes.length = 0;
   generalContainerNodes.length = 0;
@@ -594,6 +599,7 @@ function renderDashboard() {
   generalContainerNodes.length = 0;
   sidebarButtons.length = 0;
   scadaContainer.innerHTML = "";
+  const scadaGrid = scadaContainer?.parentElement;
   if (sidebarMenu) {
     sidebarMenu.innerHTML = "";
   }
@@ -627,11 +633,9 @@ function renderDashboard() {
       }
     }
 
+    node.dataset.isGeneral = isGeneral ? "true" : "false";
     if (isGeneral) {
       node.classList.add("container-general");
-      node.dataset.isGeneral = "true";
-    } else {
-      node.dataset.isGeneral = "false";
     }
 
     if (sidebarMenu && !isGeneral) {
@@ -676,8 +680,15 @@ function renderDashboard() {
     } else {
       normalContainerNodes.push(node);
     }
-    scadaContainer.appendChild(node);
   });
+
+  // Colocar el general arriba del grid; los normales dentro del scada-container
+  if (generalContainerNodes.length && scadaGrid) {
+    generalContainerNodes.forEach((node) => {
+      scadaGrid.insertBefore(node, scadaContainer);
+    });
+  }
+  normalContainerNodes.forEach((node) => scadaContainer.appendChild(node));
 
   if (normalContainerNodes.length) {
     selectContainer(Math.min(selectedContainerIndex, normalContainerNodes.length - 1));
