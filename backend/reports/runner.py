@@ -128,10 +128,8 @@ def _build_pdf(
         flow = _image_flowable(chart_bytes) if chart_bytes else None
         if flow:
             elements.append(flow)
-        else:
-            condensed = _condense_points(points, 80)
-            spark_data = " ".join(_sparkline(condensed))
-            elements.append(Paragraph(f"Sparklines: {spark_data}", styles["Code"]))
+        elif not points:
+            elements.append(Paragraph("Sin datos en el rango.", normal))
         elements.append(Spacer(1, 0.2 * cm))
 
     elements.append(Spacer(1, 0.3 * cm))
@@ -244,22 +242,26 @@ def _plot_alarms_timeline(events: Sequence[dict]) -> Optional[bytes]:
     if not events:
         return None
     try:
-        times = []
-        values = []
-        colors_map = []
+        # Agrupa por hora para un histograma de barras
+        buckets: dict[str, int] = {}
         for ev in events:
             ts = ev.get("triggered_at")
             if isinstance(ts, str):
                 ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            times.append(ts)
-            values.append(ev.get("observed") or 0)
-            colors_map.append("#198754" if ev.get("email_sent") else "#dc3545")
-        plt.figure(figsize=(6, 2.0))
-        plt.scatter(times, values, c=colors_map, alpha=0.8)
-        plt.title("Alarmas notificadas", fontsize=10)
-        plt.xlabel("Tiempo")
-        plt.ylabel("Valor observado")
-        plt.grid(True, linestyle="--", alpha=0.3)
+            if not isinstance(ts, datetime):
+                continue
+            label = ts.strftime("%m-%d %H:00")
+            buckets[label] = buckets.get(label, 0) + 1
+        if not buckets:
+            return None
+        labels = sorted(buckets.keys())
+        counts = [buckets[l] for l in labels]
+        plt.figure(figsize=(6, 2.2))
+        plt.bar(labels, counts, color="#0d6efd")
+        plt.title("Alarmas notificadas por hora", fontsize=10)
+        plt.xlabel("Hora")
+        plt.ylabel("Alarmas")
+        plt.xticks(rotation=45, ha="right", fontsize=8)
         plt.tight_layout()
         buf = io.BytesIO()
         plt.savefig(buf, format="png", dpi=120)
