@@ -93,9 +93,10 @@ def _build_pdf(
             elements.append(Paragraph(f"Sparklines: {spark_data}", styles["Code"]))
         elements.append(Spacer(1, 0.2 * cm))
 
+    elements.append(Spacer(1, 0.3 * cm))
+    elements.append(Paragraph("<b>Alarmas notificadas</b>", styles["Heading2"]))
     if alarms:
-        elements.append(Spacer(1, 0.2 * cm))
-        elements.append(Paragraph("<b>Alarmas notificadas</b>", styles["Heading3"]))
+        elements.append(Paragraph(f"Total en ventana: {len(alarms)}", styles["Normal"]))
         table_data = [["Tag", "Umbral", "Valor", "Operador", "Correo", "Fecha", "Estado correo"]]
         for event in alarms:
             table_data.append(
@@ -119,6 +120,8 @@ def _build_pdf(
             ),
         )
         elements.append(alarm_table)
+    else:
+        elements.append(Paragraph("Sin alarmas notificadas en la ventana seleccionada.", styles["Normal"]))
 
     doc.build(elements)
     return buffer.getvalue()
