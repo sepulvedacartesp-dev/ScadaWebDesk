@@ -1022,9 +1022,16 @@
                   <textarea id="report-recipients" rows="2" class="text-input" placeholder="operaciones@cliente.com"></textarea>
                 </div>
                 <div class="form-group">
-                  <label for="report-tags">Tags historizados (separa por coma o salto de línea)</label>
-                  <textarea id="report-tags" rows="2" class="text-input" placeholder="scada/customers/acme/Temp&#10;scada/customers/acme/Presion"></textarea>
-                  <p class="helper-text">Variables que se graficarán y resumirán.</p>
+                  <label for="report-tags-select">Tags historizados</label>
+                  <select id="report-tags-select" class="select-input" multiple size="6"></select>
+                  <div class="button-row align-start">
+                    <button type="button" class="btn btn-ghost" id="report-tags-refresh">Actualizar lista de tags</button>
+                  </div>
+                  <div class="form-inline">
+                    <input id="report-tag-manual" type="text" class="text-input" placeholder="Agregar tag manual">
+                    <button type="button" class="btn btn-secondary" id="report-tag-add">Agregar</button>
+                  </div>
+                  <p class="helper-text" id="report-tags-helper">Selecciona desde las tags disponibles de la planta (Ctrl/Cmd + clic múltiple) o agrega manualmente.</p>
                 </div>
                 <div class="form-group">
                   <label class="checkbox">

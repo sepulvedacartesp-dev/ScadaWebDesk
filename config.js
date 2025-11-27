@@ -171,6 +171,7 @@ const state = {
   reportSelectedId: null,
   reportLoading: false,
   reportSaving: false,
+  reportTagsCache: new Map(),
   config: createEmptyConfig(),
   plantAccessEntries: [],
   currentPlantId: null,
@@ -235,6 +236,11 @@ const dom = {
   reportSlot: document.getElementById("report-slot"),
   reportRecipients: document.getElementById("report-recipients"),
   reportTags: document.getElementById("report-tags"),
+  reportTagsSelect: document.getElementById("report-tags-select"),
+  reportTagManual: document.getElementById("report-tag-manual"),
+  reportTagAdd: document.getElementById("report-tag-add"),
+  reportTagsRefresh: document.getElementById("report-tags-refresh"),
+  reportTagsHelper: document.getElementById("report-tags-helper"),
   reportIncludeAlarms: document.getElementById("report-include-alarms"),
   reportSendEmail: document.getElementById("report-send-email"),
   reportSubmit: document.getElementById("report-submit"),
@@ -392,6 +398,18 @@ function attachStaticHandlers() {
   });
   dom.reportRefreshBtn?.addEventListener("click", () => loadReports(true));
   dom.reportsList?.addEventListener("click", handleReportListClick);
+  dom.reportPlant?.addEventListener("change", handleReportPlantChange);
+  dom.reportTagsRefresh?.addEventListener("click", () => handleReportPlantChange(true));
+  dom.reportTagAdd?.addEventListener("click", (e) => {
+    e.preventDefault();
+    addManualTag();
+  });
+  dom.reportTagManual?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addManualTag();
+    }
+  });
 }
 
 function setLogoStatus(message, tone = "info") {
@@ -1203,6 +1221,113 @@ function updateReportFrequencyFields() {
   if (dom.reportDayMonth) dom.reportDayMonth.required = freq === "monthly";
 }
 
+function renderTagOptions(plantaId, selected = []) {
+  if (!dom.reportTagsSelect) return;
+  const options = state.reportTagsCache.get(plantaId || getDefaultPlantId()) || [];
+  dom.reportTagsSelect.innerHTML = "";
+  if (!options.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Sin tags disponibles";
+    opt.disabled = true;
+    dom.reportTagsSelect.appendChild(opt);
+    if (dom.reportTagsHelper) {
+      dom.reportTagsHelper.textContent = "No se encontraron tags historizados para esta planta. Puedes agregar manualmente.";
+    }
+    return;
+  }
+  options.forEach((tag) => {
+    const opt = document.createElement("option");
+    opt.value = tag;
+    opt.textContent = tag;
+    opt.selected = selected.includes(tag);
+    dom.reportTagsSelect.appendChild(opt);
+  });
+  selected.forEach((tag) => {
+    if (options.includes(tag)) return;
+    const opt = document.createElement("option");
+    opt.value = tag;
+    opt.textContent = tag;
+    opt.selected = true;
+    dom.reportTagsSelect.appendChild(opt);
+  });
+  if (dom.reportTagsHelper) {
+    dom.reportTagsHelper.textContent = "Selecciona uno o varios tags (Ctrl/Cmd + click).";
+  }
+}
+
+function preselectReportTags(tags) {
+  if (!dom.reportTagsSelect) return;
+  const values = Array.isArray(tags) ? tags : [];
+  Array.from(dom.reportTagsSelect.options || []).forEach((opt) => {
+    opt.selected = values.includes(opt.value);
+  });
+}
+
+async function loadReportTagsForPlant(plantaId, force = false, preselect = []) {
+  const plant = (plantaId || "").trim().toLowerCase() || getDefaultPlantId();
+  if (!state.token) {
+    renderTagOptions(plant, preselect);
+    return;
+  }
+  if (!force && state.reportTagsCache.has(plant)) {
+    renderTagOptions(plant, preselect);
+    preselectReportTags(preselect);
+    return;
+  }
+  const query = buildEmpresaQuery();
+  const separator = query ? (query.includes("?") ? "&" : "?") : "?";
+  const plantaParam = plant ? `${separator}plantaId=${encodeURIComponent(plant)}` : "";
+  if (dom.reportTagsHelper) dom.reportTagsHelper.textContent = "Cargando tags...";
+  try {
+    const response = await fetch(`${BACKEND_HTTP}/api/tendencias/tags${query || ""}${plantaParam}`, {
+      headers: {
+        Authorization: "Bearer " + state.token,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const data = await response.json();
+    const tags = Array.isArray(data?.tags) ? data.tags.filter(Boolean) : [];
+    state.reportTagsCache.set(plant, tags);
+    renderTagOptions(plant, preselect);
+    preselectReportTags(preselect);
+  } catch (error) {
+    console.error("loadReportTagsForPlant", error);
+    if (dom.reportTagsHelper) dom.reportTagsHelper.textContent = "No se pudieron cargar tags; agrega manualmente.";
+    renderTagOptions(plant, preselect);
+  }
+}
+
+function handleReportPlantChange(force = false) {
+  const plantId = (dom.reportPlant?.value || "").trim().toLowerCase() || getDefaultPlantId();
+  loadReportTagsForPlant(plantId, force);
+}
+
+function addManualTag() {
+  const input = dom.reportTagManual;
+  if (!input) return;
+  const value = input.value.trim();
+  if (!value) return;
+  if (dom.reportTagsSelect) {
+    const exists = Array.from(dom.reportTagsSelect.options).some((opt) => opt.value === value);
+    if (!exists) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      opt.selected = true;
+      dom.reportTagsSelect.appendChild(opt);
+    } else {
+      Array.from(dom.reportTagsSelect.options).forEach((opt) => {
+        if (opt.value === value) opt.selected = true;
+      });
+    }
+  }
+  input.value = "";
+}
+
 function resetReportForm() {
   state.reportSelectedId = null;
   dom.reportForm?.reset();
@@ -1219,6 +1344,8 @@ function resetReportForm() {
   if (dom.reportPlant) {
     populatePlantSelect(dom.reportPlant, targetPlant, true);
   }
+  loadReportTagsForPlant(targetPlant, false, []);
+  renderTagOptions(targetPlant, []);
   if (dom.reportFormTitle) dom.reportFormTitle.textContent = "Crear reporte";
   if (dom.reportSubmit) dom.reportSubmit.textContent = "Guardar reporte";
   setReportFormStatus("");
@@ -1293,6 +1420,8 @@ function renderReportsSection() {
     const current = dom.reportPlant.value || getDefaultPlantId();
     populatePlantSelect(dom.reportPlant, current, true);
   }
+  const selected = Array.from(dom.reportTagsSelect?.selectedOptions || []).map((opt) => opt.value);
+  renderTagOptions(dom.reportPlant?.value || getDefaultPlantId(), selected);
   const canEdit = Boolean(state.canEdit);
   if (dom.reportForm) {
     const controls = dom.reportForm.querySelectorAll("input, select, textarea, button");
@@ -1374,6 +1503,8 @@ async function loadReports(force = false) {
     state.reports = Array.isArray(data) ? data : [];
     renderReportsSection();
     resetReportForm();
+    const plantId = dom.reportPlant?.value || getDefaultPlantId();
+    loadReportTagsForPlant(plantId, false);
     if (!state.reports.length) {
       setReportStatus("No hay reportes configurados.", "info");
     } else {
@@ -1392,19 +1523,22 @@ function fillReportForm(report) {
   state.reportSelectedId = report.id !== undefined ? Number(report.id) : null;
   if (dom.reportId) dom.reportId.value = report.id !== undefined ? String(report.id) : "";
   if (dom.reportName) dom.reportName.value = report.name || "";
-  if (dom.reportPlant) populatePlantSelect(dom.reportPlant, report.plantaId || getDefaultPlantId(), true);
+  const targetPlant = report.plantaId || getDefaultPlantId();
+  if (dom.reportPlant) populatePlantSelect(dom.reportPlant, targetPlant, true);
+  loadReportTagsForPlant(targetPlant, false, report.tags || []);
   if (dom.reportFrequency) dom.reportFrequency.value = report.frequency || "daily";
   if (dom.reportDayWeek) dom.reportDayWeek.value = report.dayOfWeek || "";
   if (dom.reportDayMonth) dom.reportDayMonth.value = report.dayOfMonth || "";
   if (dom.reportTime) dom.reportTime.value = report.timeOfDay || "08:00";
   if (dom.reportSlot) dom.reportSlot.value = String(report.slot || 1);
   if (dom.reportRecipients) dom.reportRecipients.value = (report.recipients || []).join(", ");
-  if (dom.reportTags) dom.reportTags.value = (report.tags || []).join(", ");
+  preselectReportTags(report.tags || []);
   if (dom.reportIncludeAlarms) dom.reportIncludeAlarms.checked = Boolean(report.includeAlarms);
   if (dom.reportSendEmail) dom.reportSendEmail.checked = report.sendEmail !== false;
   if (dom.reportFormTitle) dom.reportFormTitle.textContent = "Editar reporte";
   if (dom.reportSubmit) dom.reportSubmit.textContent = "Actualizar reporte";
   updateReportFrequencyFields();
+  renderTagOptions(targetPlant, report.tags || []);
 }
 
 function validateReportLimit(plantaId, editingId) {
@@ -1427,7 +1561,7 @@ async function handleReportFormSubmit(event) {
   const timeOfDay = dom.reportTime?.value || "08:00";
   const slot = dom.reportSlot?.value ? Number(dom.reportSlot.value) : 1;
   const recipients = normalizeListInput(dom.reportRecipients?.value || "");
-  const tags = normalizeListInput(dom.reportTags?.value || "");
+  const tags = Array.from(dom.reportTagsSelect?.selectedOptions || []).map((opt) => opt.value.trim()).filter(Boolean);
   const includeAlarms = dom.reportIncludeAlarms ? Boolean(dom.reportIncludeAlarms.checked) : true;
   const sendEmail = dom.reportSendEmail ? Boolean(dom.reportSendEmail.checked) : true;
   if (!name) {
@@ -1440,6 +1574,10 @@ async function handleReportFormSubmit(event) {
   }
   if (!recipients.length) {
     setReportFormStatus("Debes indicar al menos un correo de destino.");
+    return;
+  }
+  if (!tags.length) {
+    setReportFormStatus("Selecciona al menos un tag historizado.");
     return;
   }
   if (frequency === "weekly" && !dayOfWeek) {
