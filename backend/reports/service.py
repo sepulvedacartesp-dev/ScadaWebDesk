@@ -583,10 +583,10 @@ async def fetch_alarm_events(
     pool: Pool,
     *,
     empresa_id: str,
-    planta_id: str,
+    planta_id: Optional[str],
     start: datetime,
     end: datetime,
-    limit: int = 100,
+    limit: int = 500,
 ) -> List[Dict[str, Any]]:
     query = """
         SELECT
@@ -604,12 +604,17 @@ async def fetch_alarm_events(
             notified_at
         FROM alarm_events
         WHERE empresa_id = $1
-          AND (planta_id = $2 OR planta_id = 'default' OR planta_id IS NULL)
-          AND triggered_at BETWEEN $3 AND $4
+          {planta_clause}
+          AND triggered_at BETWEEN $2 AND $3
         ORDER BY triggered_at DESC
-        LIMIT $5
+        LIMIT $4
     """
-    rows = await pool.fetch(query, empresa_id, planta_id, start, end, max(1, min(limit, 500)))
+    planta_filter = ""
+    params: List[Any] = [empresa_id, start, end, max(1, min(limit, 500))]
+    if planta_id:
+        planta_filter = "AND (planta_id = $5 OR planta_id = 'default' OR planta_id IS NULL)"
+        params.append(planta_id)
+    rows = await pool.fetch(query.format(planta_clause=planta_filter), *params)
     events: List[Dict[str, Any]] = []
     for row in rows:
         events.append(
