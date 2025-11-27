@@ -660,10 +660,10 @@ if EXTRA_CORS_ORIGINS:
 for default_origin in ("https://surnex.cl", "https://www.surnex.cl"):
     if default_origin not in ALLOWED_CORS_ORIGINS:
         ALLOWED_CORS_ORIGINS.append(default_origin)
-ALLOWED_CORS_ORIGINS = sorted(set(ALLOWED_CORS_ORIGINS))
-ALLOW_CREDENTIALS = "*" not in ALLOWED_CORS_ORIGINS
-if not ALLOW_CREDENTIALS:
-    logger.warning("CORS credentials disabled because '*' is present in FRONTEND_ORIGIN")
+# Si se usaba "*" la removemos y usamos regex para eco dinámico
+ALLOW_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", "https://.*").strip() or "https://.*"
+ALLOWED_CORS_ORIGINS = sorted({origin for origin in ALLOWED_CORS_ORIGINS if origin != "*"})
+ALLOW_CREDENTIALS = True
 
 MQTT_HOST = os.getenv("HIVEMQ_HOST", "").strip()
 MQTT_PORT = int(os.getenv("HIVEMQ_PORT", "8883"))
@@ -1055,7 +1055,8 @@ async def stop_session_cleanup_task():
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_CORS_ORIGINS,
+    allow_origins=ALLOWED_CORS_ORIGINS or ["http://localhost", "https://localhost"],
+    allow_origin_regex=ALLOW_ORIGIN_REGEX,
     allow_credentials=ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
