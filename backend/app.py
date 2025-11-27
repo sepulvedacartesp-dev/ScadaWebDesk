@@ -70,6 +70,14 @@ from quotes.schemas import (
 
 from alarms import service as alarm_service
 from alarms.schemas import AlarmRuleCreate, AlarmRuleOut, AlarmRuleUpdate, AlarmEventOut
+from reports import service as report_service
+from reports.schemas import (
+    ReportCreatePayload,
+    ReportDefinitionOut,
+    ReportRunOut,
+    ReportRunRequest,
+    ReportUpdatePayload,
+)
 
 load_dotenv()
 
@@ -2089,6 +2097,18 @@ def ensure_alarm_admin(decoded_token: Dict[str, Any], empresa_id: str) -> Dict[s
     return cfg
 
 
+def ensure_report_admin(decoded_token: Dict[str, Any], empresa_id: str) -> Dict[str, Any]:
+    return ensure_alarm_admin(decoded_token, empresa_id)
+
+
+def ensure_planta_exists(cfg: Dict[str, Any], planta_id: str) -> str:
+    lookup = plant_lookup(cfg.get("plants", []) or [])
+    normalized = normalize_plant_id(planta_id)
+    if normalized not in lookup:
+        raise HTTPException(status_code=400, detail="Planta no encontrada en la configuracion")
+    return normalized
+
+
 @app.get("/api/alarms/rules", response_model=List[AlarmRuleOut])
 async def list_alarm_rules_endpoint(
     authorization: Optional[str] = Header(None),
@@ -2178,6 +2198,144 @@ async def list_alarm_events_endpoint(
     pool = require_trend_pool()
     events = await alarm_service.list_events(pool, company_id, limit=limit, tag=tag)
     return events
+
+
+# ---- Report management ----
+
+
+@app.get("/api/reports", response_model=List[ReportDefinitionOut])
+async def list_reports_endpoint(
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+    planta_id: Optional[str] = Query(None, alias="plantaId"),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    cfg = ensure_report_admin(decoded, company_id)
+    filter_plants = None
+    if planta_id:
+        normalized = ensure_planta_exists(cfg, planta_id)
+        filter_plants = [normalized]
+    pool = require_trend_pool()
+    try:
+        return await report_service.list_definitions(pool, company_id, filter_plants)
+    except Exception as exc:
+        logger.exception("No se pudieron listar los reportes: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudieron listar los reportes") from exc
+
+
+@app.post("/api/reports", response_model=ReportDefinitionOut, status_code=201)
+async def create_report_endpoint(
+    payload: ReportCreatePayload,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    cfg = ensure_report_admin(decoded, company_id)
+    normalized_planta = ensure_planta_exists(cfg, payload.planta_id)
+    payload = payload.model_copy(update={"planta_id": normalized_planta})
+    pool = require_trend_pool()
+    try:
+        return await report_service.create_definition(pool, company_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except asyncpg.UniqueViolationError as exc:
+        raise HTTPException(status_code=400, detail="Solo se permiten 2 reportes por planta") from exc
+    except asyncpg.PostgresError as exc:
+        logger.exception("No se pudo crear el reporte: %s", exc)
+        raise HTTPException(status_code=500, detail="No se pudo crear el reporte") from exc
+
+
+@app.put("/api/reports/{report_id}", response_model=ReportDefinitionOut)
+async def update_report_endpoint(
+    report_id: int,
+    payload: ReportUpdatePayload,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    cfg = ensure_report_admin(decoded, company_id)
+    if payload.planta_id:
+        normalized_planta = ensure_planta_exists(cfg, payload.planta_id)
+        payload = payload.model_copy(update={"planta_id": normalized_planta})
+    pool = require_trend_pool()
+    try:
+        updated = await report_service.update_definition(pool, company_id, report_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except asyncpg.PostgresError as exc:
+        logger.exception("No se pudo actualizar el reporte %s: %s", report_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo actualizar el reporte") from exc
+    if not updated:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    return updated
+
+
+@app.delete("/api/reports/{report_id}")
+async def delete_report_endpoint(
+    report_id: int,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    ensure_report_admin(decoded, company_id)
+    pool = require_trend_pool()
+    try:
+        deleted = await report_service.delete_definition(pool, company_id, report_id)
+    except asyncpg.PostgresError as exc:
+        logger.exception("No se pudo eliminar el reporte %s: %s", report_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo eliminar el reporte") from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    return {"ok": True}
+
+
+@app.get("/api/reports/{report_id}/runs", response_model=List[ReportRunOut])
+async def list_report_runs_endpoint(
+    report_id: int,
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=200),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    ensure_report_admin(decoded, company_id)
+    pool = require_trend_pool()
+    definition = await report_service.get_definition(pool, company_id, report_id)
+    if not definition:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    try:
+        return await report_service.list_runs(pool, company_id, report_id, limit=limit)
+    except asyncpg.PostgresError as exc:
+        logger.exception("No se pudieron listar las ejecuciones del reporte %s: %s", report_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudieron listar las ejecuciones") from exc
+
+
+@app.post("/api/reports/{report_id}/runs", response_model=ReportRunOut, status_code=201)
+async def trigger_report_run_endpoint(
+    report_id: int,
+    request: Optional[ReportRunRequest] = Body(None),
+    authorization: Optional[str] = Header(None),
+    empresa_id: Optional[str] = Query(None),
+):
+    decoded = verify_bearer_token(authorization)
+    company_id = resolve_company_access(decoded, empresa_id)
+    ensure_report_admin(decoded, company_id)
+    pool = require_trend_pool()
+    definition = await report_service.get_definition(pool, company_id, report_id)
+    if not definition:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    try:
+        run = await report_service.create_run(pool, company_id, report_id, definition, request, decoded.get("email"))
+        return run
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except asyncpg.PostgresError as exc:
+        logger.exception("No se pudo agendar la ejecucion del reporte %s: %s", report_id, exc)
+        raise HTTPException(status_code=500, detail="No se pudo agendar la ejecucion") from exc
 
 
 @app.post("/logos")
