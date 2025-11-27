@@ -258,9 +258,15 @@ function escapeHtml(value) {
 
 function formatDateTime(value) {
   if (!value) return "--";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("es-CL", {
+  let parsed = null;
+  if (typeof value === "string") {
+    const hasZone = /(?:Z|[+-]\d\d:?\d\d)$/.test(value);
+    parsed = new Date(hasZone ? value : `${value}Z`);
+  } else {
+    parsed = new Date(value);
+  }
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString("es-CL", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -592,7 +598,7 @@ async function loadAlarmEvents(limit = 20) {
   alarmEventsBody.innerHTML = '<tr><td colspan="8">Cargando...</td></tr>';
   try {
     const token = await user.getIdToken();
-    const fetchLimit = Math.max(200, limit * 20);
+    const fetchLimit = Math.max(500, limit * 40);
     const response = await fetch(
       `${BACKEND_HTTP}/api/alarms/events?empresaId=${encodeURIComponent(empresaId)}&limit=${fetchLimit}`,
       {
