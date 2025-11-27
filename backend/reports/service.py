@@ -604,7 +604,7 @@ async def fetch_alarm_events(
             notified_at
         FROM alarm_events
         WHERE empresa_id = $1
-          AND planta_id = $2
+          AND (planta_id = $2 OR planta_id = 'default' OR planta_id IS NULL)
           AND triggered_at BETWEEN $3 AND $4
         ORDER BY triggered_at DESC
         LIMIT $5
