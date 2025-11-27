@@ -153,24 +153,31 @@ def _condense_points(points: Sequence[dict], target: int) -> List[float]:
     return condensed
 
 
-def _load_email_settings() -> Optional[EmailSettings]:
-    host = (os.environ.get("ALARM_SMTP_HOST") or "").strip()
-    username = (os.environ.get("ALARM_SMTP_USERNAME") or "").strip()
-    password = (os.environ.get("ALARM_SMTP_PASSWORD") or "").strip()
+def _load_email_settings() -> Optional[dict]:
+    def pick(*keys: str) -> str:
+        for key in keys:
+            val = os.environ.get(key)
+            if val and str(val).strip():
+                return str(val).strip()
+        return ""
+
+    host = pick("ALARM_SMTP_HOST", "SMTP_HOST", "MAIL_HOST")
+    username = pick("ALARM_SMTP_USERNAME", "ALARM_SMTP_USER", "SMTP_USERNAME", "SMTP_USER", "MAIL_USER")
+    password = pick("ALARM_SMTP_PASSWORD", "ALARM_SMTP_PASS", "SMTP_PASSWORD", "MAIL_PASSWORD")
     if not host or not username or not password:
         return None
     return {
         "host": host,
-        "port": int(os.environ.get("ALARM_SMTP_PORT") or 587),
+        "port": int(os.environ.get("ALARM_SMTP_PORT") or os.environ.get("SMTP_PORT") or 587),
         "username": username,
         "password": password,
-        "from_address": (os.environ.get("ALARM_EMAIL_FROM") or "notificaciones@surnex.cl").strip(),
-        "from_name": (os.environ.get("ALARM_EMAIL_FROM_NAME") or "").strip() or None,
-        "use_starttls": os.environ.get("ALARM_SMTP_STARTTLS", "1") not in {"0", "false", "no"},
-        "use_tls": os.environ.get("ALARM_SMTP_USE_SSL", "0") in {"1", "true", "yes"},
-        "timeout": float(os.environ.get("ALARM_SMTP_TIMEOUT") or 10.0),
+        "from_address": (os.environ.get("ALARM_EMAIL_FROM") or os.environ.get("SMTP_FROM") or "notificaciones@surnex.cl").strip(),
+        "from_name": (os.environ.get("ALARM_EMAIL_FROM_NAME") or os.environ.get("SMTP_FROM_NAME") or "").strip() or None,
+        "use_starttls": (os.environ.get("ALARM_SMTP_STARTTLS") or os.environ.get("SMTP_STARTTLS") or "1").lower() not in {"0", "false", "no"},
+        "use_tls": (os.environ.get("ALARM_SMTP_USE_SSL") or os.environ.get("SMTP_USE_SSL") or "0").lower() in {"1", "true", "yes"},
+        "timeout": float(os.environ.get("ALARM_SMTP_TIMEOUT") or os.environ.get("SMTP_TIMEOUT") or 10.0),
         "subject_prefix": (os.environ.get("ALARM_EMAIL_SUBJECT_PREFIX") or "[Reporte SCADA]").strip(),
-        "reply_to": (os.environ.get("ALARM_EMAIL_REPLY_TO") or "").strip() or None,
+        "reply_to": (os.environ.get("ALARM_EMAIL_REPLY_TO") or os.environ.get("SMTP_REPLY_TO") or "").strip() or None,
         "tz_name": (os.environ.get("ALARM_EMAIL_TZ") or "").strip() or None,
     }
 
@@ -249,7 +256,7 @@ async def execute_run(
     if run.send_email:
         settings = _load_email_settings()
         if not settings:
-            error = "SMTP no configurado (define ALARM_SMTP_HOST/USERNAME/PASSWORD)"
+            error = "SMTP no configurado (usa ALARM_SMTP_* o SMTP_* en el servicio web)"
         else:
             try:
                 emails_sent = await _send_report_email(settings, definition, pdf_bytes, run)
