@@ -609,9 +609,19 @@ async function loadAlarmEvents(limit = 20) {
       throw new Error(text || `Error ${response.status}`);
     }
     const data = await response.json();
+    const normalizeBool = (value) => {
+      if (value === true || value === false) return value;
+      if (typeof value === "string") {
+        const v = value.trim().toLowerCase();
+        if (v === "true") return true;
+        if (v === "false") return false;
+      }
+      return undefined;
+    };
     const isNotified = (event) => {
-      const flag = event.emailSent ?? event.email_sent;
-      if (flag !== undefined) return Boolean(flag);
+      const flag = normalizeBool(event.emailSent ?? event.email_sent);
+      if (flag === true) return true;
+      if (flag === false) return false;
       if (event.notifiedAt || event.notified_at) return true;
       return false;
     };
