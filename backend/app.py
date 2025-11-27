@@ -643,6 +643,7 @@ REPORTS_SCHEDULER_ENABLED = coerce_bool(os.environ.get("REPORTS_SCHEDULER_ENABLE
 # ---- Config ----
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*").strip()
+EXTRA_CORS_ORIGINS = os.getenv("EXTRA_CORS_ORIGINS", "").strip()
 
 
 def parse_allowed_origins(raw: str) -> List[str]:
@@ -653,6 +654,13 @@ def parse_allowed_origins(raw: str) -> List[str]:
 
 
 ALLOWED_CORS_ORIGINS = parse_allowed_origins(FRONTEND_ORIGIN)
+if EXTRA_CORS_ORIGINS:
+    ALLOWED_CORS_ORIGINS.extend(parse_allowed_origins(EXTRA_CORS_ORIGINS))
+# Incluye dominios habituales si no están presentes
+for default_origin in ("https://surnex.cl", "https://www.surnex.cl"):
+    if default_origin not in ALLOWED_CORS_ORIGINS:
+        ALLOWED_CORS_ORIGINS.append(default_origin)
+ALLOWED_CORS_ORIGINS = sorted(set(ALLOWED_CORS_ORIGINS))
 ALLOW_CREDENTIALS = "*" not in ALLOWED_CORS_ORIGINS
 if not ALLOW_CREDENTIALS:
     logger.warning("CORS credentials disabled because '*' is present in FRONTEND_ORIGIN")
