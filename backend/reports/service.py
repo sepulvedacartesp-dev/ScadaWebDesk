@@ -350,11 +350,17 @@ def compute_default_window(definition: ReportDefinitionOut, reference_utc: Optio
     tz = _resolve_timezone(definition.timezone) if getattr(definition, "timezone", None) else timezone.utc
     local_now = ref.astimezone(tz)
     if definition.frequency == "monthly":
-        start_local, end_local = _previous_month_window(local_now)
+        # Ventana rodante de 30 dias hacia atras
+        start_local = local_now - timedelta(days=30)
+        end_local = local_now
     elif definition.frequency == "weekly":
-        start_local, end_local = _previous_week_window(local_now)
+        # Ventana rodante de 7 dias hacia atras
+        start_local = local_now - timedelta(days=7)
+        end_local = local_now
     else:
-        start_local, end_local = _previous_day_window(local_now)
+        # Ventana rodante de 24 horas hacia atras
+        start_local = local_now - timedelta(days=1)
+        end_local = local_now
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
 
@@ -604,13 +610,17 @@ async def fetch_alarm_events(
     start: datetime,
     end: datetime,
     limit: int = 500,
+    tags: Optional[Sequence[str]] = None,
 ) -> List[Dict[str, Any]]:
     has_planta = await _table_has_column(pool, "alarm_events", "planta_id")
-    clauses = ["empresa_id = $1", "triggered_at BETWEEN $2 AND $3"]
+    clauses = ["empresa_id = $1", "triggered_at BETWEEN $2 AND $3", "email_sent = true"]
     params: List[Any] = [empresa_id, start, end]
     if planta_id and has_planta:
-        clauses.append("(planta_id = $4 OR planta_id = 'default' OR planta_id IS NULL)")
+        clauses.append("(planta_id = ${} OR planta_id = 'default' OR planta_id IS NULL)".format(len(params) + 1))
         params.append(planta_id)
+    if tags:
+        clauses.append("tag = ANY(${})".format(len(params) + 1))
+        params.append(list(tags))
     params.append(max(1, min(limit, 1000)))
     query = f"""
         SELECT

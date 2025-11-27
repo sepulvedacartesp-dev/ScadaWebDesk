@@ -252,6 +252,7 @@ async def execute_run(
             planta_id=definition.planta_id,
             start=start,
             end=end,
+            tags=definition.tags or None,
         )
     pdf_bytes = _build_pdf(definition, run, series, alarms)
     emails_sent: List[str] = []
