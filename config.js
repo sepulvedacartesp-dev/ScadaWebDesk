@@ -166,6 +166,11 @@ const state = {
   alarmSelectedId: null,
   alarmLoading: false,
   alarmSaving: false,
+  reports: [],
+  reportRuns: new Map(),
+  reportSelectedId: null,
+  reportLoading: false,
+  reportSaving: false,
   config: createEmptyConfig(),
   plantAccessEntries: [],
   currentPlantId: null,
@@ -211,6 +216,32 @@ const dom = {
   alarmResetBtn: document.getElementById("alarm-reset-btn"),
   alarmTableBody: document.getElementById("alarm-table-body"),
   alarmEmpty: document.getElementById("alarm-empty"),
+  reportsCard: document.getElementById("reports-card"),
+  reportsStatus: document.getElementById("reports-status"),
+  reportsList: document.getElementById("reports-list"),
+  reportsEmpty: document.getElementById("reports-empty"),
+  reportTemplate: document.getElementById("report-item-template"),
+  reportForm: document.getElementById("report-form"),
+  reportFormTitle: document.getElementById("report-form-title"),
+  reportId: document.getElementById("report-id"),
+  reportName: document.getElementById("report-name"),
+  reportPlant: document.getElementById("report-plant"),
+  reportFrequency: document.getElementById("report-frequency"),
+  reportDayWeek: document.getElementById("report-day-week"),
+  reportDayMonth: document.getElementById("report-day-month"),
+  reportDowGroup: document.getElementById("report-dow-group"),
+  reportDomGroup: document.getElementById("report-dom-group"),
+  reportTime: document.getElementById("report-time"),
+  reportSlot: document.getElementById("report-slot"),
+  reportRecipients: document.getElementById("report-recipients"),
+  reportTags: document.getElementById("report-tags"),
+  reportIncludeAlarms: document.getElementById("report-include-alarms"),
+  reportSendEmail: document.getElementById("report-send-email"),
+  reportSubmit: document.getElementById("report-submit"),
+  reportCancel: document.getElementById("report-cancel"),
+  reportNew: document.getElementById("report-new"),
+  reportRefreshBtn: document.getElementById("report-refresh-btn"),
+  reportFormStatus: document.getElementById("report-form-status"),
   addPlantBtn: document.getElementById("add-plant"),
   plantsList: document.getElementById("plants-list"),
   plantsEmpty: document.getElementById("plants-empty"),
@@ -352,6 +383,15 @@ function attachStaticHandlers() {
   dom.alarmTableBody?.addEventListener("click", handleAlarmTableClick);
   dom.alarmRefreshBtn?.addEventListener("click", () => loadAlarmRules(true));
   updateAlarmThresholdInput();
+  dom.reportFrequency?.addEventListener("change", updateReportFrequencyFields);
+  dom.reportForm?.addEventListener("submit", handleReportFormSubmit);
+  dom.reportCancel?.addEventListener("click", resetReportForm);
+  dom.reportNew?.addEventListener("click", () => {
+    resetReportForm();
+    dom.reportForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  dom.reportRefreshBtn?.addEventListener("click", () => loadReports(true));
+  dom.reportsList?.addEventListener("click", handleReportListClick);
 }
 
 function setLogoStatus(message, tone = "info") {
@@ -657,6 +697,7 @@ async function loadConfig(force = false, targetEmpresaId = null) {
     renderAll();
     initializeCollapsibleSections(false);
     await loadAlarmRules(true);
+    await loadReports(true);
     refreshCompanyLogo({ bustCache: empresaChanged });
     ensureUserCardVisibility();
     if (state.canManageUsers && (empresaChanged || !state.usersLoaded)) {
@@ -1132,10 +1173,446 @@ function handleAlarmTableClick(event) {
   }
 }
 
+// ---- Reports ----
+
+function setReportStatus(message, tone = "info") {
+  if (!dom.reportsStatus) return;
+  dom.reportsStatus.textContent = message || "";
+  dom.reportsStatus.dataset.tone = tone || "info";
+  dom.reportsStatus.hidden = !message;
+}
+
+function setReportFormStatus(message) {
+  if (!dom.reportFormStatus) return;
+  dom.reportFormStatus.textContent = message || "";
+}
+
+function normalizeListInput(value) {
+  if (!value) return [];
+  return value
+    .split(/[\n,;,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function updateReportFrequencyFields() {
+  const freq = dom.reportFrequency?.value || "daily";
+  if (dom.reportDowGroup) dom.reportDowGroup.hidden = freq !== "weekly";
+  if (dom.reportDomGroup) dom.reportDomGroup.hidden = freq !== "monthly";
+  if (dom.reportDayWeek) dom.reportDayWeek.required = freq === "weekly";
+  if (dom.reportDayMonth) dom.reportDayMonth.required = freq === "monthly";
+}
+
+function resetReportForm() {
+  state.reportSelectedId = null;
+  dom.reportForm?.reset();
+  if (dom.reportName) dom.reportName.value = "";
+  if (dom.reportId) dom.reportId.value = "";
+  if (dom.reportFrequency) dom.reportFrequency.value = "daily";
+  if (dom.reportDayWeek) dom.reportDayWeek.value = "";
+  if (dom.reportDayMonth) dom.reportDayMonth.value = "";
+  if (dom.reportTime) dom.reportTime.value = dom.reportTime.getAttribute("value") || "08:00";
+  if (dom.reportSlot) dom.reportSlot.value = "1";
+  if (dom.reportIncludeAlarms) dom.reportIncludeAlarms.checked = true;
+  if (dom.reportSendEmail) dom.reportSendEmail.checked = true;
+  const targetPlant = getDefaultPlantId();
+  if (dom.reportPlant) {
+    populatePlantSelect(dom.reportPlant, targetPlant);
+  }
+  if (dom.reportFormTitle) dom.reportFormTitle.textContent = "Crear reporte";
+  if (dom.reportSubmit) dom.reportSubmit.textContent = "Guardar reporte";
+  setReportFormStatus("");
+  updateReportFrequencyFields();
+}
+
+function upsertReportState(report) {
+  if (!report || typeof report !== "object") return;
+  if (!Array.isArray(state.reports)) {
+    state.reports = [];
+  }
+  const entry = {
+    ...report,
+    id: report.id !== undefined ? Number(report.id) : report.id,
+    plantaId: (report.plantaId || report.planta_id || getDefaultPlantId()).toLowerCase(),
+    recipients: Array.isArray(report.recipients) ? report.recipients : [],
+    tags: Array.isArray(report.tags) ? report.tags : [],
+  };
+  const index = state.reports.findIndex((item) => item.id === entry.id);
+  if (index >= 0) {
+    state.reports[index] = entry;
+  } else {
+    state.reports.push(entry);
+  }
+  state.reports.sort((a, b) => {
+    if (a.plantaId !== b.plantaId) return a.plantaId < b.plantaId ? -1 : 1;
+    if (a.slot !== b.slot) return (a.slot || 0) - (b.slot || 0);
+    return (a.id || 0) - (b.id || 0);
+  });
+}
+
+function renderReportRuns(reportId) {
+  if (!dom.reportsList || !dom.reportTemplate) return;
+  const container = dom.reportsList.querySelector(`[data-report-id="${reportId}"]`);
+  if (!container) return;
+  const runs = state.reportRuns.get(reportId) || [];
+  const wrapper = container.querySelector("[data-runs-wrapper]");
+  const tbody = container.querySelector("[data-runs-body]");
+  const empty = container.querySelector("[data-runs-empty]");
+  if (!wrapper || !tbody || !empty) return;
+  if (!runs.length) {
+    wrapper.hidden = false;
+    tbody.innerHTML = "";
+    empty.hidden = false;
+    return;
+  }
+  const rows = runs
+    .map((run) => {
+      const status = run.status || run.lastStatus || "";
+      const windowLabel = `${run.windowStart || "--"} → ${run.windowEnd || "--"}`;
+      const emails = Array.isArray(run.emailsSent) ? run.emailsSent.join(", ") : "";
+      const err = run.error || "";
+      return `
+        <tr>
+          <td>${escapeHtml(status)}</td>
+          <td>${escapeHtml(windowLabel)}</td>
+          <td>${escapeHtml(run.startedAt || "")}</td>
+          <td>${escapeHtml(run.completedAt || "")}</td>
+          <td>${escapeHtml(emails || "")}</td>
+          <td>${escapeHtml(err)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+  tbody.innerHTML = rows;
+  wrapper.hidden = false;
+  empty.hidden = runs.length > 0;
+}
+
+function renderReportsSection() {
+  if (dom.reportPlant) {
+    const current = dom.reportPlant.value || getDefaultPlantId();
+    populatePlantSelect(dom.reportPlant, current);
+  }
+  const canEdit = Boolean(state.canEdit);
+  if (dom.reportForm) {
+    const controls = dom.reportForm.querySelectorAll("input, select, textarea, button");
+    controls.forEach((el) => {
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el instanceof HTMLButtonElement)) return;
+      if (canEdit) {
+        el.removeAttribute("disabled");
+      } else {
+        el.setAttribute("disabled", "");
+      }
+    });
+    dom.reportForm.classList.toggle("is-readonly", !canEdit);
+  }
+  if (!dom.reportsList || !dom.reportTemplate) return;
+  const list = Array.isArray(state.reports) ? [...state.reports] : [];
+  dom.reportsList.innerHTML = "";
+  if (!list.length) {
+    if (dom.reportsEmpty) dom.reportsEmpty.hidden = false;
+    return;
+  }
+  if (dom.reportsEmpty) dom.reportsEmpty.hidden = true;
+  const plants = getPlantList();
+  const plantLookup = new Map(plants.map((p) => [p.id, p.name || p.id]));
+  list.forEach((report) => {
+    const fragment = dom.reportTemplate.content.cloneNode(true);
+    const card = fragment.querySelector("[data-report-id]");
+    if (!card) return;
+    card.dataset.reportId = report.id;
+    const title = card.querySelector(".report-title");
+    if (title) title.textContent = report.name || `Reporte ${report.id}`;
+    const meta = card.querySelector(".report-meta");
+    const plantName = plantLookup.get(report.plantaId) || report.plantaId || "default";
+    const freqLabel =
+      report.frequency === "weekly"
+        ? "Semanal"
+        : report.frequency === "monthly"
+        ? "Mensual"
+        : "Diario";
+    if (meta) meta.textContent = `${plantName} · ${freqLabel} · Slot ${report.slot || 1}`;
+    const detail = card.querySelector("[data-field='detail']");
+    if (detail) {
+      const recipients = (report.recipients || []).join(", ") || "--";
+      const tags = (report.tags || []).join(", ") || "--";
+      const alarms = report.includeAlarms ? "Con alarmas" : "Sin alarmas";
+      const sendMail = report.sendEmail ? "Envia correo" : "Sin envio";
+      detail.textContent = `Destinatarios: ${recipients} · Tags: ${tags} · ${alarms} · ${sendMail}`;
+    }
+    dom.reportsList.appendChild(fragment);
+    if (state.reportRuns.has(report.id)) {
+      renderReportRuns(report.id);
+    }
+  });
+}
+
+async function loadReports(force = false) {
+  if (!state.token) return;
+  if (!state.empresaId) {
+    state.reports = [];
+    state.reportRuns.clear();
+    renderReportsSection();
+    setReportStatus("Selecciona una empresa para configurar reportes.", "info");
+    return;
+  }
+  if (state.reportLoading && !force) return;
+  state.reportLoading = true;
+  setReportStatus("Cargando reportes...", "info");
+  try {
+    const query = buildEmpresaQuery();
+    const response = await fetch(`${BACKEND_HTTP}/api/reports${query}`, {
+      headers: {
+        Authorization: "Bearer " + state.token,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const data = await response.json();
+    state.reports = Array.isArray(data) ? data : [];
+    renderReportsSection();
+    resetReportForm();
+    if (!state.reports.length) {
+      setReportStatus("No hay reportes configurados.", "info");
+    } else {
+      setReportStatus("");
+    }
+  } catch (error) {
+    console.error("loadReports", error);
+    setReportStatus("No se pudieron cargar los reportes: " + ((error && error.message) || error), "error");
+  } finally {
+    state.reportLoading = false;
+  }
+}
+
+function fillReportForm(report) {
+  if (!report) return;
+  state.reportSelectedId = report.id !== undefined ? Number(report.id) : null;
+  if (dom.reportId) dom.reportId.value = report.id !== undefined ? String(report.id) : "";
+  if (dom.reportName) dom.reportName.value = report.name || "";
+  if (dom.reportPlant) populatePlantSelect(dom.reportPlant, report.plantaId || getDefaultPlantId());
+  if (dom.reportFrequency) dom.reportFrequency.value = report.frequency || "daily";
+  if (dom.reportDayWeek) dom.reportDayWeek.value = report.dayOfWeek || "";
+  if (dom.reportDayMonth) dom.reportDayMonth.value = report.dayOfMonth || "";
+  if (dom.reportTime) dom.reportTime.value = report.timeOfDay || "08:00";
+  if (dom.reportSlot) dom.reportSlot.value = String(report.slot || 1);
+  if (dom.reportRecipients) dom.reportRecipients.value = (report.recipients || []).join(", ");
+  if (dom.reportTags) dom.reportTags.value = (report.tags || []).join(", ");
+  if (dom.reportIncludeAlarms) dom.reportIncludeAlarms.checked = Boolean(report.includeAlarms);
+  if (dom.reportSendEmail) dom.reportSendEmail.checked = report.sendEmail !== false;
+  if (dom.reportFormTitle) dom.reportFormTitle.textContent = "Editar reporte";
+  if (dom.reportSubmit) dom.reportSubmit.textContent = "Actualizar reporte";
+  updateReportFrequencyFields();
+}
+
+function validateReportLimit(plantaId, editingId) {
+  const reports = Array.isArray(state.reports) ? state.reports : [];
+  const count = reports.filter((r) => r.plantaId === plantaId && r.id !== editingId).length;
+  return count < 2;
+}
+
+async function handleReportFormSubmit(event) {
+  event.preventDefault();
+  if (!state.token) {
+    setReportFormStatus("Debes iniciar sesión para guardar reportes.");
+    return;
+  }
+  const name = dom.reportName?.value.trim();
+  const plantaId = (dom.reportPlant?.value || "").trim().toLowerCase() || getDefaultPlantId();
+  const frequency = dom.reportFrequency?.value || "daily";
+  const dayOfWeek = dom.reportDayWeek?.value ? Number(dom.reportDayWeek.value) : null;
+  const dayOfMonth = dom.reportDayMonth?.value ? Number(dom.reportDayMonth.value) : null;
+  const timeOfDay = dom.reportTime?.value || "08:00";
+  const slot = dom.reportSlot?.value ? Number(dom.reportSlot.value) : 1;
+  const recipients = normalizeListInput(dom.reportRecipients?.value || "");
+  const tags = normalizeListInput(dom.reportTags?.value || "");
+  const includeAlarms = dom.reportIncludeAlarms ? Boolean(dom.reportIncludeAlarms.checked) : true;
+  const sendEmail = dom.reportSendEmail ? Boolean(dom.reportSendEmail.checked) : true;
+  if (!name) {
+    setReportFormStatus("El nombre es obligatorio.");
+    return;
+  }
+  if (!plantaId) {
+    setReportFormStatus("Selecciona una planta.");
+    return;
+  }
+  if (!recipients.length) {
+    setReportFormStatus("Debes indicar al menos un correo de destino.");
+    return;
+  }
+  if (frequency === "weekly" && !dayOfWeek) {
+    setReportFormStatus("Define el día de la semana (1-7) para frecuencia semanal.");
+    return;
+  }
+  if (frequency === "monthly" && !dayOfMonth) {
+    setReportFormStatus("Define el día del mes (1-31) para frecuencia mensual.");
+    return;
+  }
+  const editingId = state.reportSelectedId;
+  if (!validateReportLimit(plantaId, editingId)) {
+    setReportFormStatus("Solo se permiten 2 reportes por planta.");
+    return;
+  }
+  const payload = {
+    name,
+    plantaId,
+    frequency,
+    dayOfWeek: frequency === "weekly" ? dayOfWeek : null,
+    dayOfMonth: frequency === "monthly" ? dayOfMonth : null,
+    timeOfDay,
+    slot,
+    recipients,
+    tags,
+    includeAlarms,
+    sendEmail,
+  };
+  const query = buildEmpresaQuery();
+  const isUpdate = Boolean(editingId);
+  const url = isUpdate
+    ? `${BACKEND_HTTP}/api/reports/${editingId}${query}`
+    : `${BACKEND_HTTP}/api/reports${query}`;
+  const method = isUpdate ? "PUT" : "POST";
+  setReportFormStatus("Guardando...");
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + state.token,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const data = await response.json();
+    upsertReportState(data);
+    renderReportsSection();
+    resetReportForm();
+    setReportStatus("Reporte guardado correctamente.", "success");
+  } catch (error) {
+    console.error("handleReportFormSubmit", error);
+    setReportFormStatus("No se pudo guardar el reporte: " + ((error && error.message) || error));
+  }
+}
+
+async function deleteReport(reportId) {
+  if (!state.token) {
+    setReportStatus("Debes iniciar sesión para eliminar reportes.", "warning");
+    return;
+  }
+  const query = buildEmpresaQuery();
+  setReportStatus("Eliminando reporte...", "info");
+  try {
+    const response = await fetch(`${BACKEND_HTTP}/api/reports/${reportId}${query}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer " + state.token,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    state.reports = (state.reports || []).filter((item) => item.id !== Number(reportId));
+    state.reportRuns.delete(Number(reportId));
+    renderReportsSection();
+    setReportStatus("Reporte eliminado.", "success");
+  } catch (error) {
+    console.error("deleteReport", error);
+    setReportStatus("No se pudo eliminar el reporte: " + ((error && error.message) || error), "error");
+  }
+}
+
+async function loadReportRuns(reportId, force = false) {
+  if (!state.token) return;
+  if (!state.empresaId) return;
+  if (!force && state.reportRuns.has(reportId)) {
+    renderReportRuns(reportId);
+    return;
+  }
+  const query = buildEmpresaQuery();
+  try {
+    const response = await fetch(`${BACKEND_HTTP}/api/reports/${reportId}/runs${query}`, {
+      headers: {
+        Authorization: "Bearer " + state.token,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const data = await response.json();
+    state.reportRuns.set(reportId, Array.isArray(data) ? data : []);
+    renderReportRuns(reportId);
+  } catch (error) {
+    console.error("loadReportRuns", error);
+    setReportStatus("No se pudieron cargar las ejecuciones.", "error");
+  }
+}
+
+async function triggerReportRun(reportId) {
+  if (!state.token) {
+    setReportStatus("Debes iniciar sesión para generar reportes.", "warning");
+    return;
+  }
+  const query = buildEmpresaQuery();
+  setReportStatus("Agendando ejecución...", "info");
+  try {
+    const response = await fetch(`${BACKEND_HTTP}/api/reports/${reportId}/runs${query}`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + state.token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sendEmail: true }),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(detail || orFallback(response.status));
+    }
+    const run = await response.json();
+    const existing = state.reportRuns.get(reportId) || [];
+    existing.unshift(run);
+    state.reportRuns.set(reportId, existing.slice(0, 20));
+    renderReportRuns(reportId);
+    setReportStatus("Ejecución iniciada.", "success");
+  } catch (error) {
+    console.error("triggerReportRun", error);
+    setReportStatus("No se pudo generar el reporte: " + ((error && error.message) || error), "error");
+  }
+}
+
+function handleReportListClick(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const card = button.closest("[data-report-id]");
+  const reportId = Number(card?.dataset.reportId);
+  if (!Number.isFinite(reportId)) return;
+  const action = button.dataset.action;
+  const report = (state.reports || []).find((item) => item.id === reportId);
+  if (action === "edit-report" && report) {
+    fillReportForm(report);
+    dom.reportForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else if (action === "delete-report") {
+    if (confirm("¿Eliminar este reporte?")) {
+      deleteReport(reportId);
+    }
+  } else if (action === "run-report") {
+    triggerReportRun(reportId);
+  } else if (action === "load-runs") {
+    loadReportRuns(reportId, true);
+  }
+}
+
 function renderAll() {
   renderGeneralSection();
   renderRolesSection();
   renderAlarmSection();
+  renderReportsSection();
   renderPlants();
   renderPlantAccess();
   renderContainers();

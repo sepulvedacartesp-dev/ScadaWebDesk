@@ -956,6 +956,99 @@
           </div>
         </section>
 
+        <section class="config-card collapsible-card collapsed" id="reports-card" data-section-id="reports">
+          <div class="container-header collapsible-header">
+            <div class="section-headline">
+              <h2>Reportes</h2>
+              <p class="helper-text">Configura hasta 2 reportes por planta y envíalos por correo en PDF.</p>
+            </div>
+            <div class="section-controls">
+              <div class="button-row">
+                <button type="button" class="btn btn-editable" id="report-new">Nuevo reporte</button>
+                <button type="button" class="btn btn-ghost" id="report-refresh-btn">Actualizar</button>
+              </div>
+              <button type="button" class="section-toggle" data-section-toggle="reports" aria-expanded="false">Expandir</button>
+            </div>
+          </div>
+          <div class="collapsible-body">
+            <div id="reports-status" class="status-banner" hidden></div>
+            <form id="report-form" class="form-grid" autocomplete="off">
+              <input type="hidden" id="report-id">
+              <header class="alarm-form__head">
+                <h3 id="report-form-title">Crear reporte</h3>
+              </header>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="report-name">Nombre</label>
+                  <input id="report-name" type="text" class="text-input" maxlength="120" placeholder="Reporte Planta Norte" required>
+                </div>
+                <div class="form-group">
+                  <label for="report-plant">Planta</label>
+                  <select id="report-plant" class="select-input"></select>
+                  <p class="helper-text">Máximo 2 reportes por planta.</p>
+                </div>
+                <div class="form-group">
+                  <label for="report-frequency">Frecuencia</label>
+                  <select id="report-frequency" class="select-input">
+                    <option value="daily">Diario</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="monthly">Mensual</option>
+                  </select>
+                </div>
+                <div class="form-group" id="report-dow-group">
+                  <label for="report-day-week">Día de la semana (1=lunes)</label>
+                  <input id="report-day-week" type="number" class="text-input" min="1" max="7" placeholder="1">
+                </div>
+                <div class="form-group" id="report-dom-group" hidden>
+                  <label for="report-day-month">Día del mes</label>
+                  <input id="report-day-month" type="number" class="text-input" min="1" max="31" placeholder="1">
+                </div>
+                <div class="form-group">
+                  <label for="report-time">Hora (HH:MM)</label>
+                  <input id="report-time" type="time" class="text-input" value="08:00">
+                </div>
+                <div class="form-group">
+                  <label for="report-slot">Slot</label>
+                  <select id="report-slot" class="select-input">
+                    <option value="1">Slot 1</option>
+                    <option value="2">Slot 2</option>
+                  </select>
+                  <p class="helper-text">Identifica los dos reportes permitidos por planta.</p>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="report-recipients">Destinatarios (correos separados por coma o salto de línea)</label>
+                  <textarea id="report-recipients" rows="2" class="text-input" placeholder="operaciones@cliente.com"></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="report-tags">Tags historizados (separa por coma o salto de línea)</label>
+                  <textarea id="report-tags" rows="2" class="text-input" placeholder="scada/customers/acme/Temp&#10;scada/customers/acme/Presion"></textarea>
+                  <p class="helper-text">Variables que se graficarán y resumirán.</p>
+                </div>
+                <div class="form-group">
+                  <label class="checkbox">
+                    <input type="checkbox" id="report-include-alarms" checked>
+                    <span>Incluir alarmas notificadas</span>
+                  </label>
+                  <label class="checkbox">
+                    <input type="checkbox" id="report-send-email" checked>
+                    <span>Enviar PDF por correo</span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="report-submit">Guardar reporte</button>
+                <button type="button" class="btn btn-ghost" id="report-cancel">Cancelar</button>
+              </div>
+              <div id="report-form-status" class="helper-text"></div>
+            </form>
+            <div id="reports-list" class="plant-access-list">
+              <div id="reports-empty" class="empty-state">No hay reportes configurados.</div>
+            </div>
+          </div>
+        </section>
+
         <section class="config-card collapsible-card collapsed" id="user-card" data-section-id="users" hidden>
           <div class="container-header collapsible-header">
             <div class="section-headline">
@@ -1217,6 +1310,44 @@
       </div>
       <div class="button-row align-start">
         <button type="button" class="btn btn-danger btn-editable" data-action="remove-access">Eliminar</button>
+      </div>
+    </article>
+  </template>
+
+  <template id="report-item-template">
+    <article class="plant-access-card report-card" data-report-id>
+      <div class="report-head">
+        <div>
+          <h3 class="report-title"></h3>
+          <p class="helper-text report-meta"></p>
+        </div>
+        <div class="button-row align-start">
+          <button type="button" class="btn btn-ghost btn-editable" data-action="run-report">Generar ahora</button>
+          <button type="button" class="btn btn-secondary btn-editable" data-action="edit-report">Editar</button>
+          <button type="button" class="btn btn-danger btn-editable" data-action="delete-report">Eliminar</button>
+        </div>
+      </div>
+      <p class="helper-text report-detail" data-field="detail"></p>
+      <div class="report-runs">
+        <div class="button-row">
+          <button type="button" class="btn btn-ghost" data-action="load-runs">Ver ejecuciones</button>
+        </div>
+        <div class="table-wrapper" data-runs-wrapper hidden>
+          <table class="alarm-table">
+            <thead>
+              <tr>
+                <th>Estado</th>
+                <th>Ventana</th>
+                <th>Inicio</th>
+                <th>Fin</th>
+                <th>Correos</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody data-runs-body></tbody>
+          </table>
+          <div class="empty-state" data-runs-empty hidden>Sin ejecuciones recientes.</div>
+        </div>
       </div>
     </article>
   </template>
