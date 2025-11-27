@@ -43,7 +43,7 @@ class EmailNotifier:
         self._tz = self._resolve_timezone(settings.tz_name)
 
     def _resolve_timezone(self, tz_name: Optional[str]) -> timezone:
-        name = (tz_name or os.environ.get("ALARM_EMAIL_TZ") or "UTC").strip()
+        name = (tz_name or os.environ.get("ALARM_EMAIL_TZ") or "America/Santiago").strip()
         try:
             return ZoneInfo(name)
         except ZoneInfoNotFoundError:
