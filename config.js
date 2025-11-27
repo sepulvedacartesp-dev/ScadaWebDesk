@@ -1266,23 +1266,29 @@ function preselectReportTags(tags) {
 
 async function loadReportTagsForPlant(plantaId, force = false, preselect = []) {
   const plant = (plantaId || "").trim().toLowerCase() || getDefaultPlantId();
-  if (!state.token) {
-    renderTagOptions(plant, preselect);
-    return;
-  }
   if (!force && state.reportTagsCache.has(plant)) {
     renderTagOptions(plant, preselect);
     preselectReportTags(preselect);
     return;
   }
-  const query = buildEmpresaQuery();
-  const separator = query ? (query.includes("?") ? "&" : "?") : "?";
-  const plantaParam = plant ? `${separator}plantaId=${encodeURIComponent(plant)}` : "";
   if (dom.reportTagsHelper) dom.reportTagsHelper.textContent = "Cargando tags...";
   try {
-    const response = await fetch(`${BACKEND_HTTP}/api/tendencias/tags${query || ""}${plantaParam}`, {
+    let token = state.token;
+    if (firebase?.auth?.currentUser) {
+      token = await firebase.auth().currentUser.getIdToken(true);
+      state.token = token;
+    }
+    if (!token) {
+      throw new Error("Sesion no disponible");
+    }
+    const empresaQuery = buildEmpresaQuery();
+    const params = new URLSearchParams();
+    if (plant) params.set("plantaId", plant);
+    const separator = empresaQuery ? "&" : "?";
+    const url = `${BACKEND_HTTP}/api/tendencias/tags${empresaQuery || ""}${params.toString() ? `${separator}${params.toString()}` : ""}`;
+    const response = await fetch(url, {
       headers: {
-        Authorization: "Bearer " + state.token,
+        Authorization: "Bearer " + token,
       },
     });
     if (!response.ok) {
@@ -1303,6 +1309,8 @@ async function loadReportTagsForPlant(plantaId, force = false, preselect = []) {
 
 function handleReportPlantChange(force = false) {
   const plantId = (dom.reportPlant?.value || "").trim().toLowerCase() || getDefaultPlantId();
+  // Limpia selección previa y muestra placeholder mientras carga
+  renderTagOptions(plantId, []);
   loadReportTagsForPlant(plantId, force);
 }
 
