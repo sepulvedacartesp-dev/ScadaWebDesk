@@ -181,6 +181,7 @@ def load_email_settings() -> Optional[EmailSettings]:
         timeout=coerce_float(os.environ.get("ALARM_SMTP_TIMEOUT"), 10.0),
         subject_prefix=(os.environ.get("ALARM_EMAIL_SUBJECT_PREFIX") or "[Alarma SCADA]").strip(),
         reply_to=(os.environ.get("ALARM_EMAIL_REPLY_TO") or "").strip() or None,
+        tz_name=(os.environ.get("ALARM_EMAIL_TZ") or "").strip() or None,
     )
     if settings.use_starttls and settings.use_tls:
         logger.warning("Configuracion SMTP indica STARTTLS y SSL simultaneamente; se prioriza STARTTLS.")
