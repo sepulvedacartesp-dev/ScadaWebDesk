@@ -1217,7 +1217,7 @@ function resetReportForm() {
   if (dom.reportSendEmail) dom.reportSendEmail.checked = true;
   const targetPlant = getDefaultPlantId();
   if (dom.reportPlant) {
-    populatePlantSelect(dom.reportPlant, targetPlant);
+    populatePlantSelect(dom.reportPlant, targetPlant, true);
   }
   if (dom.reportFormTitle) dom.reportFormTitle.textContent = "Crear reporte";
   if (dom.reportSubmit) dom.reportSubmit.textContent = "Guardar reporte";
@@ -1291,7 +1291,7 @@ function renderReportRuns(reportId) {
 function renderReportsSection() {
   if (dom.reportPlant) {
     const current = dom.reportPlant.value || getDefaultPlantId();
-    populatePlantSelect(dom.reportPlant, current);
+    populatePlantSelect(dom.reportPlant, current, true);
   }
   const canEdit = Boolean(state.canEdit);
   if (dom.reportForm) {
@@ -1392,7 +1392,7 @@ function fillReportForm(report) {
   state.reportSelectedId = report.id !== undefined ? Number(report.id) : null;
   if (dom.reportId) dom.reportId.value = report.id !== undefined ? String(report.id) : "";
   if (dom.reportName) dom.reportName.value = report.name || "";
-  if (dom.reportPlant) populatePlantSelect(dom.reportPlant, report.plantaId || getDefaultPlantId());
+  if (dom.reportPlant) populatePlantSelect(dom.reportPlant, report.plantaId || getDefaultPlantId(), true);
   if (dom.reportFrequency) dom.reportFrequency.value = report.frequency || "daily";
   if (dom.reportDayWeek) dom.reportDayWeek.value = report.dayOfWeek || "";
   if (dom.reportDayMonth) dom.reportDayMonth.value = report.dayOfMonth || "";
@@ -1668,15 +1668,23 @@ function getDefaultPlantId() {
   return plants[0]?.id || "planta_general";
 }
 
-function populatePlantSelect(selectNode, selectedId) {
+function populatePlantSelect(selectNode, selectedId, includePlaceholder = false) {
   if (!selectNode) return;
   const plants = getPlantList();
   selectNode.innerHTML = "";
+  if (includePlaceholder) {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Selecciona una planta";
+    placeholder.disabled = true;
+    placeholder.selected = !selectedId;
+    selectNode.appendChild(placeholder);
+  }
   plants.forEach((plant) => {
     const option = document.createElement("option");
     option.value = plant.id;
     option.textContent = plant.serialCode ? `${plant.name} (${plant.serialCode})` : plant.name;
-    option.selected = plant.id === selectedId;
+    option.selected = plant.id === selectedId || (!selectedId && !includePlaceholder && plant === plants[0]);
     selectNode.appendChild(option);
   });
   if (!plants.length) {
