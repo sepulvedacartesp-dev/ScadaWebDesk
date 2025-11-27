@@ -609,9 +609,18 @@ async function loadAlarmEvents(limit = 20) {
       throw new Error(text || `Error ${response.status}`);
     }
     const data = await response.json();
-    const events = Array.isArray(data) ? data.slice(0, limit) : [];
+    const isNotified = (event) => {
+      const flag = event.emailSent ?? event.email_sent;
+      if (flag !== undefined) return Boolean(flag);
+      if (event.notifiedAt || event.notified_at) return true;
+      return false;
+    };
+    const events = Array.isArray(data) ? data.filter(isNotified).slice(0, limit) : [];
     renderAlarmEventsTable(events);
-    setAlarmEventsStatus(events.length ? "" : "No hay alarmas registradas.", events.length ? "info" : "warning");
+    setAlarmEventsStatus(
+      events.length ? "" : "No hay alarmas con envio de correo registrado.",
+      events.length ? "info" : "warning"
+    );
   } catch (error) {
     console.error("loadAlarmEvents", error);
     renderAlarmEventsTable([]);
