@@ -39,6 +39,12 @@ const currentPlantLabel = document.getElementById("current-plant");
 const plantSelectorSection = document.getElementById("plant-selector");
 const plantSelect = document.getElementById("plant-select");
 const plantEmptyMessage = document.getElementById("plant-empty");
+const alarmEventsBtn = document.getElementById("alarm-events-btn");
+const alarmEventsHint = document.getElementById("alarm-events-hint");
+const alarmEventsDialog = document.getElementById("alarm-events-dialog");
+const alarmEventsBody = document.getElementById("alarm-events-body");
+const alarmEventsStatus = document.getElementById("alarm-events-status");
+const alarmEventsCloseBtn = document.getElementById("alarm-events-close");
 
 
 const topicElementMap = new Map();
@@ -239,6 +245,30 @@ function setStatus(text) {
   if (statusLabel) {
     statusLabel.textContent = text;
   }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatDateTime(value) {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("es-CL", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZone: "UTC",
+  });
 }
 
 function computeBrandInitials(value) {
@@ -481,6 +511,13 @@ function updateRoleUI() {
   if (configLink) {
     configLink.hidden = !isAdmin;
   }
+  if (alarmEventsBtn) {
+    alarmEventsBtn.hidden = !isAdmin;
+    alarmEventsBtn.disabled = !isAdmin;
+  }
+  if (alarmEventsHint) {
+    alarmEventsHint.hidden = isAdmin;
+  }
   if (cotizadorLink) {
     cotizadorLink.hidden = !canAccessCotizador;
   }
@@ -499,6 +536,97 @@ function updateRoleUI() {
       }
     }
   });
+}
+
+function setAlarmEventsStatus(message, tone = "info") {
+  if (!alarmEventsStatus) return;
+  alarmEventsStatus.textContent = message || "";
+  alarmEventsStatus.dataset.tone = tone;
+  alarmEventsStatus.hidden = !message;
+}
+
+function renderAlarmEventsTable(events) {
+  if (!alarmEventsBody) return;
+  if (!Array.isArray(events) || !events.length) {
+    alarmEventsBody.innerHTML = '<tr><td colspan="8">No hay alarmas registradas.</td></tr>';
+    return;
+  }
+  const operatorSymbols = { gte: ">=", lte: "<=", eq: "==" };
+  const rows = events
+    .map((event) => {
+      const operatorSymbol = operatorSymbols[event.operator] || event.operator || "";
+      const statusClass = event.emailSent ? "status-badge ok" : event.emailError ? "status-badge fail" : "status-badge";
+      const statusLabel = event.emailSent ? "Enviado" : event.emailError ? "Sin envio" : "Pendiente";
+      const errorLabel = event.emailError ? escapeHtml(event.emailError) : "";
+      return `
+        <tr>
+          <td>${escapeHtml(formatDateTime(event.triggeredAt || event.triggered_at))}</td>
+          <td>${escapeHtml(event.plantaId || event.planta_id || "default")}</td>
+          <td>${escapeHtml(event.tag || "")}</td>
+          <td>${escapeHtml(event.observedValue ?? event.observed_value ?? "")}</td>
+          <td>${escapeHtml(event.thresholdValue ?? event.threshold_value ?? "")}</td>
+          <td>${escapeHtml(operatorSymbol)}</td>
+          <td><span class="${statusClass}">${escapeHtml(statusLabel)}</span></td>
+          <td>${errorLabel || "--"}</td>
+        </tr>
+      `;
+    })
+    .join("");
+  alarmEventsBody.innerHTML = rows;
+}
+
+async function loadAlarmEvents(limit = 20) {
+  if (!alarmEventsBody) return;
+  const user = firebase.auth().currentUser;
+  if (!user) {
+    renderAlarmEventsTable([]);
+    setAlarmEventsStatus("Inicia sesion para ver alarmas.", "warning");
+    return;
+  }
+  const empresaId = currentCompanyId || scadaConfig?.empresaId || null;
+  if (!empresaId) {
+    renderAlarmEventsTable([]);
+    setAlarmEventsStatus("No hay empresa activa.", "warning");
+    return;
+  }
+  setAlarmEventsStatus("Cargando ultimas alarmas...", "info");
+  alarmEventsBody.innerHTML = '<tr><td colspan="8">Cargando...</td></tr>';
+  try {
+    const token = await user.getIdToken();
+    const response = await fetch(
+      `${BACKEND_HTTP}/api/alarms/events?empresaId=${encodeURIComponent(empresaId)}&limit=${limit}`,
+      {
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      }
+    );
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      if (response.status === 403) {
+        throw new Error("Sin permisos para ver alarmas (rol admin requerido).");
+      }
+      throw new Error(text || `Error ${response.status}`);
+    }
+    const data = await response.json();
+    const events = Array.isArray(data) ? data.slice(0, limit) : [];
+    renderAlarmEventsTable(events);
+    setAlarmEventsStatus(events.length ? "" : "No hay alarmas registradas.", events.length ? "info" : "warning");
+  } catch (error) {
+    console.error("loadAlarmEvents", error);
+    renderAlarmEventsTable([]);
+    setAlarmEventsStatus(`No se pudieron cargar las alarmas: ${error.message || error}`, "error");
+  }
+}
+
+function openAlarmEventsDialog() {
+  if (!alarmEventsDialog) return;
+  try {
+    alarmEventsDialog.showModal();
+  } catch (_) {
+    alarmEventsDialog.open = true;
+  }
+  loadAlarmEvents(20);
 }
 
 function setCurrentUser(email, empresaId) {
@@ -1531,11 +1659,29 @@ function resetSessionState() {
   if (cotizadorLink) {
     cotizadorLink.hidden = true;
   }
+  if (alarmEventsBtn) {
+    alarmEventsBtn.hidden = true;
+    alarmEventsBtn.disabled = true;
+  }
+  if (alarmEventsHint) {
+    alarmEventsHint.hidden = true;
+  }
+  if (alarmEventsDialog && typeof alarmEventsDialog.close === "function") {
+    alarmEventsDialog.close();
+  }
+  if (alarmEventsBody) {
+    alarmEventsBody.innerHTML = '<tr><td colspan="8">No hay alarmas registradas.</td></tr>';
+  }
+  if (alarmEventsStatus) {
+    alarmEventsStatus.textContent = "";
+  }
 }
 
 handleViewToggle();
 setupLoginDialog();
 plantSelect?.addEventListener("change", handlePlantChange);
+alarmEventsBtn?.addEventListener("click", () => openAlarmEventsDialog());
+alarmEventsCloseBtn?.addEventListener("click", () => alarmEventsDialog?.close());
 
 if (loginForm) {
   loginForm.addEventListener("submit", async (event) => {

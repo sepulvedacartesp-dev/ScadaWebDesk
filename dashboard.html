@@ -83,6 +83,12 @@
         </div>
         <p id="plant-empty" class="helper-text" hidden>No tienes plantas disponibles.</p>
       </article>
+      <article class="toolbar-card">
+        <h3 class="toolbar-title">Alarmas 24/7</h3>
+        <p class="helper-text">Revisa las ultimas alarmas registradas para la empresa actual.</p>
+        <button id="alarm-events-btn" type="button" class="btn btn-view" hidden>Ver ultimas alarmas</button>
+        <p id="alarm-events-hint" class="helper-text" hidden>Requiere rol administrador.</p>
+      </article>
     </section>
 
     <section class="scada-wrapper">
@@ -108,6 +114,38 @@
         <button type="button" class="btn btn-cancel" id="close-login">Cancelar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="alarm-events-dialog" class="alarm-events-dialog">
+    <section class="modal-card">
+      <header class="modal-header">
+        <div>
+          <p class="helper-text">Eventos recientes</p>
+          <h3 class="modal-title">Ultimas 20 alarmas</h3>
+        </div>
+        <button id="alarm-events-close" type="button" class="btn btn-link">Cerrar</button>
+      </header>
+      <p id="alarm-events-status" class="helper-text">Cargando...</p>
+      <div class="table-wrapper">
+        <table class="events-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Planta</th>
+              <th>Tag</th>
+              <th>Valor</th>
+              <th>Umbral</th>
+              <th>Comparador</th>
+              <th>Envio</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="alarm-events-body">
+            <tr><td colspan="8">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </dialog>
 
   <template id="container-template">

@@ -1235,6 +1235,94 @@ body {
   gap: 0.75rem;
 }
 
+/* Alarm events modal */
+.alarm-events-dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+  width: min(960px, 94vw);
+}
+
+.alarm-events-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+}
+
+.modal-card {
+  background: var(--bg-elevated);
+  border-radius: 18px;
+  border: 1px solid rgba(108, 132, 255, 0.2);
+  box-shadow: var(--shadow-soft);
+  padding: 1.25rem 1.25rem 1rem;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.modal-title {
+  margin: 0;
+}
+
+.table-wrapper {
+  overflow: auto;
+  max-height: 60vh;
+}
+
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.events-table th,
+.events-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid rgba(159, 197, 255, 0.16);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.events-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(12, 22, 36, 0.9);
+  z-index: 1;
+}
+
+.events-table td:last-child,
+.events-table th:last-child {
+  min-width: 140px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.status-badge.ok {
+  color: var(--success);
+  background: rgba(6, 214, 160, 0.12);
+}
+
+.status-badge.fail {
+  color: var(--danger);
+  background: rgba(239, 71, 111, 0.15);
+}
+
+.status-badge.cooldown {
+  color: var(--warning);
+  background: rgba(255, 209, 102, 0.15);
+}
+
 .empty-state {
   text-align: center;
   padding: 3rem 1rem;
