@@ -14,10 +14,21 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from reports.schemas import ReportDefinitionOut, ReportRunOut, ReportStatus
 from reports import service as report_service
+
+PALETTE = {
+    "primary": colors.HexColor("#0d6efd"),
+    "muted": colors.HexColor("#6c757d"),
+    "accent": colors.HexColor("#198754"),
+    "bg": colors.HexColor("#f7f9fb"),
+}
 
 
 def _tz_aware(dt: datetime) -> datetime:
@@ -45,32 +56,58 @@ def _build_pdf(
         pagesize=landscape(A4),
         title=f"Reporte {definition.name}",
         author="SCADA SurNex",
+        leftMargin=1.5 * cm,
+        rightMargin=1.5 * cm,
+        topMargin=1.2 * cm,
+        bottomMargin=1.2 * cm,
     )
     styles = getSampleStyleSheet()
+    title_style = styles["Title"]
+    subtitle = styles["Heading2"]
+    h3 = styles["Heading3"]
+    normal = styles["Normal"]
+    normal.leading = 14
+
+    total_points = sum(len(item.get("points") or []) for item in series)
+    alarm_count = len(alarms)
+    tags_count = len([item for item in series if item.get("tag")])
+
     elements: List[object] = []
-    elements.append(Paragraph(f"<b>{definition.name}</b>", styles["Title"]))
-    elements.append(
-        Paragraph(
-            f"Empresa: {definition.empresa_id} | Planta: {definition.planta_id} | Frecuencia: {definition.frequency}",
-            styles["Normal"],
-        )
+    elements.append(Paragraph(f"<b>{definition.name}</b>", title_style))
+    meta_text = (
+        f"Empresa: {definition.empresa_id} | Planta: {definition.planta_id} | Frecuencia: {definition.frequency} | "
+        f"Ventana: {run.window_start} a {run.window_end}"
     )
-    elements.append(
-        Paragraph(
-            f"Ventana: {run.window_start} a {run.window_end} | Destinatarios: {', '.join(definition.recipients)}",
-            styles["Normal"],
-        )
-    )
+    elements.append(Paragraph(meta_text, normal))
+    elements.append(Paragraph(f"Destinatarios: {', '.join(definition.recipients)}", normal))
     elements.append(Spacer(1, 0.3 * cm))
+
+    summary_table = Table(
+        [
+            ["Tags", "Puntos", "Alarmas"],
+            [str(tags_count), str(total_points), str(alarm_count)],
+        ],
+        style=TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), PALETTE["primary"]),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("FONTSIZE", (0, 0), (-1, -1), 11),
+            ]
+        ),
+    )
+    elements.append(summary_table)
+    elements.append(Spacer(1, 0.4 * cm))
 
     for item in series:
         tag = item.get("tag", "")
         stats = item.get("stats") or {}
         points = item.get("points") or []
-        elements.append(Paragraph(f"<b>Tag:</b> {tag}", styles["Heading3"]))
+        elements.append(Paragraph(f"Tag: <b>{tag}</b>", h3))
         stats_table = Table(
             [
-                ["Min", "Max", "Promedio", "Ultimo", "Muestras"],
+                ["Min", "Max", "Promedio", "Último", "Muestras"],
                 [
                     f"{stats.get('min') if stats else '--'}",
                     f"{stats.get('max') if stats else '--'}",
@@ -81,32 +118,43 @@ def _build_pdf(
             ],
             style=TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                    ("BACKGROUND", (0, 0), (-1, 0), PALETTE["bg"]),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                 ]
             ),
         )
         elements.append(stats_table)
-        if points:
+        chart_bytes = _plot_series_chart(tag, points)
+        flow = _image_flowable(chart_bytes) if chart_bytes else None
+        if flow:
+            elements.append(flow)
+        else:
             condensed = _condense_points(points, 80)
             spark_data = " ".join(_sparkline(condensed))
             elements.append(Paragraph(f"Sparklines: {spark_data}", styles["Code"]))
         elements.append(Spacer(1, 0.2 * cm))
 
     elements.append(Spacer(1, 0.3 * cm))
-    elements.append(Paragraph("<b>Alarmas notificadas</b>", styles["Heading2"]))
+    elements.append(Paragraph("Alarmas notificadas", subtitle))
+    elements.append(Paragraph(f"Total en ventana: {alarm_count}", normal))
+
+    alarm_chart = _plot_alarms_timeline(alarms)
+    flow_alarm = _image_flowable(alarm_chart) if alarm_chart else None
+    if flow_alarm:
+        elements.append(flow_alarm)
+
     if alarms:
-        elements.append(Paragraph(f"Total en ventana: {len(alarms)}", styles["Normal"]))
-        table_data = [["Tag", "Umbral", "Valor", "Operador", "Correo", "Fecha", "Estado correo"]]
+        table_data = [["Fecha", "Planta", "Tag", "Valor", "Umbral", "Operador", "Envío", "Error"]]
         for event in alarms:
             table_data.append(
                 [
+                    str(event.get("triggered_at")),
+                    event.get("planta_id") or "--",
                     event.get("tag", "--"),
-                    str(event.get("threshold", "--")),
                     str(event.get("observed", "--")),
+                    str(event.get("threshold", "--")),
                     str(event.get("operator", "--")),
                     "Enviado" if event.get("email_sent") else "No enviado",
-                    str(event.get("triggered_at")),
                     event.get("email_error") or "",
                 ]
             )
@@ -114,14 +162,16 @@ def _build_pdf(
             table_data,
             style=TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                    ("BACKGROUND", (0, 0), (-1, 0), PALETTE["primary"]),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ]
             ),
         )
         elements.append(alarm_table)
     else:
-        elements.append(Paragraph("Sin alarmas notificadas en la ventana seleccionada.", styles["Normal"]))
+        elements.append(Paragraph("Sin alarmas notificadas en la ventana seleccionada.", normal))
 
     doc.build(elements)
     return buffer.getvalue()
@@ -154,6 +204,70 @@ def _condense_points(points: Sequence[dict], target: int) -> List[float]:
         avg = sum(p.get("value", 0) for p in batch) / len(batch)
         condensed.append(avg)
     return condensed
+
+
+def _image_flowable(image_bytes: bytes, width: float = 14 * cm) -> Optional[Image]:
+    if not image_bytes:
+        return None
+    try:
+        img = Image(io.BytesIO(image_bytes))
+        img._restrictSize(width, width * 0.6)
+        return img
+    except Exception:
+        return None
+
+
+def _plot_series_chart(tag: str, points: Sequence[dict]) -> Optional[bytes]:
+    if not points:
+        return None
+    try:
+        xs = [datetime.fromisoformat(p["timestamp"].replace("Z", "+00:00")) for p in points]
+        ys = [p["value"] for p in points]
+        plt.figure(figsize=(6, 2.2))
+        plt.plot(xs, ys, color="#0d6efd", linewidth=1.5)
+        plt.fill_between(xs, ys, color="#0d6efd", alpha=0.1)
+        plt.title(tag, fontsize=10)
+        plt.xlabel("Tiempo")
+        plt.ylabel("Valor")
+        plt.grid(True, linestyle="--", alpha=0.3)
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=120)
+        plt.close()
+        return buf.getvalue()
+    except Exception:
+        plt.close()
+        return None
+
+
+def _plot_alarms_timeline(events: Sequence[dict]) -> Optional[bytes]:
+    if not events:
+        return None
+    try:
+        times = []
+        values = []
+        colors_map = []
+        for ev in events:
+            ts = ev.get("triggered_at")
+            if isinstance(ts, str):
+                ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            times.append(ts)
+            values.append(ev.get("observed") or 0)
+            colors_map.append("#198754" if ev.get("email_sent") else "#dc3545")
+        plt.figure(figsize=(6, 2.0))
+        plt.scatter(times, values, c=colors_map, alpha=0.8)
+        plt.title("Alarmas notificadas", fontsize=10)
+        plt.xlabel("Tiempo")
+        plt.ylabel("Valor observado")
+        plt.grid(True, linestyle="--", alpha=0.3)
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=120)
+        plt.close()
+        return buf.getvalue()
+    except Exception:
+        plt.close()
+        return None
 
 
 def _load_email_settings() -> Optional[dict]:
