@@ -20,6 +20,7 @@ DEFAULT_PLANTA_ID = "default"
 MAX_REPORTS_PER_PLANT = 2
 ALLOWED_STATUSES: Set[ReportStatus] = {"idle", "queued", "running", "success", "failed", "skipped"}
 DEFAULT_MAX_POINTS = 400
+_COLUMN_CACHE: Dict[Tuple[str, str], bool] = {}
 
 
 def _now_utc() -> datetime:
@@ -37,6 +38,22 @@ def _parse_time_of_day(value: Optional[str]) -> Optional[time]:
     if hours < 0 or hours > 23 or minutes < 0 or minutes > 59:
         raise ValueError("timeOfDay debe estar entre 00:00 y 23:59")
     return time(hour=hours, minute=minutes)
+
+
+async def _table_has_column(pool: Pool, table: str, column: str) -> bool:
+    key = (table, column)
+    if key in _COLUMN_CACHE:
+        return _COLUMN_CACHE[key]
+    query = """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = $1 AND column_name = $2
+        LIMIT 1
+    """
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval(query, table, column)
+    _COLUMN_CACHE[key] = bool(exists)
+    return _COLUMN_CACHE[key]
 
 
 def _time_to_label(value: Optional[time]) -> Optional[str]:
