@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import asyncpg
@@ -19,6 +19,7 @@ from .schemas import (
 DEFAULT_PLANTA_ID = "default"
 MAX_REPORTS_PER_PLANT = 2
 ALLOWED_STATUSES: Set[ReportStatus] = {"idle", "queued", "running", "success", "failed", "skipped"}
+DEFAULT_MAX_POINTS = 400
 
 
 def _now_utc() -> datetime:
