@@ -248,12 +248,17 @@ async def execute_run(
     error = None
     if run.send_email:
         settings = _load_email_settings()
-        if settings:
+        if not settings:
+            error = "SMTP no configurado (define ALARM_SMTP_HOST/USERNAME/PASSWORD)"
+        else:
             try:
                 emails_sent = await _send_report_email(settings, definition, pdf_bytes, run)
+                if not emails_sent:
+                    error = "No se pudo enviar correo (sin destinatarios aceptados)"
             except Exception as exc:  # noqa: BLE001
                 error = str(exc)
-    return "success", pdf_bytes, emails_sent, error
+    status: ReportStatus = "success" if error is None else "failed"
+    return status, pdf_bytes, emails_sent, error
 
 
 async def process_run(pool: asyncpg.pool.Pool, run_id: int) -> Optional[ReportRunOut]:

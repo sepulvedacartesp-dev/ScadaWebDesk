@@ -1404,8 +1404,8 @@ function renderReportRuns(reportId) {
     .map((run) => {
       const status = run.status || run.lastStatus || "";
       const windowLabel = `${run.windowStart || "--"} → ${run.windowEnd || "--"}`;
-      const emails = Array.isArray(run.emailsSent) ? run.emailsSent.join(", ") : "";
-      const err = run.error || "";
+      const emails = Array.isArray(run.emailsSent) && run.emailsSent.length ? run.emailsSent.join(", ") : "No enviado";
+      const err = run.error || (run.sendEmail && emails === "No enviado" ? "Envio pendiente o configuracion SMTP faltante" : "");
       return `
         <tr>
           <td>${escapeHtml(status)}</td>
