@@ -56,6 +56,37 @@ async def _table_has_column(pool: Pool, table: str, column: str) -> bool:
     return _COLUMN_CACHE[key]
 
 
+def compute_next_run_at(definition: ReportDefinitionOut, reference_utc: Optional[datetime] = None) -> datetime:
+    ref = reference_utc or _now_utc()
+    tz = _resolve_timezone(definition.timezone) if getattr(definition, "timezone", None) else timezone.utc
+    local_ref = ref.astimezone(tz)
+    time_of_day = _parse_time_of_day(definition.time_of_day) or time(hour=8, minute=0)
+    target_local = local_ref.replace(hour=time_of_day.hour, minute=time_of_day.minute, second=0, microsecond=0)
+    if definition.frequency == "weekly":
+        dow = definition.day_of_week or 1  # 1=lunes
+        days_ahead = (dow - target_local.isoweekday()) % 7
+        if days_ahead == 0 and target_local <= local_ref:
+            days_ahead = 7
+        target_local = target_local + timedelta(days=days_ahead)
+    elif definition.frequency == "monthly":
+        dom = max(1, min(definition.day_of_month or 1, 28))
+        try:
+            target_local = target_local.replace(day=dom)
+        except ValueError:
+            target_local = target_local.replace(day=1)
+        if target_local <= local_ref:
+            year = target_local.year + (1 if target_local.month == 12 else 0)
+            month = 1 if target_local.month == 12 else target_local.month + 1
+            try:
+                target_local = target_local.replace(year=year, month=month, day=dom)
+            except ValueError:
+                target_local = target_local.replace(year=year, month=month, day=1)
+    else:
+        if target_local <= local_ref:
+            target_local = target_local + timedelta(days=1)
+    return target_local.astimezone(timezone.utc)
+
+
 def _time_to_label(value: Optional[time]) -> Optional[str]:
     if value is None:
         return None
@@ -154,6 +185,53 @@ async def list_definitions(pool: Pool, empresa_id: str, plantas: Optional[Sequen
     return [_record_to_definition(row) for row in rows]
 
 
+async def list_due_definitions(pool: Pool, now_utc: datetime) -> List[ReportDefinitionOut]:
+    base_query = """
+        SELECT
+            id,
+            empresa_id,
+            planta_id,
+            name,
+            frequency,
+            day_of_week,
+            day_of_month,
+            time_of_day,
+            timezone,
+            include_alarms,
+            send_email,
+            format,
+            recipients,
+            tags,
+            slot,
+            active,
+            last_run_at,
+            next_run_at,
+            last_status,
+            last_error,
+            created_at,
+            updated_at
+        FROM report_definitions
+        WHERE active = TRUE
+          AND (next_run_at IS NULL OR next_run_at <= $1)
+    """
+    rows = await pool.fetch(base_query, now_utc)
+    return [_record_to_definition(row) for row in rows]
+
+
+async def update_next_run(pool: Pool, empresa_id: str, report_id: int, next_run_at: datetime) -> None:
+    await pool.execute(
+        """
+        UPDATE report_definitions
+        SET next_run_at = $1, updated_at = $2
+        WHERE empresa_id = $3 AND id = $4
+        """,
+        next_run_at,
+        _now_utc(),
+        empresa_id,
+        report_id,
+    )
+
+
 async def get_definition(pool: Pool, empresa_id: str, report_id: int) -> Optional[ReportDefinitionOut]:
     query = """
         SELECT
@@ -193,6 +271,32 @@ async def create_definition(pool: Pool, empresa_id: str, payload: ReportCreatePa
     slot = await _resolve_slot(pool, empresa_id, payload.planta_id, payload.slot)
     now = _now_utc()
     time_of_day = _parse_time_of_day(payload.time_of_day) if payload.time_of_day else None
+    next_run = compute_next_run_at(
+        ReportDefinitionOut(
+            id=0,
+            empresa_id=empresa_id,
+            planta_id=payload.planta_id,
+            name=payload.name,
+            frequency=payload.frequency,
+            day_of_week=payload.day_of_week,
+            day_of_month=payload.day_of_month,
+            time_of_day=payload.time_of_day,
+            timezone=payload.timezone,
+            include_alarms=payload.include_alarms,
+            send_email=payload.send_email,
+            format="pdf",
+            recipients=payload.recipients,
+            tags=payload.tags,
+            slot=slot,
+            active=payload.active,
+            last_run_at=None,
+            next_run_at=None,
+            last_status="idle",
+            last_error=None,
+            created_at=now,
+            updated_at=now,
+        )
+    )
     query = """
         INSERT INTO report_definitions (
             empresa_id,
@@ -210,11 +314,12 @@ async def create_definition(pool: Pool, empresa_id: str, payload: ReportCreatePa
             tags,
             slot,
             active,
+            next_run_at,
             last_status,
             created_at,
             updated_at
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
         )
         RETURNING *
     """
@@ -235,6 +340,7 @@ async def create_definition(pool: Pool, empresa_id: str, payload: ReportCreatePa
         payload.tags,
         slot,
         payload.active,
+        next_run,
         "idle",
         now,
         now,
@@ -283,6 +389,44 @@ async def update_definition(pool: Pool, empresa_id: str, report_id: int, payload
         add("slot", slot)
     if payload.active is not None:
         add("active", payload.active)
+
+    # Recalcula next_run_at si cambia frecuencia/hora/dia/planta/active
+    if any(
+        field is not None
+        for field in (
+            payload.frequency,
+            payload.day_of_week,
+            payload.day_of_month,
+            payload.time_of_day,
+            payload.timezone,
+            payload.planta_id,
+        )
+    ):
+        future_def = ReportDefinitionOut(
+            id=report_id,
+            empresa_id=empresa_id,
+            planta_id=target_planta,
+            name=payload.name or current.name,
+            frequency=payload.frequency or current.frequency,
+            day_of_week=payload.day_of_week if payload.day_of_week is not None else current.day_of_week,
+            day_of_month=payload.day_of_month if payload.day_of_month is not None else current.day_of_month,
+            time_of_day=payload.time_of_day if payload.time_of_day is not None else current.time_of_day,
+            timezone=payload.timezone if payload.timezone is not None else current.timezone,
+            include_alarms=payload.include_alarms if payload.include_alarms is not None else current.include_alarms,
+            send_email=payload.send_email if payload.send_email is not None else current.send_email,
+            format=current.format,
+            recipients=payload.recipients if payload.recipients is not None else current.recipients,
+            tags=payload.tags if payload.tags is not None else current.tags,
+            slot=slot,
+            active=payload.active if payload.active is not None else current.active,
+            last_run_at=current.last_run_at,
+            next_run_at=current.next_run_at,
+            last_status=current.last_status,
+            last_error=current.last_error,
+            created_at=current.created_at,
+            updated_at=current.updated_at,
+        )
+        add("next_run_at", compute_next_run_at(future_def))
 
     add("updated_at", _now_utc())
 

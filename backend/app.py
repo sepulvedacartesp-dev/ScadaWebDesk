@@ -72,6 +72,7 @@ from alarms import service as alarm_service
 from alarms.schemas import AlarmRuleCreate, AlarmRuleOut, AlarmRuleUpdate, AlarmEventOut
 from reports import service as report_service
 from reports import runner as report_runner
+from reports import scheduler as report_scheduler
 from reports.schemas import (
     ReportCreatePayload,
     ReportDefinitionOut,
@@ -298,6 +299,11 @@ def require_quote_pool() -> asyncpg.pool.Pool:
         return quote_db.get_pool()
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Servicio de cotizaciones no disponible") from exc
+async def start_report_scheduler():
+    if not REPORTS_SCHEDULER_ENABLED:
+        logger.info("Report scheduler deshabilitado (REPORTS_SCHEDULER_ENABLED=0)")
+        return
+    asyncio.create_task(report_scheduler.scheduler_loop(lambda: trend_db_pool))
 
 
 # ---- Session helpers (WebSocket) ----
@@ -633,6 +639,7 @@ event_loop: Optional[asyncio.AbstractEventLoop] = None
 trend_db_pool: Optional[asyncpg.pool.Pool] = None
 session_cleanup_task: Optional[asyncio.Task] = None
 session_table_ready = False
+REPORTS_SCHEDULER_ENABLED = coerce_bool(os.environ.get("REPORTS_SCHEDULER_ENABLED"), True)
 # ---- Config ----
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*").strip()
@@ -996,6 +1003,11 @@ async def start_session_cleanup_task():
             await asyncio.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
 
     session_cleanup_task = asyncio.create_task(_run_cleanup())
+
+
+@app.on_event("startup")
+async def start_reports_scheduler_task():
+    await start_report_scheduler()
 
 
 @app.on_event("shutdown")
