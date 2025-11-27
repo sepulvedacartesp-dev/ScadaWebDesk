@@ -588,12 +588,19 @@ async def fetch_alarm_events(
     end: datetime,
     limit: int = 500,
 ) -> List[Dict[str, Any]]:
-    query = """
+    has_planta = await _table_has_column(pool, "alarm_events", "planta_id")
+    clauses = ["empresa_id = $1", "triggered_at BETWEEN $2 AND $3"]
+    params: List[Any] = [empresa_id, start, end]
+    if planta_id and has_planta:
+        clauses.append("(planta_id = $4 OR planta_id = 'default' OR planta_id IS NULL)")
+        params.append(planta_id)
+    params.append(max(1, min(limit, 1000)))
+    query = f"""
         SELECT
             id,
             rule_id,
             empresa_id,
-            planta_id,
+            {"planta_id," if has_planta else "NULL AS planta_id,"}
             tag,
             observed_value,
             operator,
@@ -603,18 +610,11 @@ async def fetch_alarm_events(
             triggered_at,
             notified_at
         FROM alarm_events
-        WHERE empresa_id = $1
-          {planta_clause}
-          AND triggered_at BETWEEN $2 AND $3
+        WHERE {' AND '.join(clauses)}
         ORDER BY triggered_at DESC
-        LIMIT $4
+        LIMIT ${len(params)}
     """
-    planta_filter = ""
-    params: List[Any] = [empresa_id, start, end, max(1, min(limit, 500))]
-    if planta_id:
-        planta_filter = "AND (planta_id = $5 OR planta_id = 'default' OR planta_id IS NULL)"
-        params.append(planta_id)
-    rows = await pool.fetch(query.format(planta_clause=planta_filter), *params)
+    rows = await pool.fetch(query, *params)
     events: List[Dict[str, Any]] = []
     for row in rows:
         events.append(
