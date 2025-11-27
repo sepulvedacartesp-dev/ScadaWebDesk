@@ -96,6 +96,7 @@ def _time_to_label(value: Optional[time]) -> Optional[str]:
 def _record_to_definition(record: asyncpg.Record) -> ReportDefinitionOut:
     data = dict(record)
     data["planta_id"] = data.get("planta_id") or DEFAULT_PLANTA_ID
+    data["format"] = (data.get("format") or "pdf").strip().lower()
     data["time_of_day"] = _time_to_label(data.get("time_of_day"))
     data["recipients"] = data.get("recipients") or []
     data["tags"] = data.get("tags") or []
@@ -284,7 +285,7 @@ async def create_definition(pool: Pool, empresa_id: str, payload: ReportCreatePa
             timezone=payload.timezone,
             include_alarms=payload.include_alarms,
             send_email=payload.send_email,
-            format="pdf",
+            format=payload.format or "pdf",
             recipients=payload.recipients,
             tags=payload.tags,
             slot=slot,
@@ -335,7 +336,7 @@ async def create_definition(pool: Pool, empresa_id: str, payload: ReportCreatePa
         payload.timezone,
         payload.include_alarms,
         payload.send_email,
-        "pdf",
+        payload.format or "pdf",
         payload.recipients,
         payload.tags,
         slot,
@@ -383,6 +384,8 @@ async def update_definition(pool: Pool, empresa_id: str, report_id: int, payload
         add("recipients", payload.recipients)
     if payload.tags is not None:
         add("tags", payload.tags)
+    if payload.format is not None:
+        add("format", payload.format)
     if target_planta != current.planta_id:
         add("planta_id", target_planta)
     if slot != current.slot:
@@ -414,7 +417,7 @@ async def update_definition(pool: Pool, empresa_id: str, report_id: int, payload
             timezone=payload.timezone if payload.timezone is not None else current.timezone,
             include_alarms=payload.include_alarms if payload.include_alarms is not None else current.include_alarms,
             send_email=payload.send_email if payload.send_email is not None else current.send_email,
-            format=current.format,
+            format=payload.format if payload.format is not None else current.format,
             recipients=payload.recipients if payload.recipients is not None else current.recipients,
             tags=payload.tags if payload.tags is not None else current.tags,
             slot=slot,

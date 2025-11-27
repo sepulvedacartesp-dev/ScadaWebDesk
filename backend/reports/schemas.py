@@ -38,6 +38,7 @@ class ReportBase(BaseModel):
     tags: List[str] = Field(default_factory=list)
     include_alarms: bool = Field(default=False, alias="includeAlarms")
     send_email: bool = Field(default=True, alias="sendEmail")
+    format: str = Field(default="pdf", alias="format")
     day_of_week: Optional[int] = Field(None, ge=1, le=7, alias="dayOfWeek")
     day_of_month: Optional[int] = Field(None, ge=1, le=31, alias="dayOfMonth")
     time_of_day: Optional[str] = Field("08:00", alias="timeOfDay")
@@ -101,6 +102,14 @@ class ReportBase(BaseModel):
     def _validate_time(cls, value: Optional[str]) -> Optional[str]:
         return _normalize_time_of_day(value)
 
+    @field_validator("format")
+    @classmethod
+    def _validate_format(cls, value: str) -> str:
+        cleaned = str(value).strip().lower()
+        if cleaned not in {"pdf"}:
+            raise ValueError("Formato de reporte no soportado")
+        return cleaned
+
     @field_validator("day_of_week", "day_of_month", "frequency")
     @classmethod
     def _validate_schedule(cls, value, info):
@@ -129,6 +138,7 @@ class ReportUpdatePayload(BaseModel):
     tags: Optional[List[str]] = None
     include_alarms: Optional[bool] = Field(None, alias="includeAlarms")
     send_email: Optional[bool] = Field(None, alias="sendEmail")
+    format: Optional[str] = Field(None, alias="format")
     day_of_week: Optional[int] = Field(None, ge=1, le=7, alias="dayOfWeek")
     day_of_month: Optional[int] = Field(None, ge=1, le=31, alias="dayOfMonth")
     time_of_day: Optional[str] = Field(None, alias="timeOfDay")
@@ -199,6 +209,16 @@ class ReportUpdatePayload(BaseModel):
         if value is None:
             return None
         return _normalize_time_of_day(value)
+
+    @field_validator("format")
+    @classmethod
+    def _validate_format(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = str(value).strip().lower()
+        if cleaned not in {"pdf"}:
+            raise ValueError("Formato de reporte no soportado")
+        return cleaned
 
 
 class ReportDefinitionOut(ReportBase):
