@@ -593,7 +593,7 @@ async function loadAlarmEvents(limit = 20) {
   alarmEventsBody.innerHTML = '<tr><td colspan="8">Cargando...</td></tr>';
   try {
     const token = await user.getIdToken();
-    const fetchLimit = Math.max(60, limit * 3);
+    const fetchLimit = Math.max(200, limit * 20);
     const response = await fetch(
       `${BACKEND_HTTP}/api/alarms/events?empresaId=${encodeURIComponent(empresaId)}&limit=${fetchLimit}`,
       {
@@ -634,16 +634,21 @@ async function loadAlarmEvents(limit = 20) {
       const time = date.getTime();
       return Number.isNaN(time) ? 0 : time;
     };
-    const events = Array.isArray(data)
+    const notifiedEvents = Array.isArray(data)
       ? data
           .filter(isNotified)
-          .sort((a, b) => parseTs(b.triggeredAt || b.triggered_at || b.notifiedAt || b.notified_at) -
-            parseTs(a.triggeredAt || a.triggered_at || a.notifiedAt || a.notified_at))
-          .slice(0, limit)
+          .sort(
+            (a, b) =>
+              parseTs(b.triggeredAt || b.triggered_at || b.notifiedAt || b.notified_at) -
+              parseTs(a.triggeredAt || a.triggered_at || a.notifiedAt || a.notified_at)
+          )
       : [];
+    const events = notifiedEvents.slice(0, limit);
     renderAlarmEventsTable(events);
     setAlarmEventsStatus(
-      events.length ? "" : "No hay alarmas con envio de correo registrado.",
+      events.length
+        ? ""
+        : `No hay alarmas con envio de correo registrado en los ultimos ${fetchLimit} eventos.`,
       events.length ? "info" : "warning"
     );
   } catch (error) {
