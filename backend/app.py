@@ -71,6 +71,7 @@ from quotes.schemas import (
 from alarms import service as alarm_service
 from alarms.schemas import AlarmRuleCreate, AlarmRuleOut, AlarmRuleUpdate, AlarmEventOut
 from reports import service as report_service
+from reports import runner as report_runner
 from reports.schemas import (
     ReportCreatePayload,
     ReportDefinitionOut,
@@ -2330,6 +2331,7 @@ async def trigger_report_run_endpoint(
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     try:
         run = await report_service.create_run(pool, company_id, report_id, definition, request, decoded.get("email"))
+        report_runner.spawn_background(pool, run.id)
         return run
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -439,3 +439,190 @@ async def list_runs(pool: Pool, empresa_id: str, report_id: int, limit: int = 20
     """
     rows = await pool.fetch(query, empresa_id, report_id, max(1, min(limit, 200)))
     return [_record_to_run(row) for row in rows]
+
+
+async def update_run_status(
+    pool: Pool,
+    run_id: int,
+    status: ReportStatus,
+    *,
+    error: Optional[str] = None,
+    pdf_bytes: Optional[bytes] = None,
+    emails_sent: Optional[List[str]] = None,
+) -> Optional[ReportRunOut]:
+    if status not in ALLOWED_STATUSES:
+        raise ValueError("Estado de reporte no soportado")
+    set_fields = ["status = $1", "completed_at = $2"]
+    values: List[object] = [status, _now_utc()]
+    if error is not None:
+        set_fields.append("error = $3")
+        values.append(error)
+    if emails_sent is not None:
+        set_fields.append("emails_sent = ${}".format(len(values) + 1))
+        values.append(emails_sent)
+    if pdf_bytes is not None:
+        set_fields.append("pdf_blob = ${}".format(len(values) + 1))
+        values.append(pdf_bytes)
+        set_fields.append("pdf_size_bytes = ${}".format(len(values) + 1))
+        values.append(len(pdf_bytes))
+    set_clause = ", ".join(set_fields)
+    query = f"""
+        UPDATE report_runs
+        SET {set_clause}
+        WHERE id = ${len(values) + 1}
+        RETURNING *
+    """
+    values.append(run_id)
+    row = await pool.fetchrow(query, *values)
+    if not row:
+        return None
+    return _record_to_run(row)
+
+
+async def fetch_run(pool: Pool, run_id: int) -> Optional[ReportRunOut]:
+    query = """
+        SELECT
+            id,
+            report_id,
+            empresa_id,
+            planta_id,
+            status,
+            window_start,
+            window_end,
+            started_at,
+            completed_at,
+            error,
+            send_email,
+            emails_sent,
+            pdf_size_bytes,
+            pdf_mime,
+            triggered_by
+        FROM report_runs
+        WHERE id = $1
+    """
+    row = await pool.fetchrow(query, run_id)
+    if not row:
+        return None
+    return _record_to_run(row)
+
+
+async def fetch_trend_series(
+    pool: Pool,
+    *,
+    empresa_id: str,
+    planta_id: str,
+    tags: Sequence[str],
+    start: datetime,
+    end: datetime,
+    max_points: int = DEFAULT_MAX_POINTS,
+) -> List[Dict[str, Any]]:
+    if not tags:
+        return []
+    total_seconds = max(1, int((end - start).total_seconds()))
+    bucket = max(1, int(total_seconds / max(1, min(max_points, 1000))))
+    results: List[Dict[str, Any]] = []
+    async with pool.acquire() as conn:
+        for tag in tags:
+            stats_query = """
+                SELECT
+                    COUNT(*) OVER () AS count,
+                    MIN(valor) OVER () AS min_value,
+                    MAX(valor) OVER () AS max_value,
+                    AVG(valor) OVER () AS avg_value,
+                    FIRST_VALUE(valor) OVER (ORDER BY timestamp DESC) AS latest_value,
+                    FIRST_VALUE(timestamp) OVER (ORDER BY timestamp DESC) AS latest_timestamp
+                FROM trends
+                WHERE empresa_id = $1
+                  AND planta_id = $2
+                  AND tag = $3
+                  AND timestamp BETWEEN $4 AND $5
+                ORDER BY timestamp DESC
+                LIMIT 1
+            """
+            stats_row = await conn.fetchrow(stats_query, empresa_id, planta_id, tag, start, end)
+            if stats_row is None or not stats_row["count"]:
+                results.append({"tag": tag, "points": [], "stats": None})
+                continue
+            data_query = """
+                SELECT to_timestamp(floor(extract(epoch FROM timestamp)/$6)*$6) AS bucket,
+                       AVG(valor) AS value
+                FROM trends
+                WHERE empresa_id = $1
+                  AND planta_id = $2
+                  AND tag = $3
+                  AND timestamp BETWEEN $4 AND $5
+                GROUP BY bucket
+                ORDER BY bucket ASC
+                LIMIT $7
+            """
+            rows = await conn.fetch(
+                data_query,
+                empresa_id,
+                planta_id,
+                tag,
+                start,
+                end,
+                bucket,
+                max_points,
+            )
+            points = [{"timestamp": row["bucket"], "value": float(row["value"])} for row in rows]
+            stats = {
+                "latest": float(stats_row["latest_value"]) if stats_row["latest_value"] is not None else None,
+                "min": float(stats_row["min_value"]) if stats_row["min_value"] is not None else None,
+                "max": float(stats_row["max_value"]) if stats_row["max_value"] is not None else None,
+                "avg": float(stats_row["avg_value"]) if stats_row["avg_value"] is not None else None,
+                "latestTimestamp": stats_row["latest_timestamp"],
+                "count": int(stats_row["count"]),
+            }
+            results.append({"tag": tag, "points": points, "stats": stats})
+    return results
+
+
+async def fetch_alarm_events(
+    pool: Pool,
+    *,
+    empresa_id: str,
+    planta_id: str,
+    start: datetime,
+    end: datetime,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    query = """
+        SELECT
+            id,
+            rule_id,
+            empresa_id,
+            planta_id,
+            tag,
+            observed_value,
+            operator,
+            threshold_value,
+            email_sent,
+            email_error,
+            triggered_at,
+            notified_at
+        FROM alarm_events
+        WHERE empresa_id = $1
+          AND planta_id = $2
+          AND triggered_at BETWEEN $3 AND $4
+        ORDER BY triggered_at DESC
+        LIMIT $5
+    """
+    rows = await pool.fetch(query, empresa_id, planta_id, start, end, max(1, min(limit, 500)))
+    events: List[Dict[str, Any]] = []
+    for row in rows:
+        events.append(
+            {
+                "id": row["id"],
+                "rule_id": row["rule_id"],
+                "tag": row["tag"],
+                "observed": row["observed_value"],
+                "operator": row["operator"],
+                "threshold": row["threshold_value"],
+                "email_sent": row["email_sent"],
+                "email_error": row["email_error"],
+                "triggered_at": row["triggered_at"],
+                "notified_at": row["notified_at"],
+            }
+        )
+    return events
