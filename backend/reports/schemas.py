@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 ReportFrequency = Literal["daily", "weekly", "monthly"]
 ReportStatus = Literal["idle", "queued", "running", "success", "failed", "skipped"]
+DEFAULT_REPORT_TIMEZONE = "America/Santiago"
 
 
 def _normalize_time_of_day(value: Optional[str]) -> Optional[str]:
@@ -42,7 +43,7 @@ class ReportBase(BaseModel):
     day_of_week: Optional[int] = Field(None, ge=1, le=7, alias="dayOfWeek")
     day_of_month: Optional[int] = Field(None, ge=1, le=31, alias="dayOfMonth")
     time_of_day: Optional[str] = Field("08:00", alias="timeOfDay")
-    timezone: Optional[str] = Field(None, alias="timezone")
+    timezone: Optional[str] = Field(DEFAULT_REPORT_TIMEZONE, alias="timezone")
     slot: Optional[int] = Field(None, ge=1, le=2, alias="slot")
     active: bool = Field(default=True)
 
@@ -101,6 +102,14 @@ class ReportBase(BaseModel):
     @classmethod
     def _validate_time(cls, value: Optional[str]) -> Optional[str]:
         return _normalize_time_of_day(value)
+
+    @field_validator("timezone")
+    @classmethod
+    def _normalize_timezone(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return DEFAULT_REPORT_TIMEZONE
+        cleaned = value.strip()
+        return cleaned or DEFAULT_REPORT_TIMEZONE
 
     @field_validator("format")
     @classmethod
@@ -209,6 +218,14 @@ class ReportUpdatePayload(BaseModel):
         if value is None:
             return None
         return _normalize_time_of_day(value)
+
+    @field_validator("timezone")
+    @classmethod
+    def _normalize_timezone(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or DEFAULT_REPORT_TIMEZONE
 
     @field_validator("format")
     @classmethod

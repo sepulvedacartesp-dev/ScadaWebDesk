@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -21,6 +22,7 @@ MAX_REPORTS_PER_PLANT = 2
 ALLOWED_STATUSES: Set[ReportStatus] = {"idle", "queued", "running", "success", "failed", "skipped"}
 DEFAULT_MAX_POINTS = 400
 _COLUMN_CACHE: Dict[Tuple[str, str], bool] = {}
+DEFAULT_REPORT_TIMEZONE = os.getenv("REPORTS_DEFAULT_TIMEZONE", "America/Santiago").strip() or "America/Santiago"
 
 
 def _now_utc() -> datetime:
@@ -58,7 +60,7 @@ async def _table_has_column(pool: Pool, table: str, column: str) -> bool:
 
 def compute_next_run_at(definition: ReportDefinitionOut, reference_utc: Optional[datetime] = None) -> datetime:
     ref = reference_utc or _now_utc()
-    tz = _resolve_timezone(definition.timezone) if getattr(definition, "timezone", None) else timezone.utc
+    tz = _resolve_timezone(definition.timezone) if getattr(definition, "timezone", None) else _resolve_timezone(None)
     local_ref = ref.astimezone(tz)
     time_of_day = _parse_time_of_day(definition.time_of_day) or time(hour=8, minute=0)
     target_local = local_ref.replace(hour=time_of_day.hour, minute=time_of_day.minute, second=0, microsecond=0)
@@ -97,6 +99,7 @@ def _record_to_definition(record: asyncpg.Record) -> ReportDefinitionOut:
     data = dict(record)
     data["planta_id"] = data.get("planta_id") or DEFAULT_PLANTA_ID
     data["format"] = (data.get("format") or "pdf").strip().lower()
+    data["timezone"] = data.get("timezone") or DEFAULT_REPORT_TIMEZONE
     data["time_of_day"] = _time_to_label(data.get("time_of_day"))
     data["recipients"] = data.get("recipients") or []
     data["tags"] = data.get("tags") or []
@@ -272,6 +275,7 @@ async def create_definition(pool: Pool, empresa_id: str, payload: ReportCreatePa
     slot = await _resolve_slot(pool, empresa_id, payload.planta_id, payload.slot)
     now = _now_utc()
     time_of_day = _parse_time_of_day(payload.time_of_day) if payload.time_of_day else None
+    target_timezone = payload.timezone or DEFAULT_REPORT_TIMEZONE
     next_run = compute_next_run_at(
         ReportDefinitionOut(
             id=0,
@@ -282,7 +286,7 @@ async def create_definition(pool: Pool, empresa_id: str, payload: ReportCreatePa
             day_of_week=payload.day_of_week,
             day_of_month=payload.day_of_month,
             time_of_day=payload.time_of_day,
-            timezone=payload.timezone,
+            timezone=target_timezone,
             include_alarms=payload.include_alarms,
             send_email=payload.send_email,
             format=payload.format or "pdf",
@@ -333,7 +337,7 @@ async def create_definition(pool: Pool, empresa_id: str, payload: ReportCreatePa
         payload.day_of_week,
         payload.day_of_month,
         time_of_day,
-        payload.timezone,
+        target_timezone,
         payload.include_alarms,
         payload.send_email,
         payload.format or "pdf",
@@ -356,6 +360,7 @@ async def update_definition(pool: Pool, empresa_id: str, report_id: int, payload
     target_planta = payload.planta_id or current.planta_id
     target_slot = payload.slot if payload.slot is not None else current.slot
     slot = await _resolve_slot(pool, empresa_id, target_planta, target_slot, exclude_report_id=report_id)
+    target_timezone = payload.timezone if payload.timezone is not None else (current.timezone or DEFAULT_REPORT_TIMEZONE)
 
     fields = []
     values: List[object] = []
@@ -375,7 +380,7 @@ async def update_definition(pool: Pool, empresa_id: str, report_id: int, payload
     if payload.time_of_day is not None:
         add("time_of_day", _parse_time_of_day(payload.time_of_day))
     if payload.timezone is not None:
-        add("timezone", payload.timezone)
+        add("timezone", target_timezone)
     if payload.include_alarms is not None:
         add("include_alarms", payload.include_alarms)
     if payload.send_email is not None:
@@ -414,7 +419,7 @@ async def update_definition(pool: Pool, empresa_id: str, report_id: int, payload
             day_of_week=payload.day_of_week if payload.day_of_week is not None else current.day_of_week,
             day_of_month=payload.day_of_month if payload.day_of_month is not None else current.day_of_month,
             time_of_day=payload.time_of_day if payload.time_of_day is not None else current.time_of_day,
-            timezone=payload.timezone if payload.timezone is not None else current.timezone,
+            timezone=target_timezone,
             include_alarms=payload.include_alarms if payload.include_alarms is not None else current.include_alarms,
             send_email=payload.send_email if payload.send_email is not None else current.send_email,
             format=payload.format if payload.format is not None else current.format,
@@ -462,10 +467,9 @@ async def delete_definition(pool: Pool, empresa_id: str, report_id: int) -> bool
 
 
 def _resolve_timezone(tz_name: Optional[str]) -> timezone:
-    if not tz_name:
-        return timezone.utc
+    target = tz_name or DEFAULT_REPORT_TIMEZONE
     try:
-        return ZoneInfo(tz_name)
+        return ZoneInfo(target)
     except ZoneInfoNotFoundError:
         return timezone.utc
 
@@ -494,7 +498,7 @@ def _previous_month_window(now_local: datetime) -> Tuple[datetime, datetime]:
 
 def compute_default_window(definition: ReportDefinitionOut, reference_utc: Optional[datetime] = None) -> Tuple[datetime, datetime]:
     ref = reference_utc or _now_utc()
-    tz = _resolve_timezone(definition.timezone) if getattr(definition, "timezone", None) else timezone.utc
+    tz = _resolve_timezone(definition.timezone) if getattr(definition, "timezone", None) else _resolve_timezone(None)
     local_now = ref.astimezone(tz)
     if definition.frequency == "monthly":
         # Ventana rodante de 30 dias hacia atras
