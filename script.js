@@ -45,6 +45,7 @@ const alarmEventsDialog = document.getElementById("alarm-events-dialog");
 const alarmEventsBody = document.getElementById("alarm-events-body");
 const alarmEventsStatus = document.getElementById("alarm-events-status");
 const alarmEventsCloseBtn = document.getElementById("alarm-events-close");
+const alarmEventsPlantSelect = document.getElementById("alarm-events-plant-select");
 
 
 const topicElementMap = new Map();
@@ -62,6 +63,7 @@ let canAccessCotizador = false;
 let availablePlants = [];
 let accessiblePlantIds = [];
 let selectedPlantId = null;
+let selectedAlarmPlantId = null;
 
 function persistMainTitle(value) {
   const nextTitle = (value || "").trim() || DEFAULT_MAIN_TITLE;
@@ -153,6 +155,7 @@ function setAvailablePlants(plants, allowedIds, empresaId) {
   }
   updatePlantSelectorUI();
   updatePlantBadge();
+  updateAlarmEventsPlantOptions();
 }
 
 function getCurrentPlant() {
@@ -551,6 +554,46 @@ function setAlarmEventsStatus(message, tone = "info") {
   alarmEventsStatus.hidden = !message;
 }
 
+function getAlarmPlantFilter() {
+  if (!selectedAlarmPlantId) return null;
+  const normalized = selectedAlarmPlantId.toLowerCase();
+  if (!accessiblePlantIds.length) return normalized;
+  return accessiblePlantIds.includes(normalized) ? normalized : null;
+}
+
+function updateAlarmEventsPlantOptions() {
+  if (!alarmEventsPlantSelect) return;
+  alarmEventsPlantSelect.innerHTML = "";
+  const hasPlants = Array.isArray(availablePlants) && availablePlants.length > 0;
+  if (!hasPlants) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Sin plantas autorizadas";
+    alarmEventsPlantSelect.appendChild(option);
+    alarmEventsPlantSelect.disabled = true;
+    return;
+  }
+  const defaultPlant = selectedAlarmPlantId || selectedPlantId || availablePlants[0].id;
+  selectedAlarmPlantId = defaultPlant ? defaultPlant.toLowerCase() : null;
+  availablePlants.forEach((plant) => {
+    const option = document.createElement("option");
+    option.value = plant.id;
+    option.textContent = plant.name || plant.id;
+    option.selected = plant.id === selectedAlarmPlantId;
+    alarmEventsPlantSelect.appendChild(option);
+  });
+  alarmEventsPlantSelect.disabled = availablePlants.length <= 1;
+}
+
+function handleAlarmEventsPlantChange(event) {
+  const nextId = (event?.target?.value || "").toLowerCase();
+  if (!nextId || (accessiblePlantIds.length && !accessiblePlantIds.includes(nextId))) {
+    return;
+  }
+  selectedAlarmPlantId = nextId;
+  loadAlarmEvents(20);
+}
+
 function renderAlarmEventsTable(events) {
   if (!alarmEventsBody) return;
   if (!Array.isArray(events) || !events.length) {
@@ -650,13 +693,24 @@ async function loadAlarmEvents(limit = 20) {
           )
       : [];
     const events = notifiedEvents.slice(0, limit);
-    renderAlarmEventsTable(events);
-    setAlarmEventsStatus(
-      events.length
-        ? ""
-        : `No hay alarmas con envio de correo registrado en los ultimos ${fetchLimit} eventos.`,
-      events.length ? "info" : "warning"
-    );
+    const filterId = getAlarmPlantFilter();
+    const filtered = filterId
+      ? events.filter((event) => {
+          const plantId = (event.plantaId || event.planta_id || "").toString().trim().toLowerCase();
+          return plantId === filterId;
+        })
+      : events;
+    renderAlarmEventsTable(filtered);
+    if (!filtered.length) {
+      setAlarmEventsStatus(
+        filterId
+          ? "No hay alarmas registradas para la planta seleccionada."
+          : `No hay alarmas con envio de correo registrado en los ultimos ${fetchLimit} eventos.`,
+        "warning"
+      );
+    } else {
+      setAlarmEventsStatus("", "info");
+    }
   } catch (error) {
     console.error("loadAlarmEvents", error);
     renderAlarmEventsTable([]);
@@ -671,6 +725,7 @@ function openAlarmEventsDialog() {
   } catch (_) {
     alarmEventsDialog.open = true;
   }
+  updateAlarmEventsPlantOptions();
   loadAlarmEvents(20);
 }
 
@@ -1680,6 +1735,7 @@ function resetSessionState() {
   availablePlants = [];
   accessiblePlantIds = [];
   selectedPlantId = null;
+  selectedAlarmPlantId = null;
   clearDashboard();
   scadaContainer.innerHTML = '<p class="empty-state">Inicia sesion para cargar tu tablero SCADA.</p>';
   if (sidebarMenu) {
@@ -1720,6 +1776,9 @@ function resetSessionState() {
   if (alarmEventsStatus) {
     alarmEventsStatus.textContent = "";
   }
+  if (alarmEventsPlantSelect) {
+    alarmEventsPlantSelect.innerHTML = "";
+  }
 }
 
 handleViewToggle();
@@ -1727,6 +1786,7 @@ setupLoginDialog();
 plantSelect?.addEventListener("change", handlePlantChange);
 alarmEventsBtn?.addEventListener("click", () => openAlarmEventsDialog());
 alarmEventsCloseBtn?.addEventListener("click", () => alarmEventsDialog?.close());
+alarmEventsPlantSelect?.addEventListener("change", handleAlarmEventsPlantChange);
 
 if (loginForm) {
   loginForm.addEventListener("submit", async (event) => {
