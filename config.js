@@ -177,6 +177,15 @@ const state = {
   currentPlantId: null,
 };
 
+const CONFIG_GROUPS = {
+  general: ["status-card", "general-card"],
+  access: ["roles-card", "user-card", "plants-card", "plant-access-card"],
+  alerts: ["alarm-card", "reports-card"],
+  containers: ["containers-card"],
+};
+
+const DEFAULT_CONFIG_GROUP = "general";
+
 const dom = {
   root: document.getElementById("config-root"),
   statusBanner: document.getElementById("status-banner"),
@@ -296,6 +305,7 @@ const dom = {
   tenantMode: document.getElementById("tenant-mode"),
   tenantStatus: document.getElementById("tenant-form-status"),
   tenantSubmit: document.getElementById("tenant-submit-btn"),
+  configNav: document.getElementById("config-nav"),
 };
 
 const logoButtonDefaultText = dom.uploadLogoBtn?.dataset.label || dom.uploadLogoBtn?.textContent || "Subir logo";
@@ -409,6 +419,39 @@ function attachStaticHandlers() {
       e.preventDefault();
       addManualTag();
     }
+  });
+  initConfigGroupNavigation();
+}
+
+function initConfigGroupNavigation() {
+  if (!dom.configNav) return;
+  const buttons = Array.from(dom.configNav.querySelectorAll("[data-config-nav]"));
+  const defaultGroup = dom.configNav.dataset.defaultGroup || DEFAULT_CONFIG_GROUP;
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setActiveConfigGroup(btn.dataset.configNav);
+    });
+  });
+  setActiveConfigGroup(defaultGroup);
+}
+
+function setActiveConfigGroup(groupKey) {
+  const targetGroup = CONFIG_GROUPS[groupKey] ? groupKey : DEFAULT_CONFIG_GROUP;
+  Object.entries(CONFIG_GROUPS).forEach(([group, sectionIds]) => {
+    const shouldShow = group === targetGroup;
+    sectionIds.forEach((sectionId) => {
+      const section = document.getElementById(sectionId);
+      if (!section) return;
+      section.classList.toggle("config-group-hidden", !shouldShow);
+    });
+  });
+
+  if (!dom.configNav) return;
+  const buttons = dom.configNav.querySelectorAll("[data-config-nav]");
+  buttons.forEach((btn) => {
+    const isActive = btn.dataset.configNav === targetGroup;
+    btn.classList.toggle("config-nav__btn--active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
   });
 }
 

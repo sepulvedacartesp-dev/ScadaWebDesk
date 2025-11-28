@@ -66,6 +66,34 @@
       justify-content: flex-end;
       align-items: center;
     }
+    .config-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.4rem;
+    }
+    .config-nav__btn {
+      border: 1px solid rgba(112, 138, 255, 0.26);
+      background: rgba(9, 18, 32, 0.65);
+      color: var(--text-primary);
+      border-radius: 999px;
+      padding: 0.55rem 1rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+    }
+    .config-nav__btn:hover {
+      background: rgba(58, 134, 255, 0.22);
+      border-color: rgba(112, 138, 255, 0.42);
+      transform: translateY(-1px);
+    }
+    .config-nav__btn--active {
+      background: linear-gradient(135deg, rgba(58, 134, 255, 0.3), rgba(0, 180, 216, 0.35));
+      border-color: rgba(112, 138, 255, 0.55);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(0, 180, 216, 0.18);
+    }
     .config-content {
       display: grid;
       gap: clamp(1.5rem, 3vw, 2.25rem);
@@ -649,6 +677,9 @@
       padding: 0;
       background: transparent;
     }
+    .config-group-hidden {
+      display: none !important;
+    }
     @media (min-width: 1100px) {
       .config-content {
         grid-template-columns: minmax(0, 1fr) 320px;
@@ -737,6 +768,12 @@
         <h2 class="section-title">Configura tu tablero en minutos</h2>
         <p class="helper-text">Autenticate con una cuenta de administrador para cargar la configuracion actual, editar los contenedores disponibles y guardar los cambios en el servidor.</p>
         <p class="helper-text">Este asistente edita el archivo usado por el dashboard principal y mantiene la estructura del sistema.</p>
+        <div class="config-nav" id="config-nav" role="tablist" aria-label="Navegacion por secciones de configuracion" data-default-group="general">
+          <button type="button" class="config-nav__btn config-nav__btn--active" data-config-nav="general" aria-pressed="true">Datos Generales</button>
+          <button type="button" class="config-nav__btn" data-config-nav="access" aria-pressed="false">Usuarios, Permisos y plantas</button>
+          <button type="button" class="config-nav__btn" data-config-nav="alerts" aria-pressed="false">Alarmas y Reportes</button>
+          <button type="button" class="config-nav__btn" data-config-nav="containers" aria-pressed="false">Contenedores</button>
+        </div>
       </div>
       <div class="hero-actions">
         <span class="badge-inline">Archivo base: scada_configs/&lt;empresaId&gt;_Scada_Config.json</span>
@@ -800,7 +837,7 @@
             </div>
           </div>
         </section>
-        <section class="config-card status-card">
+        <section class="config-card status-card" id="status-card" data-config-group="general">
           <header class="config-card__head">
             <h2>Estado general</h2>
             <p class="helper-text">Mantiene la sesion activa para desbloquear la edicion.</p>
@@ -808,7 +845,7 @@
           <div id="status-banner" class="status-banner">Autenticate para cargar la configuracion.</div>
         </section>
 
-        <section class="config-card collapsible-card collapsed" id="general-card" data-section-id="general">
+        <section class="config-card collapsible-card collapsed" id="general-card" data-section-id="general" data-config-group="general">
           <div class="container-header collapsible-header">
             <div class="section-headline">
               <h2>Datos generales</h2>
@@ -839,7 +876,7 @@
           </div>
         </section>
 
-        <section class="config-card collapsible-card collapsed" id="roles-card" data-section-id="roles">
+        <section class="config-card collapsible-card collapsed" id="roles-card" data-section-id="roles" data-config-group="access">
           <div class="container-header collapsible-header">
             <div class="section-headline">
               <h2>Roles y permisos</h2>
@@ -865,7 +902,7 @@
           </div>
         </section>
 
-        <section class="config-card alarm-card collapsible-card collapsed" id="alarm-card" data-section-id="alarms">
+        <section class="config-card alarm-card collapsible-card collapsed" id="alarm-card" data-section-id="alarms" data-config-group="alerts">
           <div class="container-header collapsible-header">
             <div class="section-headline">
               <h2>Alarmas de proceso</h2>
@@ -956,7 +993,7 @@
           </div>
         </section>
 
-        <section class="config-card collapsible-card collapsed" id="reports-card" data-section-id="reports">
+        <section class="config-card collapsible-card collapsed" id="reports-card" data-section-id="reports" data-config-group="alerts">
           <div class="container-header collapsible-header">
             <div class="section-headline">
               <h2>Reportes</h2>
@@ -1056,7 +1093,7 @@
           </div>
         </section>
 
-        <section class="config-card collapsible-card collapsed" id="user-card" data-section-id="users" hidden>
+        <section class="config-card collapsible-card collapsed" id="user-card" data-section-id="users" data-config-group="access" hidden>
           <div class="container-header collapsible-header">
             <div class="section-headline">
               <h2>Usuarios</h2>
@@ -1111,7 +1148,7 @@
           </div>
         </section>
 
-        <section class="config-card collapsible-card collapsed" id="plants-card" data-section-id="plants">
+        <section class="config-card collapsible-card collapsed" id="plants-card" data-section-id="plants" data-config-group="access">
           <div class="container-header collapsible-header">
             <div class="section-headline">
               <h2>Plantas</h2>
@@ -1131,7 +1168,7 @@
           </div>
         </section>
 
-        <section class="config-card collapsible-card collapsed" id="plant-access-card" data-section-id="plantAccess">
+        <section class="config-card collapsible-card collapsed" id="plant-access-card" data-section-id="plantAccess" data-config-group="access">
           <div class="container-header collapsible-header">
             <div class="section-headline">
               <h2>Accesos por planta</h2>
@@ -1151,7 +1188,7 @@
           </div>
         </section>
 
-        <section class="config-card">
+        <section class="config-card" id="containers-card" data-config-group="containers">
           <div class="container-header">
             <h2>Contenedores del tablero</h2>
             <div class="button-row align-start">
