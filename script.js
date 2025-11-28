@@ -512,16 +512,17 @@ function applyScopedTopics() {
 function updateRoleUI() {
   const isAdmin = currentRole === "admin";
   const isViewer = currentRole === "viewer" || currentRole === "visualizacion";
+  const canSeeAlarmEvents = isAdmin || currentRole === "operador";
 
   if (configLink) {
     configLink.hidden = !isAdmin;
   }
   if (alarmEventsBtn) {
-    alarmEventsBtn.hidden = !isAdmin;
-    alarmEventsBtn.disabled = !isAdmin;
+    alarmEventsBtn.hidden = !canSeeAlarmEvents;
+    alarmEventsBtn.disabled = !canSeeAlarmEvents;
   }
   if (alarmEventsHint) {
-    alarmEventsHint.hidden = isAdmin;
+    alarmEventsHint.hidden = canSeeAlarmEvents;
   }
   if (cotizadorLink) {
     cotizadorLink.hidden = !canAccessCotizador;
