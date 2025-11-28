@@ -10,7 +10,7 @@ const OBJECT_TYPES = [
     defaults: { type: "level", label: "Nivel", topic: "", unit: "%", min: 0, max: 100, color: "#00b4d8" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Nivel Estanque", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/Nivel", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/Nivel", section: "primary" },
       { key: "unit", label: "Unidad", type: "text", placeholder: "%, m3", section: "primary" },
       { key: "color", label: "Color", type: "color", section: "primary" },
       { key: "min", label: "Valor minimo", type: "number", section: "advanced" },
@@ -24,7 +24,7 @@ const OBJECT_TYPES = [
     defaults: { type: "gauge", label: "Indicador", topic: "", unit: "", min: 0, max: 100, color: "#00b4d8" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Presion linea", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/Presion", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/Presion", section: "primary" },
       { key: "unit", label: "Unidad", type: "text", placeholder: "bar, psi", section: "primary" },
       { key: "color", label: "Color", type: "color", section: "primary" },
       { key: "min", label: "Valor minimo", type: "number", section: "advanced" },
@@ -38,7 +38,7 @@ const OBJECT_TYPES = [
     defaults: { type: "number", label: "Valor", topic: "", unit: "" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Caudal instante", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/Caudal", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/Caudal", section: "primary" },
       { key: "unit", label: "Unidad", type: "text", placeholder: "m3/h", section: "primary" },
     ],
   },
@@ -49,8 +49,8 @@ const OBJECT_TYPES = [
     defaults: { type: "valuePublisher", label: "Publicar valor", topic: "", unit: "", feedbackTopic: "" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Setpoint caldera", section: "primary" },
-      { key: "topic", label: "Topic MQTT destino", type: "text", placeholder: "Linea1/Setpoint", section: "primary" },
-      { key: "feedbackTopic", label: "Topic MQTT lectura", type: "text", placeholder: "Linea1/SetpointActual", section: "primary" },
+      { key: "topico", label: "Topico destino", type: "text", placeholder: "Linea1/Setpoint", section: "primary" },
+      { key: "feedbackTopic", label: "Topico lectura", type: "text", placeholder: "Linea1/SetpointActual", section: "primary" },
       { key: "unit", label: "Unidad", type: "text", placeholder: "degC, bar, %", section: "primary" },
     ],
   },
@@ -61,8 +61,8 @@ const OBJECT_TYPES = [
     defaults: { type: "slide", label: "Control", topic: "", feedbackTopic: "", onText: "Encendido", offText: "Apagado" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Modo Manual", section: "primary" },
-      { key: "topic", label: "Topic MQTT comando", type: "text", placeholder: "Linea1/CmdModo", section: "primary" },
-      { key: "feedbackTopic", label: "Topic MQTT feedback", type: "text", placeholder: "Linea1/StsModo", section: "primary" },
+      { key: "topico", label: "Topico comando", type: "text", placeholder: "Linea1/CmdModo", section: "primary" },
+      { key: "feedbackTopic", label: "Topico feedback", type: "text", placeholder: "Linea1/StsModo", section: "primary" },
       { key: "onText", label: "Texto estado ON", type: "text", placeholder: "Encendido", section: "primary" },
       { key: "offText", label: "Texto estado OFF", type: "text", placeholder: "Apagado", section: "primary" },
     ],
@@ -74,7 +74,7 @@ const OBJECT_TYPES = [
     defaults: { type: "text", label: "Texto", topic: "" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Estado PLC", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/Estado", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/Estado", section: "primary" },
     ],
   },
   {
@@ -84,7 +84,7 @@ const OBJECT_TYPES = [
     defaults: { type: "motorSpeed", label: "Velocidad", topic: "", unit: "rpm" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Motor bomba", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/Velocidad", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/Velocidad", section: "primary" },
       { key: "unit", label: "Unidad", type: "text", placeholder: "rpm", section: "primary" },
     ],
   },
@@ -95,7 +95,7 @@ const OBJECT_TYPES = [
     defaults: { type: "pumpStatus", label: "Estado", topic: "", onColor: "#00ff9d", offColor: "#6c757d" },
     fields: [
       { key: "label", label: "Nombre visible", type: "text", placeholder: "Estado Bomba", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/PumpSts", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/PumpSts", section: "primary" },
       { key: "onColor", label: "Color encendido", type: "color", section: "primary" },
       { key: "offColor", label: "Color apagado", type: "color", section: "primary" },
     ],
@@ -107,7 +107,7 @@ const OBJECT_TYPES = [
     defaults: { type: "startBtn", label: "Partir", topic: "", color: "#00b4d8", payload: "1" },
     fields: [
       { key: "label", label: "Texto del boton", type: "text", placeholder: "Partir equipo", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/CmdStart", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/CmdStart", section: "primary" },
       { key: "color", label: "Color del boton", type: "color", section: "primary" },
       { key: "payload", label: "Payload a enviar", type: "text", placeholder: "1", section: "advanced" },
     ],
@@ -119,7 +119,7 @@ const OBJECT_TYPES = [
     defaults: { type: "stopBtn", label: "Detener", topic: "", color: "#ef476f", payload: "0" },
     fields: [
       { key: "label", label: "Texto del boton", type: "text", placeholder: "Parar equipo", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/CmdStop", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/CmdStop", section: "primary" },
       { key: "color", label: "Color del boton", type: "color", section: "primary" },
       { key: "payload", label: "Payload a enviar", type: "text", placeholder: "0", section: "advanced" },
     ],
@@ -131,7 +131,7 @@ const OBJECT_TYPES = [
     defaults: { type: "resetBtn", label: "Reset", topic: "", color: "#ffd166", payload: "reset" },
     fields: [
       { key: "label", label: "Texto del boton", type: "text", placeholder: "Reset alarma", section: "primary" },
-      { key: "topic", label: "Topic MQTT", type: "text", placeholder: "Linea1/CmdReset", section: "primary" },
+      { key: "topico", label: "Topico", type: "text", placeholder: "Linea1/CmdReset", section: "primary" },
       { key: "color", label: "Color del boton", type: "color", section: "primary" },
       { key: "payload", label: "Payload a enviar", type: "text", placeholder: "reset", section: "advanced" },
     ],
